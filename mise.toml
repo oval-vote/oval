@@ -1,0 +1,7 @@
+# Tool versions for working on this repo. Install with `mise install`.
+[tools]
+node = "24"
+
+[tasks.test]
+description = "Compile the schema in strict mode and validate the example and conformance documents"
+run = "npm test"

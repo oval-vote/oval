@@ -1,0 +1,525 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oval.vote/schema/1/guide.json",
+  "title": "Oval Vote guide",
+  "description": "A voting guide for one election: who wrote it, when the election is, and a tree of regions holding contests and measures.",
+  "type": "object",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "description": "A stable identifier. Letters, digits, dot, underscore, and hyphen; case-sensitive. Where it must be unique is stated on each use."
+    },
+    "author": {
+      "title": "Author",
+      "description": "Who wrote the guide.",
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A person's or organization's name."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "A home page or profile for the author."
+        }
+      },
+      "additionalProperties": false
+    },
+    "region": {
+      "title": "Region",
+      "description": "A jurisdiction or grouping on the ballot: a country, state, county, city, or district. Holds contests, measures, and smaller regions, in ballot order.",
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "name",
+        "entries"
+      ],
+      "properties": {
+        "type": {
+          "const": "region",
+          "description": "Marks this entry as a region."
+        },
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "A stable identifier, unique across the document. Used as a link anchor."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The region's name, e.g. \"United States\", \"California\", \"City of Oakland\"."
+        },
+        "description": {
+          "type": "string",
+          "description": "An introduction shown under the heading: what is and is not on this part of the ballot. CommonMark; consumers sanitize before rendering."
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/entry"
+          },
+          "description": "The contests, measures, and sub-regions in this region, in the order they should appear."
+        }
+      },
+      "additionalProperties": false
+    },
+    "entry": {
+      "description": "One entry in a region: a contest, a measure, or a sub-region. The type field selects which.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/contest"
+        },
+        {
+          "$ref": "#/$defs/measure"
+        },
+        {
+          "$ref": "#/$defs/region"
+        }
+      ]
+    },
+    "contest": {
+      "title": "Contest",
+      "description": "One race on the ballot: an office and the candidates competing for it.",
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "name",
+        "voting",
+        "candidates",
+        "recommendation"
+      ],
+      "properties": {
+        "type": {
+          "const": "contest",
+          "description": "Marks this entry as a contest."
+        },
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "A stable identifier, unique across the document. Used to refer to the contest from elsewhere and as a link anchor."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The office or race as printed on the ballot, e.g. \"Mayor of Oakland\" or \"United States Representative, District 11\"."
+        },
+        "description": {
+          "type": "string",
+          "description": "What the office is and does: term length, responsibilities, who it represents. Stable from one election to the next. CommonMark; consumers sanitize before rendering."
+        },
+        "note": {
+          "type": "string",
+          "description": "A remark about this particular race that the ballot does not carry: an open seat, a withdrawal, tabulation rules, a pointer to coverage. CommonMark; may contain links. Consumers sanitize before rendering."
+        },
+        "party": {
+          "type": "string",
+          "minLength": 1,
+          "description": "For a party primary, the party whose nomination is being contested, e.g. \"Democratic\". Absent for general elections and nonpartisan contests."
+        },
+        "partisan": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the ballot prints a party label beside each candidate. Absent means false. A party primary (see party) is usually not partisan in this sense, since every candidate is from the same party."
+        },
+        "writeIn": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the ballot has a write-in line for this contest. Absent means false. A recommendation may name a write-in only when this is true."
+        },
+        "voting": {
+          "$ref": "#/$defs/voting"
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/candidate"
+          },
+          "description": "Every candidate printed on the ballot for this contest, in ballot order, including any who have withdrawn. Candidate ids must be unique within the contest."
+        },
+        "recommendation": {
+          "$ref": "#/$defs/contestRecommendation"
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "required": [
+          "writeIn"
+        ],
+        "properties": {
+          "writeIn": {
+            "const": true
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "recommendation": {
+            "type": "object",
+            "properties": {
+              "picks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/id"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "voting": {
+      "description": "How votes are cast in a contest. The method field selects the shape; each method carries only the fields it needs.",
+      "oneOf": [
+        {
+          "title": "Single choice",
+          "type": "object",
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "const": "single",
+              "description": "Vote for one candidate."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "title": "Multiple choice",
+          "type": "object",
+          "required": [
+            "method",
+            "seats"
+          ],
+          "properties": {
+            "method": {
+              "const": "multiple",
+              "description": "Vote for up to a fixed number of candidates; the top vote-getters fill the seats."
+            },
+            "seats": {
+              "type": "integer",
+              "minimum": 2,
+              "description": "The number of seats filled, and the maximum number of candidates a voter may choose."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "title": "Ranked choice",
+          "type": "object",
+          "required": [
+            "method"
+          ],
+          "properties": {
+            "method": {
+              "const": "ranked",
+              "description": "Rank candidates in order of preference."
+            },
+            "maxRankings": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "The most candidates a voter may rank, when the ballot limits it. Absent means every candidate may be ranked."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "candidate": {
+      "title": "Candidate",
+      "description": "A person running for an office, as printed on the ballot.",
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "A stable identifier, unique within the contest. Used to refer to the candidate from elsewhere in a document."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The candidate's name as printed on the ballot."
+        },
+        "party": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Party affiliation or preference as printed on the ballot, e.g. \"Democratic\", \"Republican\", \"No Party Preference\". Omit for nonpartisan contests or when the ballot does not print one."
+        },
+        "incumbent": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the candidate currently holds the office being contested. Absent means false."
+        },
+        "designation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "A few words saying who the candidate is, shown beside the name: \"Emergency Room Doctor\", \"Community Organizer\", \"Retired Teacher\". Usually the ballot designation as printed, but may be the author's own. Plain text. Most candidates should have one. Use the incumbent field rather than writing \"Incumbent\" here."
+        },
+        "note": {
+          "type": "string",
+          "description": "A remark about the candidate that the ballot does not carry, such as \"Withdrew in September but remains on the ballot\" or a pointer to a news story. CommonMark; may contain links. Consumers sanitize before rendering."
+        }
+      },
+      "additionalProperties": false
+    },
+    "pick": {
+      "description": "One entry in a recommendation's picks: the id of a candidate in the contest, or a write-in.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "title": "Write-in",
+          "type": "object",
+          "required": [
+            "writeIn"
+          ],
+          "properties": {
+            "writeIn": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The name to write on the ballot, exactly as the voter should write it."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "contestRecommendation": {
+      "title": "Recommendation",
+      "description": "The author's advice for one contest. status says whether there is advice yet; picks and avoid carry it. Both lists refer to candidates in the same contest by id, and a candidate may not appear in both.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "none",
+            "decided"
+          ],
+          "description": "pending: the author has not decided yet; the guide is still being written here. none: the author has decided not to recommend anyone. decided: see picks. Only a decided recommendation may have picks; avoid is allowed with any status."
+        },
+        "picks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pick"
+          },
+          "uniqueItems": true,
+          "description": "Candidates to vote for, in order, each a candidate id or a write-in. For a ranked contest the order is the recommended ranking. For single choice at most one entry; for multiple choice at most the number of seats; for ranked at most maxRankings when the contest sets one. Write-ins are allowed only when the contest has writeIn: true."
+        },
+        "avoid": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true,
+          "description": "Candidates the author advises against under any circumstances: do not vote for them, and in a ranked contest do not rank them at all. Independent of picks; a contest may have an avoid list with one pick, many, or none."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why the author recommends this. CommonMark; may contain links. Consumers sanitize before rendering."
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "if": {
+        "properties": {
+          "status": {
+            "const": "decided"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "picks"
+        ],
+        "properties": {
+          "picks": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "picks": false
+        }
+      }
+    },
+    "measure": {
+      "title": "Measure",
+      "description": "A yes-or-no question on the ballot: a proposition, initiative, referendum, bond, or charter amendment.",
+      "type": "object",
+      "required": [
+        "type",
+        "id",
+        "name",
+        "recommendation"
+      ],
+      "properties": {
+        "type": {
+          "const": "measure",
+          "description": "Marks this entry as a measure."
+        },
+        "id": {
+          "$ref": "#/$defs/id",
+          "description": "A stable identifier, unique across the document. Used to refer to the measure from elsewhere and as a link anchor."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The measure as printed, e.g. \"Proposition A\" or \"Measure RR\"."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A short plain-language title saying what the measure is about, e.g. \"Eliminating Cash Bail\". Plain text, a few words."
+        },
+        "note": {
+          "type": "string",
+          "description": "A procedural remark the ballot does not carry: tabulation rules, what happens if a conflicting measure also passes, a pointer to coverage. CommonMark; may contain links. Consumers sanitize before rendering."
+        },
+        "yes": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What a yes vote does, in a sentence or two. Plain text."
+        },
+        "no": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What a no vote does, in a sentence or two. Plain text."
+        },
+        "placedBy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Who put the measure on the ballot: a legislature, a council, a citizen initiative, a referendum petition."
+        },
+        "supporters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Notable people and organizations backing the measure, one per entry. Plain text."
+        },
+        "opponents": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Notable people and organizations opposing the measure, one per entry. Plain text."
+        },
+        "recommendation": {
+          "$ref": "#/$defs/measureRecommendation"
+        }
+      },
+      "additionalProperties": false
+    },
+    "measureRecommendation": {
+      "title": "Measure recommendation",
+      "description": "The author's advice on a measure. status says whether there is advice yet; position carries it.",
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "none",
+            "decided"
+          ],
+          "description": "pending: the author has not decided yet. none: the author has decided not to take a position. decided: see position."
+        },
+        "position": {
+          "enum": [
+            "yes",
+            "no"
+          ],
+          "description": "How to vote. Present only when status is decided."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why the author recommends this. CommonMark; may contain links. Consumers sanitize before rendering."
+        }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "status": {
+            "const": "decided"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "position"
+        ],
+        "properties": {
+          "position": {
+            "enum": [
+              "yes",
+              "no"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "position": false
+        }
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "name",
+    "date",
+    "author",
+    "regions"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://oval.vote/schema/1/guide.json",
+      "description": "Identifies the document as an Oval Vote guide and names the format version. The URL carries the major version; a document is readable by any consumer that supports that major version."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The election, e.g. \"November 2026 General Election\". Also the guide's title."
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Election day, as YYYY-MM-DD."
+    },
+    "author": {
+      "$ref": "#/$defs/author"
+    },
+    "regions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/region"
+      },
+      "description": "The top-level regions of the ballot, in the order they should appear. Each may hold contests, measures, and smaller regions."
+    }
+  },
+  "additionalProperties": false
+}
