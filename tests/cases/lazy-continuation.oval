@@ -1,0 +1,16 @@
+oval 1
+name: Test
+date: 2026-11-03
+author: Tester
+
+# Place @place
+
+## Measure A @a
+measure
+vote: yes
+
+This paragraph wraps onto lines that look like
+vote: a field, and
+- a candidate, and
+> a description, and
+1. a rank, all of which are prose.

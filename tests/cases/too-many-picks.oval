@@ -1,0 +1,19 @@
+oval 1
+name: Test
+date: 2026-11-03
+author: Tester
+
+# Place @place
+
+## Race @race
+contest
+
++ Al Able
++ Bo Baker
+
+## Board @board
+contest, 2 seats
+
++ Al Able
++ Bo Baker
++ Cy Cole

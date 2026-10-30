@@ -1,0 +1,16 @@
+oval 1
+name: Test
+date: 2026-11-03
+author: Tester
+
+# Place @place
+
+## Measure A @a
+measure
+vote: yes
+
+See [B](@b) and [the site](https://example.org).
+
+## Measure B @b
+measure
+vote: no

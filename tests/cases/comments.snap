@@ -1,0 +1,74 @@
+---
+source: crates/oval-model/tests/conformance.rs
+---
+{
+  "version": 1,
+  "name": "Test",
+  "date": "2026-11-03",
+  "author": {
+    "name": "Tester"
+  },
+  "language": "en",
+  "children": [
+    {
+      "kind": "section",
+      "id": "place",
+      "name": "Place",
+      "description": [
+        {
+          "type": "text",
+          "text": "Described."
+        }
+      ],
+      "region": false,
+      "children": [
+        {
+          "kind": "contest",
+          "id": "race",
+          "name": "Race",
+          "partisan": false,
+          "method": {
+            "type": "single"
+          },
+          "write_ins": false,
+          "unverified": false,
+          "note": [
+            {
+              "type": "text",
+              "text": "Hi."
+            }
+          ],
+          "candidates": [
+            {
+              "id": "al-able",
+              "name": "Al Able",
+              "incumbent": false,
+              "write_in": false,
+              "position": {
+                "type": "pick"
+              }
+            },
+            {
+              "id": "bo-baker",
+              "name": "Bo Baker",
+              "incumbent": false,
+              "write_in": false,
+              "position": {
+                "type": "neutral"
+              }
+            }
+          ],
+          "decision": "decided",
+          "rationale": [
+            [
+              {
+                "type": "text",
+                "text": "First line of prose. Second line of the same paragraph."
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

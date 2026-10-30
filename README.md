@@ -9,10 +9,26 @@ An open text format for voting guides.
 This repository holds the specification, the conformance suite, and the Rust
 reference implementation (parser, formatter, linter, language server, CLI).
 
-| Path            | Contents                                                     |
-|-----------------|--------------------------------------------------------------|
-| `spec/1/`       | The version 1 specification and formal grammar               |
-| `examples/`     | `sample.oval`, every construct once; `2026-general.oval`, a real guide |
+| Path                  | Contents                                                     |
+|-----------------------|--------------------------------------------------------------|
+| `spec/1/`             | The version 1 specification and formal grammar               |
+| `examples/`           | `sample.oval`, every construct once; `2026-general.oval`, a real guide |
+| `tests/cases/`        | Conformance suite: `.oval` inputs, expected `.diagnostics`, model `.snap` |
+| `crates/oval-syntax`  | Lossless parser, typed tree accessors, inline markup         |
+| `crates/oval-model`   | Data model, lowering, semantic rules                         |
+| `crates/oval-fmt`     | Canonical formatter                                          |
+| `crates/oval-lint`    | Style rules, configured by `oval.toml`                       |
+| `crates/oval-cli`     | The `oval` command                                           |
 
-Status: pre-release. The grammar is being tested against real guides before any
-code is written; see `PLAN.md` in the parent directory.
+```
+cargo run -p oval-cli -- check examples/*.oval          # spec diagnostics, exit 1 on errors
+cargo run -p oval-cli -- lint examples/*.oval           # spec diagnostics plus lint rules
+cargo run -p oval-cli -- lint --list                    # the rules and their default levels
+cargo run -p oval-cli -- fmt examples/*.oval            # rewrite in canonical form (--check to verify)
+cargo run -p oval-cli -- export examples/sample.oval    # data model as JSON
+cargo run -p oval-cli -- tree examples/sample.oval      # syntax tree dump
+cargo test                                              # unit tests, conformance suite, formatter checks
+```
+
+Status: pre-release. The parser and model exist and pass the conformance suite;
+the grammar is not yet frozen. See `PLAN.md` in the parent directory.

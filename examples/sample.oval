@@ -3,7 +3,6 @@ name: Sample Election
 date: 2026-11-03
 author: Example Author <https://example.org/votes>
 updated: 2026-10-30
-
 // Every construct in the format appears at least once in this file.
 
 # Example State @state

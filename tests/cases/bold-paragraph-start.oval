@@ -1,0 +1,14 @@
+oval 1
+name: Test
+date: 2026-11-03
+author: Tester
+
+# Place @place
+
+## Measure A @a
+measure
+vote: no
+
+**Bold** opening and *emphasis* opening are fine.
+
+*Emphasis* at the start too.

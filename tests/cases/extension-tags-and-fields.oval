@@ -1,0 +1,18 @@
+oval 1
+name: Test
+date: 2026-11-03
+author: Tester
+
+x-generator: test
+
+# Place @place
+
+## Race @race
+contest, x-custom
+x-note: kept
+
++ Al Able
+
+## Measure A @a
+measure, x-flag
+vote: yes

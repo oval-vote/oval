@@ -1,0 +1,55 @@
+---
+source: crates/oval-model/tests/conformance.rs
+---
+{
+  "version": 1,
+  "name": "Test",
+  "date": "2026-11-03",
+  "author": {
+    "name": "Tester"
+  },
+  "language": "en",
+  "children": [
+    {
+      "kind": "section",
+      "id": "place",
+      "name": "Place",
+      "region": false,
+      "children": [
+        {
+          "kind": "contest",
+          "id": "race",
+          "name": "Race",
+          "partisan": false,
+          "method": {
+            "type": "single"
+          },
+          "write_ins": false,
+          "unverified": false,
+          "candidates": [
+            {
+              "id": "al-able",
+              "name": "Al Able",
+              "incumbent": false,
+              "write_in": false,
+              "position": {
+                "type": "neutral"
+              }
+            },
+            {
+              "id": "bo-baker",
+              "name": "Bo Baker",
+              "incumbent": false,
+              "write_in": false,
+              "position": {
+                "type": "avoid"
+              }
+            }
+          ],
+          "decision": "undecided",
+          "rationale": []
+        }
+      ]
+    }
+  ]
+}

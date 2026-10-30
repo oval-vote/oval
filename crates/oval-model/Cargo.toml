@@ -1,0 +1,17 @@
+[package]
+name = "oval-model"
+description = "Data model, lowering, and semantic validation for Oval Vote guides"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oval-syntax = { path = "../oval-syntax" }
+serde.workspace = true
+unicode-normalization.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+insta.workspace = true

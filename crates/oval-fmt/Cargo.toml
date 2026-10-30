@@ -1,0 +1,15 @@
+[package]
+name = "oval-fmt"
+description = "Canonical formatter for Oval Vote guides"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oval-syntax = { path = "../oval-syntax" }
+oval-model = { path = "../oval-model" }
+
+[dev-dependencies]
+serde_json.workspace = true

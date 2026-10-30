@@ -1,4 +1,11 @@
 # Tool versions for working on this repo. Install with `mise install`.
-# Rust and the cargo tasks arrive with phase 2 (see ../PLAN.md).
 [tools]
-node = "24"
+rust = "1.97"
+
+[tasks.test]
+description = "Run unit tests, the conformance suite, and formatter checks"
+run = "cargo test --workspace"
+
+[tasks.check]
+description = "Check and lint the example guides, and verify they are formatted"
+run = ["cargo run -q -p oval-cli -- lint examples/*.oval", "cargo run -q -p oval-cli -- fmt --check examples/*.oval"]

@@ -38,7 +38,8 @@ tag          = "partisan" | "ranked" | integer, SP, "seats"
 structure    = { field | candidate | comment | blank } ;
 
 field        = key, ":", [ SP, TEXT ], EOL, { continuation } ;
-key          = LCALPHA, { LCALPHA | SP, LCALPHA } ;
+key          = word, { SP, word } ;
+word         = LCALPHA, { LCALPHA | "-", LCALPHA } ;
 continuation = SP, { SP }, TEXT, EOL ;
 
 candidate    = marker, SP, cname, [ SP, "(", labels, ")" ],

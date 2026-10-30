@@ -1,0 +1,15 @@
+oval 1
+name: Test
+date: 2026-11-03
+author: Tester
+
+# Place @place
+
+## Race @race
+contest, nonpartisan
+
++ Al Able
+
+## Measure A @a
+measure, partisan
+vote: yes

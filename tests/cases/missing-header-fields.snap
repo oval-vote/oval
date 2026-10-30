@@ -1,0 +1,21 @@
+---
+source: crates/oval-model/tests/conformance.rs
+---
+{
+  "version": 1,
+  "name": "Test",
+  "date": "",
+  "author": {
+    "name": ""
+  },
+  "language": "en",
+  "children": [
+    {
+      "kind": "section",
+      "id": "place",
+      "name": "Place",
+      "region": false,
+      "children": []
+    }
+  ]
+}

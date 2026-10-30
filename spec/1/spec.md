@@ -177,10 +177,12 @@ Tags for `region`: none.
 ```
 field        = key ":" [ SP text ]
 continuation = 1*SP text
-key          = LCALPHA *( LCALPHA | SP LCALPHA )
+key          = word *( SP word )
+word         = LCALPHA *( LCALPHA | "-" LCALPHA )
 ```
 
-A field is a lowercase key, a colon, and a value. Continuation lines extend the
+A field is a lowercase key (words of letters and single hyphens, separated by
+single spaces), a colon, and a value. Continuation lines extend the
 value; the lines are joined with single spaces. A blank line ends the field. A
 field with an empty value is the same as an absent field.
 
