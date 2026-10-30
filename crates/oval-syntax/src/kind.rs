@@ -79,7 +79,10 @@ impl rowan::Language for Lang {
     fn kind_from_raw(raw: rowan::SyntaxKind) -> SyntaxKind {
         assert!(raw.0 < SyntaxKind::__LAST as u16);
         // SAFETY: the enum is repr(u16), contiguous, and checked above.
-        unsafe { std::mem::transmute::<u16, SyntaxKind>(raw.0) }
+        #[allow(unsafe_code)]
+        unsafe {
+            std::mem::transmute::<u16, SyntaxKind>(raw.0)
+        }
     }
     fn kind_to_raw(kind: SyntaxKind) -> rowan::SyntaxKind {
         kind.into()

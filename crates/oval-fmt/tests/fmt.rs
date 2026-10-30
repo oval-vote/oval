@@ -6,9 +6,7 @@ use oval_fmt::{format, Options};
 use std::path::{Path, PathBuf};
 
 fn files(dir: &str) -> Vec<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(dir);
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(dir);
     let mut v: Vec<PathBuf> = std::fs::read_dir(root)
         .unwrap()
         .map(|e| e.unwrap().path())
@@ -20,7 +18,7 @@ fn files(dir: &str) -> Vec<PathBuf> {
 
 fn codes(loaded: &oval_model::Loaded) -> Vec<&'static str> {
     let mut v: Vec<_> = loaded.diagnostics.iter().map(|d| d.code).collect();
-    v.sort();
+    v.sort_unstable();
     v
 }
 
@@ -36,16 +34,12 @@ fn idempotent_and_model_preserving() {
         match format(&text, &opts) {
             Err(_) if has_syntax_errors => {}
             Err(d) => failures.push(format!("{name}: refused without syntax errors: {d:?}")),
-            Ok(_) if has_syntax_errors => {
-                failures.push(format!("{name}: formatted despite syntax errors"))
-            }
+            Ok(_) if has_syntax_errors => failures.push(format!("{name}: formatted despite syntax errors")),
             Ok(once) => {
-                let twice = format(&once, &opts)
-                    .unwrap_or_else(|e| panic!("{name}: second pass failed: {e:?}"));
+                let twice =
+                    format(&once, &opts).unwrap_or_else(|e| panic!("{name}: second pass failed: {e:?}"));
                 if once != twice {
-                    failures.push(format!(
-                        "{name}: not idempotent\n--- once\n{once}\n--- twice\n{twice}"
-                    ));
+                    failures.push(format!("{name}: not idempotent\n--- once\n{once}\n--- twice\n{twice}"));
                 }
                 let after = oval_model::load(&once);
                 let (a, b) = (
@@ -53,9 +47,7 @@ fn idempotent_and_model_preserving() {
                     serde_json::to_value(&after.guide).unwrap(),
                 );
                 if a != b {
-                    failures.push(format!(
-                        "{name}: model changed\n--- before\n{a:#}\n--- after\n{b:#}"
-                    ));
+                    failures.push(format!("{name}: model changed\n--- before\n{a:#}\n--- after\n{b:#}"));
                 }
                 if codes(&before) != codes(&after) {
                     failures.push(format!(
@@ -64,9 +56,7 @@ fn idempotent_and_model_preserving() {
                         codes(&after)
                     ));
                 }
-                if !once.ends_with('\n')
-                    || once.contains("\n\n\n")
-                    || once.lines().any(|l| l.ends_with(' '))
+                if !once.ends_with('\n') || once.contains("\n\n\n") || once.lines().any(|l| l.ends_with(' '))
                 {
                     failures.push(format!("{name}: whitespace not canonical"));
                 }

@@ -23,20 +23,10 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub fn error(range: TextRange, code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            range,
-            severity: Severity::Error,
-            code,
-            message: message.into(),
-        }
+        Self { range, severity: Severity::Error, code, message: message.into() }
     }
     pub fn warning(range: TextRange, code: &'static str, message: impl Into<String>) -> Self {
-        Self {
-            range,
-            severity: Severity::Warning,
-            code,
-            message: message.into(),
-        }
+        Self { range, severity: Severity::Warning, code, message: message.into() }
     }
 }
 
@@ -58,14 +48,9 @@ impl LineIndex {
 
     /// 1-based (line, column). Column counts characters, not bytes.
     pub fn line_col(&self, text: &str, offset: TextSize) -> (usize, usize) {
-        let line = self
-            .line_starts
-            .partition_point(|&s| s <= offset)
-            .saturating_sub(1);
+        let line = self.line_starts.partition_point(|&s| s <= offset).saturating_sub(1);
         let start = self.line_starts[line];
-        let col = text[usize::from(start)..usize::from(offset)]
-            .chars()
-            .count();
+        let col = text[usize::from(start)..usize::from(offset)].chars().count();
         (line + 1, col + 1)
     }
 }

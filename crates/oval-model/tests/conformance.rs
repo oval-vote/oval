@@ -12,10 +12,7 @@ use oval_syntax::{LineIndex, Severity};
 use std::path::{Path, PathBuf};
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
 }
 
 fn oval_files(dir: &Path) -> Vec<PathBuf> {
@@ -50,9 +47,7 @@ fn cases() {
 
         let round_trip = loaded.parse.syntax().text().to_string();
         if round_trip != text {
-            failures.push(format!(
-                "{name}: syntax tree does not round-trip the source"
-            ));
+            failures.push(format!("{name}: syntax tree does not round-trip the source"));
         }
 
         let sidecar = path.with_extension("diagnostics");
@@ -75,10 +70,7 @@ fn cases() {
                     format!("    {l}:{c} {} {}", d.code, d.message)
                 })
                 .collect();
-            failures.push(format!(
-                "{name}: expected {expected:?}\n  actual:\n{}",
-                detail.join("\n")
-            ));
+            failures.push(format!("{name}: expected {expected:?}\n  actual:\n{}", detail.join("\n")));
         }
 
         insta::with_settings!({ snapshot_path => dir.clone(), prepend_module_to_snapshot => false, omit_expression => true }, {
@@ -94,17 +86,8 @@ fn examples_have_no_errors() {
     for path in oval_files(&dir) {
         let text = std::fs::read_to_string(&path).unwrap();
         let loaded = oval_model::load(&text);
-        assert_eq!(
-            loaded.parse.syntax().text().to_string(),
-            text,
-            "{}: round trip",
-            path.display()
-        );
-        let errors: Vec<_> = loaded
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Error)
-            .collect();
+        assert_eq!(loaded.parse.syntax().text().to_string(), text, "{}: round trip", path.display());
+        let errors: Vec<_> = loaded.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
         assert!(errors.is_empty(), "{}: {errors:#?}", path.display());
     }
 }

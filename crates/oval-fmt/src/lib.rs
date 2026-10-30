@@ -42,10 +42,7 @@ pub fn format(text: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
         return Err(parse.diagnostics);
     }
     let root = ast::Root::cast(parse.syntax()).expect("root");
-    let mut f = Fmt {
-        out: String::new(),
-        width: opts.width,
-    };
+    let mut f = Fmt { out: String::new(), width: opts.width };
     f.root(&root);
     Ok(f.out)
 }
@@ -54,16 +51,8 @@ pub fn format(text: &str, opts: &Options) -> Result<String, Vec<Diagnostic>> {
 /// in source order.
 const HEADER_ORDER: &[&str] = &["name", "date", "author", "updated", "language"];
 const CONTEST_ORDER: &[&str] = &["party", "note"]; // `vote` goes after the candidates
-const MEASURE_ORDER: &[&str] = &[
-    "placed by",
-    "yes",
-    "no",
-    "threshold",
-    "supporters",
-    "opponents",
-    "note",
-    "vote",
-];
+const MEASURE_ORDER: &[&str] =
+    &["placed by", "yes", "no", "threshold", "supporters", "opponents", "note", "vote"];
 const RETENTION_ORDER: &[&str] = &["designation", "note", "vote"];
 
 /// Greedy word wrap. `first` prefixes the first line, `rest` the others.
@@ -166,20 +155,12 @@ impl Fmt {
             let comments = std::mem::take(&mut pending);
             match c.kind() {
                 COMMENT => pending.push(c.text().to_string().trim_end().to_string()),
-                DESCRIPTION => {
-                    description = ast::Description::cast(c).map(|node| Item { comments, node })
-                }
+                DESCRIPTION => description = ast::Description::cast(c).map(|node| Item { comments, node }),
                 KIND_LINE => kind_line = ast::KindLine::cast(c).map(|node| Item { comments, node }),
                 FIELD => fields.extend(ast::Field::cast(c).map(|node| Item { comments, node })),
-                CANDIDATE => {
-                    candidates.extend(ast::Candidate::cast(c).map(|node| Item { comments, node }))
-                }
-                PARAGRAPH => {
-                    paragraphs.extend(ast::Paragraph::cast(c).map(|node| Item { comments, node }))
-                }
-                SECTION => {
-                    children.extend(ast::Section::cast(c).map(|node| Item { comments, node }))
-                }
+                CANDIDATE => candidates.extend(ast::Candidate::cast(c).map(|node| Item { comments, node })),
+                PARAGRAPH => paragraphs.extend(ast::Paragraph::cast(c).map(|node| Item { comments, node })),
+                SECTION => children.extend(ast::Section::cast(c).map(|node| Item { comments, node })),
                 _ => pending = comments,
             }
         }
@@ -197,9 +178,8 @@ impl Fmt {
             self.kind_line(&k.node, kind.as_deref());
         }
         let is_contest = kind.as_deref() == Some("contest");
-        let (vote, fields): (Vec<_>, Vec<_>) = fields
-            .into_iter()
-            .partition(|f| is_contest && f.node.key().is_some_and(|k| k.text == "vote"));
+        let (vote, fields): (Vec<_>, Vec<_>) =
+            fields.into_iter().partition(|f| is_contest && f.node.key().is_some_and(|k| k.text == "vote"));
         let fields = ordered(fields, |f| key_rank(f, field_order));
         for f in &fields {
             self.comments(&f.comments);
@@ -238,14 +218,7 @@ impl Fmt {
 
     fn kind_line(&mut self, k: &ast::KindLine, kind: Option<&str>) {
         let order: &[&str] = match kind {
-            Some("contest") => &[
-                "partisan",
-                "ranked",
-                "seats",
-                "rank up to",
-                "write-ins",
-                "unverified",
-            ],
+            Some("contest") => &["partisan", "ranked", "seats", "rank up to", "write-ins", "unverified"],
             _ => &["unverified"],
         };
         let rank = |t: &str| {
@@ -334,10 +307,7 @@ fn collect<T>(node: &SyntaxNode, cast: fn(SyntaxNode) -> Option<T>) -> (Vec<Item
         if c.kind() == COMMENT {
             pending.push(c.text().to_string().trim_end().to_string());
         } else if let Some(node) = cast(c) {
-            items.push(Item {
-                comments: std::mem::take(&mut pending),
-                node,
-            });
+            items.push(Item { comments: std::mem::take(&mut pending), node });
         }
     }
     (items, pending)

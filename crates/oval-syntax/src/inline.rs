@@ -45,10 +45,7 @@ struct Map {
 
 impl Map {
     fn source(&self, joined: usize) -> TextSize {
-        let i = self
-            .spans
-            .partition_point(|&(js, _, _)| js <= joined)
-            .saturating_sub(1);
+        let i = self.spans.partition_point(|&(js, _, _)| js <= joined).saturating_sub(1);
         let (js, ss, len) = self.spans[i];
         let d = (joined - js).min(len);
         TextSize::from(ss + d as u32)
@@ -69,12 +66,7 @@ pub fn parse(segments: &[Segment]) -> Vec<Inline> {
         joined.push_str(&s.text);
     }
     let map = Map { spans };
-    let mut p = P {
-        s: joined.as_bytes(),
-        src: &joined,
-        pos: 0,
-        map: &map,
-    };
+    let mut p = P { s: joined.as_bytes(), src: &joined, pos: 0, map: &map };
     p.run(None).0
 }
 
@@ -94,9 +86,7 @@ impl P<'_> {
         let mut text = String::new();
         let flush = |text: &mut String, out: &mut Vec<Inline>| {
             if !text.is_empty() {
-                out.push(Inline::Text {
-                    text: std::mem::take(text),
-                });
+                out.push(Inline::Text { text: std::mem::take(text) });
             }
         };
         while self.pos < self.s.len() {
@@ -120,9 +110,7 @@ impl P<'_> {
                     if let Some(end) = self.src[self.pos + 1..].find('`') {
                         let code = &self.src[self.pos + 1..self.pos + 1 + end];
                         flush(&mut text, &mut out);
-                        out.push(Inline::Code {
-                            text: code.to_string(),
-                        });
+                        out.push(Inline::Code { text: code.to_string() });
                         self.pos += end + 2;
                     } else {
                         text.push('`');
@@ -189,31 +177,16 @@ impl P<'_> {
         }
         // Parse the text with a sub-parser.
         let text_src = &self.src[start + 1..start + 1 + close];
-        let sub_map = Map {
-            spans: vec![(0, u32::from(self.map.source(start + 1)), text_src.len())],
-        };
-        let mut sub = P {
-            s: text_src.as_bytes(),
-            src: text_src,
-            pos: 0,
-            map: &sub_map,
-        };
+        let sub_map = Map { spans: vec![(0, u32::from(self.map.source(start + 1)), text_src.len())] };
+        let mut sub = P { s: text_src.as_bytes(), src: text_src, pos: 0, map: &sub_map };
         let children = sub.run(None).0;
         let total = 1 + close + 2 + end + 1;
         let range = self.map.range(start, start + total);
         self.pos = start + total;
         Some(if let Some(id) = target.strip_prefix('@') {
-            Inline::Ref {
-                children,
-                id: id.to_string(),
-                range,
-            }
+            Inline::Ref { children, id: id.to_string(), range }
         } else {
-            Inline::Link {
-                children,
-                url: target.to_string(),
-                range,
-            }
+            Inline::Link { children, url: target.to_string(), range }
         })
     }
 
@@ -247,9 +220,7 @@ mod tests {
         }]
     }
     fn text(s: &str) -> Inline {
-        Inline::Text {
-            text: s.to_string(),
-        }
+        Inline::Text { text: s.to_string() }
     }
 
     #[test]
@@ -263,13 +234,9 @@ mod tests {
             parse(&seg("a *b* **c** d")),
             vec![
                 text("a "),
-                Inline::Emphasis {
-                    children: vec![text("b")]
-                },
+                Inline::Emphasis { children: vec![text("b")] },
                 text(" "),
-                Inline::Strong {
-                    children: vec![text("c")]
-                },
+                Inline::Strong { children: vec![text("c")] },
                 text(" d")
             ]
         );
@@ -288,10 +255,7 @@ mod tests {
 
     #[test]
     fn code_and_escapes() {
-        assert_eq!(
-            parse(&seg("`*x*` \\*y\\*")),
-            vec![Inline::Code { text: "*x*".into() }, text(" *y*")]
-        );
+        assert_eq!(parse(&seg("`*x*` \\*y\\*")), vec![Inline::Code { text: "*x*".into() }, text(" *y*")]);
     }
 
     #[test]
@@ -305,24 +269,12 @@ mod tests {
     #[test]
     fn joins_segments_with_spaces() {
         let segs = vec![
-            Segment {
-                text: "a *b".into(),
-                range: TextRange::new(TextSize::from(0), TextSize::from(4)),
-            },
-            Segment {
-                text: "c* d".into(),
-                range: TextRange::new(TextSize::from(10), TextSize::from(14)),
-            },
+            Segment { text: "a *b".into(), range: TextRange::new(TextSize::from(0), TextSize::from(4)) },
+            Segment { text: "c* d".into(), range: TextRange::new(TextSize::from(10), TextSize::from(14)) },
         ];
         assert_eq!(
             parse(&segs),
-            vec![
-                text("a "),
-                Inline::Emphasis {
-                    children: vec![text("b c")]
-                },
-                text(" d")
-            ]
+            vec![text("a "), Inline::Emphasis { children: vec![text("b c")] }, text(" d")]
         );
     }
 }

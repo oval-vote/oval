@@ -34,9 +34,5 @@ pub struct Segment {
 /// Join segments with single spaces, as the spec says for every multi-line
 /// construct.
 pub fn join_segments(segments: &[Segment]) -> String {
-    segments
-        .iter()
-        .map(|s| s.text.as_str())
-        .collect::<Vec<_>>()
-        .join(" ")
+    segments.iter().map(|s| s.text.as_str()).collect::<Vec<_>>().join(" ")
 }

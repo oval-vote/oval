@@ -45,18 +45,13 @@ fn children<T: 'static>(
 }
 
 fn token(node: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
-    node.children_with_tokens()
-        .filter_map(|e| e.into_token())
-        .find(|t| t.kind() == kind)
+    node.children_with_tokens().filter_map(rowan::NodeOrToken::into_token).find(|t| t.kind() == kind)
 }
 
 fn text_of(node: &SyntaxNode, kind: SyntaxKind) -> Option<Segment> {
     let n = node.children().find(|c| c.kind() == kind)?;
     let t = token(&n, TEXT)?;
-    Some(Segment {
-        text: t.text().to_string(),
-        range: t.text_range(),
-    })
+    Some(Segment { text: t.text().to_string(), range: t.text_range() })
 }
 
 /// The TEXT of every CONTINUATION child, in order.
@@ -64,10 +59,7 @@ fn continuations(node: &SyntaxNode) -> Vec<Segment> {
     node.children()
         .filter(|c| c.kind() == CONTINUATION)
         .filter_map(|c| token(&c, TEXT))
-        .map(|t| Segment {
-            text: t.text().to_string(),
-            range: t.text_range(),
-        })
+        .map(|t| Segment { text: t.text().to_string(), range: t.text_range() })
         .collect()
 }
 
@@ -162,10 +154,7 @@ impl Description {
             .children()
             .filter(|c| c.kind() == DESC_LINE)
             .filter_map(|c| token(&c, TEXT))
-            .map(|t| Segment {
-                text: t.text().to_string(),
-                range: t.text_range(),
-            })
+            .map(|t| Segment { text: t.text().to_string(), range: t.text_range() })
             .collect()
     }
 }
@@ -179,10 +168,7 @@ impl KindLine {
             .children()
             .filter(|c| c.kind() == TAG)
             .filter_map(|c| token(&c, TEXT))
-            .map(|t| Segment {
-                text: t.text().to_string(),
-                range: t.text_range(),
-            })
+            .map(|t| Segment { text: t.text().to_string(), range: t.text_range() })
             .collect()
     }
 }
@@ -214,10 +200,7 @@ pub enum Marker {
 impl Candidate {
     pub fn marker(&self) -> Option<Marker> {
         let m = self.0.children().find(|c| c.kind() == MARKER)?;
-        let t = m
-            .children_with_tokens()
-            .filter_map(|e| e.into_token())
-            .next()?;
+        let t = m.children_with_tokens().find_map(rowan::NodeOrToken::into_token)?;
         Some(match t.kind() {
             PLUS => Marker::Pick,
             MINUS => Marker::Avoid,
@@ -227,10 +210,7 @@ impl Candidate {
         })
     }
     pub fn marker_range(&self) -> TextRange {
-        self.0
-            .children()
-            .find(|c| c.kind() == MARKER)
-            .map_or(self.range(), |m| m.text_range())
+        self.0.children().find(|c| c.kind() == MARKER).map_or(self.range(), |m| m.text_range())
     }
     pub fn name(&self) -> Option<Segment> {
         text_of(&self.0, NAME)
@@ -242,10 +222,7 @@ impl Candidate {
             .flat_map(|l| l.children().collect::<Vec<_>>())
             .filter(|c| c.kind() == LABEL)
             .filter_map(|c| token(&c, TEXT))
-            .map(|t| Segment {
-                text: t.text().to_string(),
-                range: t.text_range(),
-            })
+            .map(|t| Segment { text: t.text().to_string(), range: t.text_range() })
             .collect()
     }
     pub fn designation(&self) -> Option<Segment> {
@@ -265,10 +242,7 @@ impl Paragraph {
             .children()
             .filter(|c| c.kind() == PROSE_LINE)
             .filter_map(|c| token(&c, TEXT))
-            .map(|t| Segment {
-                text: t.text().to_string(),
-                range: t.text_range(),
-            })
+            .map(|t| Segment { text: t.text().to_string(), range: t.text_range() })
             .collect()
     }
 }

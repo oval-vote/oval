@@ -46,23 +46,13 @@ fn main() -> ExitCode {
         Command::Lint { files, list } => {
             if list {
                 for r in oval_lint::RULES {
-                    println!(
-                        "{:<32} {:<6} {}",
-                        r.code,
-                        format!("{:?}", r.default).to_lowercase(),
-                        r.summary
-                    );
+                    println!("{:<32} {:<6} {}", r.code, format!("{:?}", r.default).to_lowercase(), r.summary);
                 }
                 return ExitCode::SUCCESS;
             }
             check(&files, true)
         }
-        Command::Fmt {
-            files,
-            check,
-            stdout,
-            width,
-        } => fmt(&files, check, stdout, width),
+        Command::Fmt { files, check, stdout, width } => fmt(&files, check, stdout, width),
         Command::Export { file } => {
             let text = read(&file);
             let loaded = oval_model::load(&text);
@@ -113,19 +103,10 @@ fn check(files: &[PathBuf], lint: bool) -> ExitCode {
             diagnostics.sort_by_key(|d| (d.range.start(), d.range.end()));
         }
         print_diagnostics(file, &text, &diagnostics);
-        errors += diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Error)
-            .count();
-        warnings += diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Warning)
-            .count();
+        errors += diagnostics.iter().filter(|d| d.severity == Severity::Error).count();
+        warnings += diagnostics.iter().filter(|d| d.severity == Severity::Warning).count();
     }
-    eprintln!(
-        "{} file(s), {errors} error(s), {warnings} warning(s)",
-        files.len()
-    );
+    eprintln!("{} file(s), {errors} error(s), {warnings} warning(s)", files.len());
     if errors > 0 {
         ExitCode::from(1)
     } else {
@@ -146,10 +127,7 @@ fn fmt(files: &[PathBuf], check: bool, stdout: bool, width: usize) -> ExitCode {
         match oval_fmt::format(&text, &opts) {
             Err(diagnostics) => {
                 print_diagnostics(file, &text, &diagnostics);
-                eprintln!(
-                    "{}: not formatted; fix the syntax errors first",
-                    file.display()
-                );
+                eprintln!("{}: not formatted; fix the syntax errors first", file.display());
                 status = ExitCode::from(1);
             }
             Ok(out) if stdout => print!("{out}"),
@@ -184,11 +162,6 @@ fn print_diagnostics(file: &Path, text: &str, diagnostics: &[Diagnostic]) {
             Severity::Error => "error",
             Severity::Warning => "warning",
         };
-        eprintln!(
-            "{}:{line}:{col}: {sev}[{}] {}",
-            file.display(),
-            d.code,
-            d.message
-        );
+        eprintln!("{}:{line}:{col}: {sev}[{}] {}", file.display(), d.code, d.message);
     }
 }

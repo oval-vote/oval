@@ -1,7 +1,10 @@
 //! Lower a syntax tree into the data model, applying spec section 6.
 
 use crate::validate::{is_full_date, is_http_url, is_language_tag};
-use crate::*;
+use crate::{
+    candidate_order, slug, Author, Candidate, Contest, Decision, Extensions, Guide, Measure, Method, Node,
+    Position, Retention, Section, Span, Vote,
+};
 use oval_syntax::ast::{self, Marker};
 use oval_syntax::inline::{self, Inline};
 use oval_syntax::{parse, Diagnostic, Parse, Segment, TextRange, TextSize};
@@ -19,28 +22,16 @@ pub struct Loaded {
 pub fn load(text: &str) -> Loaded {
     let parse = parse(text);
     let root = ast::Root::cast(parse.syntax()).expect("root");
-    let mut l = Lower {
-        diags: parse.diagnostics.clone(),
-        ids: HashMap::new(),
-        refs: Vec::new(),
-    };
+    let mut l = Lower { diags: parse.diagnostics.clone(), ids: HashMap::new(), refs: Vec::new() };
     let guide = l.guide(&root);
     for (id, range) in std::mem::take(&mut l.refs) {
         if !l.ids.contains_key(&id) {
-            l.error(
-                range,
-                "unresolved-ref",
-                format!("no section has the id `{id}`"),
-            );
+            l.error(range, "unresolved-ref", format!("no section has the id `{id}`"));
         }
     }
     let mut diagnostics = l.diags;
     diagnostics.sort_by_key(|d| (d.range.start(), d.range.end()));
-    Loaded {
-        parse,
-        guide,
-        diagnostics,
-    }
+    Loaded { parse, guide, diagnostics }
 }
 
 struct Lower {
@@ -50,16 +41,8 @@ struct Lower {
 }
 
 pub const CONTEST_FIELDS: &[&str] = &["note", "vote", "party"];
-pub const MEASURE_FIELDS: &[&str] = &[
-    "note",
-    "vote",
-    "placed by",
-    "yes",
-    "no",
-    "threshold",
-    "supporters",
-    "opponents",
-];
+pub const MEASURE_FIELDS: &[&str] =
+    &["note", "vote", "placed by", "yes", "no", "threshold", "supporters", "opponents"];
 pub const RETENTION_FIELDS: &[&str] = &["note", "vote", "designation"];
 pub const HEADER_FIELDS: &[&str] = &["name", "date", "author", "updated", "language"];
 
@@ -80,31 +63,17 @@ impl Lower {
     fn collect_refs(&mut self, nodes: &[Inline]) {
         for n in nodes {
             match n {
-                Inline::Ref {
-                    children,
-                    id,
-                    range,
-                } => {
+                Inline::Ref { children, id, range } => {
                     self.refs.push((id.clone(), *range));
                     self.collect_refs(children);
                 }
-                Inline::Link {
-                    children,
-                    url,
-                    range,
-                } => {
+                Inline::Link { children, url, range } => {
                     if !is_http_url(url) {
-                        self.error(
-                            *range,
-                            "bad-url",
-                            "links must be absolute http or https URLs",
-                        );
+                        self.error(*range, "bad-url", "links must be absolute http or https URLs");
                     }
                     self.collect_refs(children);
                 }
-                Inline::Emphasis { children } | Inline::Strong { children } => {
-                    self.collect_refs(children)
-                }
+                Inline::Emphasis { children } | Inline::Strong { children } => self.collect_refs(children),
                 Inline::Text { .. } | Inline::Code { .. } => {}
             }
         }
@@ -140,11 +109,7 @@ impl Lower {
                 self.error(
                     key.range,
                     "unknown-field",
-                    format!(
-                        "`{}` is not a field here; allowed: {}",
-                        key.text,
-                        allowed.join(", ")
-                    ),
+                    format!("`{}` is not a field here; allowed: {}", key.text, allowed.join(", ")),
                 );
                 continue;
             }
@@ -168,30 +133,18 @@ impl Lower {
         for t in tags {
             if t.text.starts_with("x-") {
                 if ext.tags.contains(&t.text) {
-                    self.error(
-                        t.range,
-                        "duplicate-tag",
-                        format!("`{}` is repeated", t.text),
-                    );
+                    self.error(t.range, "duplicate-tag", format!("`{}` is repeated", t.text));
                 } else {
                     ext.tags.push(t.text.clone());
                 }
                 continue;
             }
             if !allowed.contains(&t.text.as_str()) {
-                self.error(
-                    t.range,
-                    "unknown-tag",
-                    format!("`{}` is not a tag here", t.text),
-                );
+                self.error(t.range, "unknown-tag", format!("`{}` is not a tag here", t.text));
                 continue;
             }
             if seen.contains(&t.text) {
-                self.error(
-                    t.range,
-                    "duplicate-tag",
-                    format!("`{}` is repeated", t.text),
-                );
+                self.error(t.range, "duplicate-tag", format!("`{}` is repeated", t.text));
                 continue;
             }
             seen.push(t.text.clone());
@@ -201,9 +154,7 @@ impl Lower {
 
     fn guide(&mut self, root: &ast::Root) -> Guide {
         let version = root.magic().and_then(|m| m.version()).unwrap_or(1);
-        let header_range = root
-            .header()
-            .map_or(TextRange::empty(TextSize::from(0)), |h| h.range());
+        let header_range = root.header().map_or(TextRange::empty(TextSize::from(0)), |h| h.range());
         let first_line = root.magic().map_or(header_range, |m| m.range());
         let mut extensions = Extensions::default();
         let fields = match root.header() {
@@ -212,64 +163,38 @@ impl Lower {
         };
         let take = |k: &str| fields.get(k).map(|f| (f.value(), f.range()));
 
-        let name = match take("name") {
-            Some((v, _)) => v,
-            None => {
-                self.error(
-                    first_line,
-                    "missing-field",
-                    "the header needs a `name:` line",
-                );
-                String::new()
-            }
+        let name = if let Some((v, _)) = take("name") {
+            v
+        } else {
+            self.error(first_line, "missing-field", "the header needs a `name:` line");
+            String::new()
         };
-        let date = match take("date") {
-            Some((v, r)) => {
-                if !is_full_date(&v) {
-                    self.error(r, "bad-date", "dates are written YYYY-MM-DD");
-                }
-                v
+        let date = if let Some((v, r)) = take("date") {
+            if !is_full_date(&v) {
+                self.error(r, "bad-date", "dates are written YYYY-MM-DD");
             }
-            None => {
-                self.error(
-                    first_line,
-                    "missing-field",
-                    "the header needs a `date:` line",
-                );
-                String::new()
-            }
+            v
+        } else {
+            self.error(first_line, "missing-field", "the header needs a `date:` line");
+            String::new()
         };
-        let author = match take("author") {
-            Some((v, r)) => {
-                let (n, url) = match v.strip_suffix('>').and_then(|s| s.rsplit_once(" <")) {
-                    Some((n, u)) => (n.trim().to_string(), Some(u.to_string())),
-                    None => (v.clone(), None),
-                };
-                if n.is_empty() {
-                    self.error(r, "bad-author", "author is `Name` or `Name <url>`");
-                }
-                if let Some(u) = &url {
-                    if !is_http_url(u) {
-                        self.error(
-                            r,
-                            "bad-url",
-                            "the author url must be an absolute http or https URL",
-                        );
-                    }
-                }
-                Author { name: n, url }
+        let author = if let Some((v, r)) = take("author") {
+            let (n, url) = match v.strip_suffix('>').and_then(|s| s.rsplit_once(" <")) {
+                Some((n, u)) => (n.trim().to_string(), Some(u.to_string())),
+                None => (v.clone(), None),
+            };
+            if n.is_empty() {
+                self.error(r, "bad-author", "author is `Name` or `Name <url>`");
             }
-            None => {
-                self.error(
-                    first_line,
-                    "missing-field",
-                    "the header needs an `author:` line",
-                );
-                Author {
-                    name: String::new(),
-                    url: None,
+            if let Some(u) = &url {
+                if !is_http_url(u) {
+                    self.error(r, "bad-url", "the author url must be an absolute http or https URL");
                 }
             }
+            Author { name: n, url }
+        } else {
+            self.error(first_line, "missing-field", "the header needs an `author:` line");
+            Author { name: String::new(), url: None }
         };
         let updated = take("updated").map(|(v, r)| {
             if !is_full_date(&v) {
@@ -280,49 +205,36 @@ impl Lower {
         let language = match take("language") {
             Some((v, r)) => {
                 if !is_language_tag(&v) {
-                    self.error(
-                        r,
-                        "bad-language",
-                        "language is a BCP 47 tag such as `en` or `es-MX`",
-                    );
+                    self.error(r, "bad-language", "language is a BCP 47 tag such as `en` or `es-MX`");
                 }
                 v
             }
             None => "en".to_string(),
         };
         let children = root.sections().filter_map(|s| self.node(&s)).collect();
-        Guide {
-            version,
-            name,
-            date,
-            author,
-            updated,
-            language,
-            extensions,
-            children,
-        }
+        Guide { version, name, date, author, updated, language, extensions, children }
     }
 
     fn section_id(&mut self, heading: &ast::Heading) -> (String, String) {
         let name = heading.name().map(|n| n.text).unwrap_or_default();
-        let (id, range) = match heading.id() {
-            Some(t) => (t.text().to_string(), t.text_range()),
-            None => {
-                let s = slug(&name);
-                let r = heading.name().map_or(heading.range(), |n| n.range);
-                self.warning(r, "derived-id", format!("no `@id`; derived `@{s}` from the name, which will change if the name does"));
-                (s, r)
-            }
+        let (id, range) = if let Some(t) = heading.id() {
+            (t.text().to_string(), t.text_range())
+        } else {
+            let s = slug(&name);
+            let r = heading.name().map_or(heading.range(), |n| n.range);
+            self.warning(
+                r,
+                "derived-id",
+                format!("no `@id`; derived `@{s}` from the name, which will change if the name does"),
+            );
+            (s, r)
         };
         if let Some(first) = self.ids.get(&id) {
             let first = *first;
             self.error(
                 range,
                 "duplicate-id",
-                format!(
-                    "`@{id}` is also used at offset {}",
-                    u32::from(first.start())
-                ),
+                format!("`@{id}` is also used at offset {}", u32::from(first.start())),
             );
         } else {
             self.ids.insert(id.clone(), range);
@@ -332,10 +244,7 @@ impl Lower {
 
     fn node(&mut self, s: &ast::Section) -> Option<Node> {
         let heading = s.heading()?;
-        let span = Span {
-            full: s.range(),
-            line: heading.range(),
-        };
+        let span = Span { full: s.range(), line: heading.range() };
         let (id, name) = self.section_id(&heading);
         let description = s.description().map(|d| self.inline(&d.segments()));
         let kind = s.kind();
@@ -348,21 +257,11 @@ impl Lower {
                     self.tags(&tags, &[], &mut extensions);
                 }
                 let children = s.sections().filter_map(|c| self.node(&c)).collect();
-                Node::Section(Section {
-                    span,
-                    id,
-                    name,
-                    description,
-                    region,
-                    extensions,
-                    children,
-                })
+                Node::Section(Section { span, id, name, description, region, extensions, children })
             }
             Some("contest") => Node::Contest(self.contest(s, span, id, name, description, &tags)),
             Some("measure") => Node::Measure(self.measure(s, span, id, name, description, &tags)),
-            Some("retention") => {
-                Node::Retention(self.retention(s, span, id, name, description, &tags))
-            }
+            Some("retention") => Node::Retention(self.retention(s, span, id, name, description, &tags)),
             Some(_) => return None,
         })
     }
@@ -380,16 +279,8 @@ impl Lower {
             "yes" if !contest => Vote::Yes,
             "no" if !contest => Vote::No,
             _ => {
-                let allowed = if contest {
-                    "undecided or none"
-                } else {
-                    "yes, no, undecided, or none"
-                };
-                self.error(
-                    f.range(),
-                    "bad-vote-value",
-                    format!("`vote:` is {allowed}; got `{v}`"),
-                );
+                let allowed = if contest { "undecided or none" } else { "yes, no, undecided, or none" };
+                self.error(f.range(), "bad-vote-value", format!("`vote:` is {allowed}; got `{v}`"));
                 Vote::Undecided
             }
         };
@@ -439,21 +330,19 @@ impl Lower {
             let word = if let Some(n) = text.strip_suffix(" seats") {
                 match n.parse::<u32>() {
                     Ok(n) if n >= 2 => seats = Some((n, t.range)),
-                    _ => self.error(
-                        t.range,
-                        "bad-number",
-                        "`N seats` needs a whole number of at least 2",
-                    ),
+                    _ => self.error(t.range, "bad-number", "`N seats` needs a whole number of at least 2"),
                 }
                 "seats"
             } else if let Some(n) = text.strip_prefix("rank up to ") {
                 match n.parse::<u32>() {
                     Ok(n) if n >= 1 => max = Some((n, t.range)),
-                    _ => self.error(
-                        t.range,
-                        "bad-number",
-                        "`rank up to N` needs a whole number of at least 1",
-                    ),
+                    _ => {
+                        self.error(
+                            t.range,
+                            "bad-number",
+                            "`rank up to N` needs a whole number of at least 1",
+                        );
+                    }
                 }
                 "rank up to"
             } else {
@@ -487,19 +376,13 @@ impl Lower {
             seen.push(word);
         }
         if let (Some(_), Some((_, r))) = (ranked, seats) {
-            self.error(
-                r,
-                "conflicting-tags",
-                "`ranked` and `N seats` cannot both be set",
-            );
+            self.error(r, "conflicting-tags", "`ranked` and `N seats` cannot both be set");
         }
         if let (None, Some((_, r))) = (ranked, max) {
             self.error(r, "tag-requires", "`rank up to N` needs `ranked`");
         }
         let method = if ranked.is_some() {
-            Method::Ranked {
-                max: max.map(|m| m.0),
-            }
+            Method::Ranked { max: max.map(|m| m.0) }
         } else if let Some((n, _)) = seats {
             Method::Multiple { seats: n }
         } else {
@@ -507,7 +390,7 @@ impl Lower {
         };
 
         let fields = self.fields(s.fields(), CONTEST_FIELDS, &mut extensions);
-        let party = fields.get("party").map(|f| f.value());
+        let party = fields.get("party").map(ast::Field::value);
         let note = fields.get("note").map(|f| self.inline(&f.segments()));
         let vote = self.vote(&fields, true);
 
@@ -550,7 +433,11 @@ impl Lower {
                     }
                     other => {
                         if party.is_some() {
-                            self.error(l.range, "multiple-party-labels", "only one label may be a party; the others are `incumbent` and `write-in`");
+                            self.error(
+                                l.range,
+                                "multiple-party-labels",
+                                "only one label may be a party; the others are `incumbent` and `write-in`",
+                            );
                         }
                         party = Some(other.to_string());
                     }
@@ -597,10 +484,7 @@ impl Lower {
             };
             let note = c.note();
             candidates.push(Candidate {
-                span: Span {
-                    full: c.range(),
-                    line: c.range(),
-                },
+                span: Span { full: c.range(), line: c.range() },
                 id: cid,
                 name: cname.text,
                 party,
@@ -618,18 +502,20 @@ impl Lower {
         for (i, n) in distinct.iter().enumerate() {
             if *n != i as u32 + 1 {
                 let r = ranks.iter().find(|r| r.0 == *n).map(|r| r.1).unwrap();
-                self.error(r, "rank-gap", format!("rank {n} follows rank {i}; ranks run 1, 2, 3 with no gaps (ties share a number)"));
+                self.error(
+                    r,
+                    "rank-gap",
+                    format!(
+                        "rank {n} follows rank {i}; ranks run 1, 2, 3 with no gaps (ties share a number)"
+                    ),
+                );
                 break;
             }
         }
         if let (Some((m, _)), Some(top)) = (max, distinct.last()) {
             if *top > m {
                 let r = ranks.iter().find(|r| r.0 == *top).map(|r| r.1).unwrap();
-                self.error(
-                    r,
-                    "rank-exceeds-max",
-                    format!("the ballot allows at most {m} rankings"),
-                );
+                self.error(r, "rank-exceeds-max", format!("the ballot allows at most {m} rankings"));
             }
         }
         // Decision.
@@ -686,12 +572,9 @@ impl Lower {
         tags: &[Segment],
     ) -> Measure {
         let mut extensions = Extensions::default();
-        let unverified = self
-            .tags(tags, &["unverified"], &mut extensions)
-            .iter()
-            .any(|t| t == "unverified");
+        let unverified = self.tags(tags, &["unverified"], &mut extensions).iter().any(|t| t == "unverified");
         let fields = self.fields(s.fields(), MEASURE_FIELDS, &mut extensions);
-        let plain = |k: &str| fields.get(k).map(|f| f.value());
+        let plain = |k: &str| fields.get(k).map(ast::Field::value);
         let vote = self.required_vote(s, &fields);
         Measure {
             span,
@@ -722,10 +605,7 @@ impl Lower {
         tags: &[Segment],
     ) -> Retention {
         let mut extensions = Extensions::default();
-        let unverified = self
-            .tags(tags, &["unverified"], &mut extensions)
-            .iter()
-            .any(|t| t == "unverified");
+        let unverified = self.tags(tags, &["unverified"], &mut extensions).iter().any(|t| t == "unverified");
         let fields = self.fields(s.fields(), RETENTION_FIELDS, &mut extensions);
         let vote = self.required_vote(s, &fields);
         Retention {
@@ -734,7 +614,7 @@ impl Lower {
             name,
             description,
             unverified,
-            designation: fields.get("designation").map(|f| f.value()),
+            designation: fields.get("designation").map(ast::Field::value),
             note: fields.get("note").map(|f| self.inline(&f.segments())),
             vote,
             rationale: self.rationale(s),
@@ -743,17 +623,16 @@ impl Lower {
     }
 
     fn required_vote(&mut self, s: &ast::Section, fields: &HashMap<String, ast::Field>) -> Vote {
-        match self.vote(fields, false) {
-            Some(v) => v,
-            None => {
-                let r = s.heading().map_or(s.range(), |h| h.range());
-                self.error(
-                    r,
-                    "missing-vote",
-                    "every measure and retention needs `vote: yes`, `no`, `undecided`, or `none`",
-                );
-                Vote::Undecided
-            }
+        if let Some(v) = self.vote(fields, false) {
+            v
+        } else {
+            let r = s.heading().map_or(s.range(), |h| h.range());
+            self.error(
+                r,
+                "missing-vote",
+                "every measure and retention needs `vote: yes`, `no`, `undecided`, or `none`",
+            );
+            Vote::Undecided
         }
     }
 }

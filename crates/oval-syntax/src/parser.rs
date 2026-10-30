@@ -34,10 +34,7 @@ pub fn parse(src: &str) -> Parse {
         open: Vec::new(),
     };
     p.file();
-    Parse {
-        green: p.b.finish(),
-        diagnostics: p.diags,
-    }
+    Parse { green: p.b.finish(), diagnostics: p.diags }
 }
 
 #[derive(Clone, Copy)]
@@ -64,26 +61,14 @@ fn split_lines(src: &str) -> Vec<Line<'_>> {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\n' {
-            let (text_end, nl) = if i > start && bytes[i - 1] == b'\r' {
-                (i - 1, "\r\n")
-            } else {
-                (i, "\n")
-            };
-            lines.push(Line {
-                start,
-                text: &src[start..text_end],
-                nl,
-            });
+            let (text_end, nl) = if i > start && bytes[i - 1] == b'\r' { (i - 1, "\r\n") } else { (i, "\n") };
+            lines.push(Line { start, text: &src[start..text_end], nl });
             start = i + 1;
         }
         i += 1;
     }
     if start < src.len() || src.is_empty() {
-        lines.push(Line {
-            start,
-            text: &src[start..],
-            nl: "",
-        });
+        lines.push(Line { start, text: &src[start..], nl: "" });
     }
     lines
 }
@@ -151,7 +136,7 @@ fn field_key_len(text: &str) -> Option<usize> {
         i += word;
         match b.get(i) {
             Some(b':') => return (matches!(b.get(i + 1), None | Some(b' '))).then_some(i),
-            Some(b' ') | Some(b'-') => i += 1,
+            Some(b' ' | b'-') => i += 1,
             _ => return None,
         }
     }
@@ -184,10 +169,7 @@ enum SecKind {
 
 impl SecKind {
     fn is_question(self) -> bool {
-        matches!(
-            self,
-            SecKind::Contest | SecKind::Measure | SecKind::Retention | SecKind::Unknown
-        )
+        matches!(self, SecKind::Contest | SecKind::Measure | SecKind::Retention | SecKind::Unknown)
     }
 }
 
@@ -274,7 +256,11 @@ impl<'a> Parser<'a> {
                 LineKind::Field => self.field(),
                 _ => {
                     self.bump();
-                    self.error(line.range(), "unexpected-line", "only fields, comments, and blank lines may appear before the first heading");
+                    self.error(
+                        line.range(),
+                        "unexpected-line",
+                        "only fields, comments, and blank lines may appear before the first heading",
+                    );
                     self.error_line(line);
                 }
             }
@@ -305,7 +291,11 @@ impl<'a> Parser<'a> {
             self.nl(line);
             self.b.finish_node();
             if ver != "1" {
-                self.error(line.range(), "unsupported-version", format!("this parser implements Oval Vote version 1, the file declares version {ver}"));
+                self.error(
+                    line.range(),
+                    "unsupported-version",
+                    format!("this parser implements Oval Vote version 1, the file declares version {ver}"),
+                );
             }
         } else {
             self.error(line.range(), "bad-magic", "the first line must be `oval 1`");
@@ -399,7 +389,7 @@ impl<'a> Parser<'a> {
                         "candidate-in-non-contest",
                         "candidate lines are only allowed in a contest",
                     );
-                    self.wrap_error(|p| p.candidate());
+                    self.wrap_error(Parser::candidate);
                 } else {
                     self.candidate();
                 }
@@ -410,12 +400,16 @@ impl<'a> Parser<'a> {
             }
             (Phase::Prose, LineKind::Prose) => self.paragraph(),
             (Phase::Prose, LineKind::Field) => {
-                self.error(line.range(), "structure-after-rationale", "fields must come before the rationale; move this line above the first paragraph");
-                self.wrap_error(|p| p.field());
+                self.error(
+                    line.range(),
+                    "structure-after-rationale",
+                    "fields must come before the rationale; move this line above the first paragraph",
+                );
+                self.wrap_error(Parser::field);
             }
             (Phase::Prose, LineKind::Candidate) => {
                 self.error(line.range(), "structure-after-rationale", "candidate lines must come before the rationale; move this line above the first paragraph");
-                self.wrap_error(|p| p.candidate());
+                self.wrap_error(Parser::candidate);
             }
             (_, LineKind::Desc) => {
                 self.error(
@@ -423,7 +417,7 @@ impl<'a> Parser<'a> {
                     "description-misplaced",
                     "a `>` description goes directly under the heading",
                 );
-                self.wrap_error(|p| p.description());
+                self.wrap_error(Parser::description);
             }
             (_, LineKind::Continuation) => {
                 self.bump();
@@ -432,11 +426,7 @@ impl<'a> Parser<'a> {
             }
             (_, LineKind::Tab) => {
                 self.bump();
-                self.error(
-                    line.range(),
-                    "tab-indent",
-                    "lines are indented with spaces, not tabs",
-                );
+                self.error(line.range(), "tab-indent", "lines are indented with spaces, not tabs");
                 self.error_line(line);
             }
             (_, LineKind::Heading | LineKind::Blank | LineKind::Comment) => unreachable!(),
@@ -462,18 +452,13 @@ impl<'a> Parser<'a> {
         }
         let parent = self.open.last();
         match parent {
-            None if level != 1 => self.error(
-                line.range(),
-                "heading-level",
-                "the first heading must be level 1 (`#`)",
-            ),
+            None if level != 1 => {
+                self.error(line.range(), "heading-level", "the first heading must be level 1 (`#`)");
+            }
             Some(p) if level > p.level + 1 => self.error(
                 line.range(),
                 "heading-level",
-                format!(
-                    "heading level {level} under a level {} heading; levels may not skip",
-                    p.level
-                ),
+                format!("heading level {level} under a level {} heading; levels may not skip", p.level),
             ),
             Some(p) if p.kind.is_question() => self.error(
                 line.range(),
@@ -483,17 +468,9 @@ impl<'a> Parser<'a> {
             _ => {}
         }
         if level > 6 {
-            self.error(
-                line.range(),
-                "heading-level",
-                "headings go at most six levels deep",
-            );
+            self.error(line.range(), "heading-level", "headings go at most six levels deep");
         }
-        self.open.push(Open {
-            level,
-            kind: SecKind::Container,
-            phase: Phase::AfterHeading,
-        });
+        self.open.push(Open { level, kind: SecKind::Container, phase: Phase::AfterHeading });
         self.b.start_node(SECTION.into());
         self.b.start_node(HEADING.into());
         self.tok(HASHES, &line.text[..level]);
@@ -658,19 +635,13 @@ impl<'a> Parser<'a> {
         };
         // 3. labels in a trailing parenthesis
         let head_t = head.trim_end();
-        let (name, labels) = match head_t
-            .strip_suffix(')')
-            .and_then(|h| h.rfind(" (").map(|i| (&h[..i], &h[i + 2..])))
-        {
-            Some((n, l)) => (n, Some(l)),
-            None => (head_t, None),
-        };
+        let (name, labels) =
+            match head_t.strip_suffix(')').and_then(|h| h.rfind(" (").map(|i| (&h[..i], &h[i + 2..]))) {
+                Some((n, l)) => (n, Some(l)),
+                None => (head_t, None),
+            };
         if name.trim().is_empty() {
-            self.error(
-                line.range(),
-                "empty-candidate",
-                "a candidate line needs a name after the marker",
-            );
+            self.error(line.range(), "empty-candidate", "a candidate line needs a name after the marker");
         } else {
             self.trimmed(TEXT, name, Some(NAME));
         }
@@ -736,11 +707,7 @@ impl<'a> Parser<'a> {
                 Some(LineKind::Comment) => {
                     // A comment inside a paragraph belongs to it only if prose follows.
                     let mut j = self.pos;
-                    while self
-                        .lines
-                        .get(j)
-                        .is_some_and(|l| classify(l.text) == LineKind::Comment)
-                    {
+                    while self.lines.get(j).is_some_and(|l| classify(l.text) == LineKind::Comment) {
                         j += 1;
                     }
                     let follows = self.lines.get(j).map(|l| classify(l.text));

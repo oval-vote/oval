@@ -34,16 +34,8 @@ pub const RULES: &[Rule] = &[
         default: Level::Warn,
         summary: "a decided contest, measure, or retention has no rationale",
     },
-    Rule {
-        code: "missing-yes",
-        default: Level::Warn,
-        summary: "a measure has no `yes:` summary",
-    },
-    Rule {
-        code: "empty-section",
-        default: Level::Warn,
-        summary: "a container section has nothing in it",
-    },
+    Rule { code: "missing-yes", default: Level::Warn, summary: "a measure has no `yes:` summary" },
+    Rule { code: "empty-section", default: Level::Warn, summary: "a container section has nothing in it" },
     Rule {
         code: "unverified-in-note",
         default: Level::Warn,
@@ -69,12 +61,10 @@ pub struct Config {
 
 impl Config {
     pub fn level(&self, code: &str) -> Level {
-        self.lint.get(code).copied().unwrap_or_else(|| {
-            RULES
-                .iter()
-                .find(|r| r.code == code)
-                .map_or(Level::Off, |r| r.default)
-        })
+        self.lint
+            .get(code)
+            .copied()
+            .unwrap_or_else(|| RULES.iter().find(|r| r.code == code).map_or(Level::Off, |r| r.default))
     }
 
     /// Parse `oval.toml` text.
@@ -87,16 +77,11 @@ impl Config {
     /// the default config when there is none; an unreadable or invalid file
     /// is an error.
     pub fn discover(start: &Path) -> Result<(Self, Option<std::path::PathBuf>), String> {
-        let mut dir = if start.is_dir() {
-            Some(start)
-        } else {
-            start.parent()
-        };
+        let mut dir = if start.is_dir() { Some(start) } else { start.parent() };
         while let Some(d) = dir {
             let p = d.join("oval.toml");
             if p.is_file() {
-                let text =
-                    std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+                let text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
                 let c = Self::parse(&text).map_err(|e| format!("{}: {e}", p.display()))?;
                 return Ok((c, Some(p)));
             }
@@ -107,10 +92,7 @@ impl Config {
 }
 
 pub fn lint(loaded: &Loaded, config: &Config) -> Vec<Diagnostic> {
-    let mut l = Linter {
-        config,
-        out: Vec::new(),
-    };
+    let mut l = Linter { config, out: Vec::new() };
     for n in &loaded.guide.children {
         l.node(n);
     }
@@ -124,23 +106,13 @@ struct Linter<'a> {
 }
 
 impl Linter<'_> {
-    fn report(
-        &mut self,
-        code: &'static str,
-        range: oval_syntax::TextRange,
-        msg: impl Into<String>,
-    ) {
+    fn report(&mut self, code: &'static str, range: oval_syntax::TextRange, msg: impl Into<String>) {
         let severity = match self.config.level(code) {
             Level::Off => return,
             Level::Warn => Severity::Warning,
             Level::Error => Severity::Error,
         };
-        self.out.push(Diagnostic {
-            range,
-            severity,
-            code,
-            message: msg.into(),
-        });
+        self.out.push(Diagnostic { range, severity, code, message: msg.into() });
     }
 
     fn node(&mut self, n: &Node) {
@@ -161,15 +133,9 @@ impl Linter<'_> {
             Node::Contest(c) => {
                 let decided = c.decision == oval_model::Decision::Decided;
                 if decided && c.rationale.is_empty() {
-                    self.report(
-                        "no-rationale",
-                        line,
-                        "this contest has picks but no rationale",
-                    );
+                    self.report("no-rationale", line, "this contest has picks but no rationale");
                 }
-                if c.rationale.is_empty()
-                    && c.candidates.iter().any(|x| x.position == Position::Avoid)
-                {
+                if c.rationale.is_empty() && c.candidates.iter().any(|x| x.position == Position::Avoid) {
                     self.report(
                         "avoid-without-rationale",
                         line,
@@ -191,14 +157,8 @@ impl Linter<'_> {
                 if m.yes.is_none() {
                     self.report("missing-yes", line, "say what a yes vote does with `yes:`");
                 }
-                if matches!(m.vote, oval_model::Vote::Yes | oval_model::Vote::No)
-                    && m.rationale.is_empty()
-                {
-                    self.report(
-                        "no-rationale",
-                        line,
-                        "this measure has a position but no rationale",
-                    );
+                if matches!(m.vote, oval_model::Vote::Yes | oval_model::Vote::No) && m.rationale.is_empty() {
+                    self.report("no-rationale", line, "this measure has a position but no rationale");
                 }
                 if !m.unverified && m.note.as_ref().is_some_and(|n| mentions_unverified(n)) {
                     self.report(
@@ -209,14 +169,8 @@ impl Linter<'_> {
                 }
             }
             Node::Retention(r) => {
-                if matches!(r.vote, oval_model::Vote::Yes | oval_model::Vote::No)
-                    && r.rationale.is_empty()
-                {
-                    self.report(
-                        "no-rationale",
-                        line,
-                        "this retention has a position but no rationale",
-                    );
+                if matches!(r.vote, oval_model::Vote::Yes | oval_model::Vote::No) && r.rationale.is_empty() {
+                    self.report("no-rationale", line, "this retention has a position but no rationale");
                 }
             }
         }
@@ -244,8 +198,10 @@ fn flatten(nodes: &[Inline], out: &mut String) {
     for n in nodes {
         match n {
             Inline::Text { text } | Inline::Code { text } => out.push_str(text),
-            Inline::Emphasis { children } | Inline::Strong { children } => flatten(children, out),
-            Inline::Link { children, .. } | Inline::Ref { children, .. } => flatten(children, out),
+            Inline::Emphasis { children }
+            | Inline::Strong { children }
+            | Inline::Link { children, .. }
+            | Inline::Ref { children, .. } => flatten(children, out),
         }
     }
 }
@@ -256,10 +212,8 @@ mod tests {
 
     #[test]
     fn config_overrides_defaults() {
-        let c = Config::parse(
-            "[lint]\nno-rationale = \"off\"\ncandidate-without-designation = \"error\"\n",
-        )
-        .unwrap();
+        let c = Config::parse("[lint]\nno-rationale = \"off\"\ncandidate-without-designation = \"error\"\n")
+            .unwrap();
         assert_eq!(c.level("no-rationale"), Level::Off);
         assert_eq!(c.level("candidate-without-designation"), Level::Error);
         assert_eq!(c.level("missing-yes"), Level::Warn);
