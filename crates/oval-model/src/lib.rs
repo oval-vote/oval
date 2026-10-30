@@ -4,6 +4,7 @@
 pub mod lower;
 mod validate;
 
+use oval_syntax::ast::Marker;
 use oval_syntax::inline::Inline;
 use oval_syntax::TextRange;
 use serde::Serialize;
@@ -240,15 +241,21 @@ pub struct Retention {
 
 /// Derived identifier (spec 6.1): lowercase, diacritics removed, runs of
 /// anything outside `a-z0-9` become `-`.
-/// Canonical candidate order (spec 4.7): ranks ascending, then picks, then
-/// listed, then avoid; stable within each group.
-pub fn candidate_order(c: &Candidate) -> (u8, u32) {
-    match c.position {
-        Position::Rank { rank } => (0, rank),
-        Position::Pick => (1, 0),
-        Position::Neutral => (2, 0),
-        Position::Avoid => (3, 0),
+impl Position {
+    /// The candidate-line marker this position came from.
+    pub fn marker(self) -> Marker {
+        match self {
+            Position::Rank { rank } => Marker::Rank(rank),
+            Position::Pick => Marker::Pick,
+            Position::Neutral => Marker::Neutral,
+            Position::Avoid => Marker::Avoid,
+        }
     }
+}
+
+/// Canonical candidate order; see [`Marker::order_key`].
+pub fn candidate_order(c: &Candidate) -> (u8, u32) {
+    c.position.marker().order_key()
 }
 
 pub fn slug(name: &str) -> String {

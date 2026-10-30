@@ -5,6 +5,7 @@
 
 use crate::{Segment, TextRange, TextSize};
 use serde::Serialize;
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -37,18 +38,24 @@ pub enum Inline {
 
 pub const ESCAPABLE: &str = "\\*_`[]()#>+-@/";
 
+/// Where one segment landed in the joined string.
+struct Span {
+    joined: usize,
+    source: u32,
+    len: usize,
+}
+
 /// Maps offsets in the joined string back to source offsets.
 struct Map {
-    // (joined start, source start, len) per segment
-    spans: Vec<(usize, u32, usize)>,
+    spans: Vec<Span>,
 }
 
 impl Map {
     fn source(&self, joined: usize) -> TextSize {
-        let i = self.spans.partition_point(|&(js, _, _)| js <= joined).saturating_sub(1);
-        let (js, ss, len) = self.spans[i];
-        let d = (joined - js).min(len);
-        TextSize::from(ss + d as u32)
+        let i = self.spans.partition_point(|s| s.joined <= joined).saturating_sub(1);
+        let span = &self.spans[i];
+        let d = (joined - span.joined).min(span.len);
+        TextSize::from(span.source + d as u32)
     }
     fn range(&self, start: usize, end: usize) -> TextRange {
         TextRange::new(self.source(start), self.source(end))
@@ -62,12 +69,11 @@ pub fn parse(segments: &[Segment]) -> Vec<Inline> {
         if i > 0 {
             joined.push(' ');
         }
-        spans.push((joined.len(), u32::from(s.range.start()), s.text.len()));
+        spans.push(Span { joined: joined.len(), source: u32::from(s.range.start()), len: s.text.len() });
         joined.push_str(&s.text);
     }
     let map = Map { spans };
-    let mut p = P { s: joined.as_bytes(), src: &joined, pos: 0, map: &map };
-    p.run(None).0
+    P::new(&joined, &map).run(None).0
 }
 
 struct P<'a> {
@@ -75,13 +81,27 @@ struct P<'a> {
     src: &'a str,
     pos: usize,
     map: &'a Map,
+    /// Openers (position, delimiter length) already known to have no closer,
+    /// so an unclosed `*` deep in a paragraph is scanned once, not once per
+    /// enclosing opener.
+    unclosed: HashSet<(usize, usize)>,
+    /// How many emphasis or strong spans enclose the current position. Spec
+    /// section 7 allows nesting to one level, so this never exceeds
+    /// `MAX_DEPTH`, which also bounds the recursion.
+    depth: usize,
 }
 
-impl P<'_> {
+const MAX_DEPTH: usize = 2;
+
+impl<'a> P<'a> {
+    fn new(src: &'a str, map: &'a Map) -> Self {
+        P { s: src.as_bytes(), src, pos: 0, map, unclosed: HashSet::new(), depth: 0 }
+    }
+
     /// Parse until `close` is found at this nesting level (or end of input).
     /// Returns the children and whether the closer was found; `pos` is left
     /// after the closer when it was.
-    fn run(&mut self, close: Option<&[u8]>) -> (Vec<Inline>, bool) {
+    fn run(&mut self, close: Option<&str>) -> (Vec<Inline>, bool) {
         let mut out = Vec::new();
         let mut text = String::new();
         let flush = |text: &mut String, out: &mut Vec<Inline>| {
@@ -91,7 +111,7 @@ impl P<'_> {
         };
         while self.pos < self.s.len() {
             if let Some(c) = close {
-                if self.s[self.pos..].starts_with(c) && self.closes_here(c) {
+                if self.src[self.pos..].starts_with(c) && self.closes_here(c) {
                     self.pos += c.len();
                     flush(&mut text, &mut out);
                     return (out, true);
@@ -129,11 +149,14 @@ impl P<'_> {
                 }
                 b'*' => {
                     let start = self.pos;
-                    let strong = self.s[self.pos..].starts_with(b"**");
-                    let delim: &[u8] = if strong { b"**" } else { b"*" };
-                    if self.opens_here(delim) {
+                    let strong = self.src[self.pos..].starts_with("**");
+                    let delim = if strong { "**" } else { "*" };
+                    let key = (start, delim.len());
+                    if self.depth < MAX_DEPTH && self.opens_here(delim) && !self.unclosed.contains(&key) {
                         self.pos += delim.len();
+                        self.depth += 1;
                         let (children, closed) = self.run(Some(delim));
+                        self.depth -= 1;
                         if closed {
                             flush(&mut text, &mut out);
                             out.push(if strong {
@@ -143,13 +166,11 @@ impl P<'_> {
                             });
                             continue;
                         }
-                        // No closer: literal.
-                        self.pos = start + delim.len();
-                        text.push_str(std::str::from_utf8(delim).unwrap());
-                    } else {
-                        text.push_str(std::str::from_utf8(delim).unwrap());
-                        self.pos += delim.len();
+                        self.unclosed.insert(key);
                     }
+                    // Not an opener, or no closer: literal.
+                    self.pos = start + delim.len();
+                    text.push_str(delim);
                 }
                 _ => {
                     let ch = self.src[self.pos..].chars().next().unwrap();
@@ -177,9 +198,14 @@ impl P<'_> {
         }
         // Parse the text with a sub-parser.
         let text_src = &self.src[start + 1..start + 1 + close];
-        let sub_map = Map { spans: vec![(0, u32::from(self.map.source(start + 1)), text_src.len())] };
-        let mut sub = P { s: text_src.as_bytes(), src: text_src, pos: 0, map: &sub_map };
-        let children = sub.run(None).0;
+        let sub_map = Map {
+            spans: vec![Span {
+                joined: 0,
+                source: u32::from(self.map.source(start + 1)),
+                len: text_src.len(),
+            }],
+        };
+        let children = P::new(text_src, &sub_map).run(None).0;
         let total = 1 + close + 2 + end + 1;
         let range = self.map.range(start, start + total);
         self.pos = start + total;
@@ -192,17 +218,17 @@ impl P<'_> {
 
     /// Opening delimiter: not followed by whitespace, and not immediately
     /// followed by the same delimiter (which would be an empty span).
-    fn opens_here(&self, delim: &[u8]) -> bool {
+    fn opens_here(&self, delim: &str) -> bool {
         let after = self.s.get(self.pos + delim.len());
         matches!(after, Some(c) if !c.is_ascii_whitespace() && *c != b'*')
     }
 
     /// Closing delimiter: not preceded by whitespace.
-    fn closes_here(&self, delim: &[u8]) -> bool {
+    fn closes_here(&self, delim: &str) -> bool {
         let before = self.pos.checked_sub(1).map(|i| self.s[i]);
         let ok = matches!(before, Some(c) if !c.is_ascii_whitespace());
         // `*` must not be the start of `**` when closing emphasis.
-        if ok && delim == b"*" && self.s.get(self.pos + 1) == Some(&b'*') {
+        if ok && delim == "*" && self.s.get(self.pos + 1) == Some(&b'*') {
             return false;
         }
         ok
@@ -264,6 +290,27 @@ mod tests {
         assert!(matches!(&out[1], Inline::Ref { id, .. } if id == "b"));
         assert!(matches!(&out[3], Inline::Link { url, .. } if url == "https://x.org"));
         assert_eq!(parse(&seg("[not a link]")), vec![text("[not a link]")]);
+    }
+
+    #[test]
+    fn nesting_stops_at_one_level() {
+        // Inside strong, emphasis may open once more; the `*` before `c` is at
+        // the depth limit and stays literal, so the next `*` closes the span.
+        let out = parse(&seg("**a *b *c* d* e**"));
+        let Inline::Strong { children } = &out[0] else { panic!("{out:?}") };
+        assert_eq!(children, &[text("a "), Inline::Emphasis { children: vec![text("b *c")] }, text(" d* e")]);
+    }
+
+    #[test]
+    fn unclosed_openers_are_linear() {
+        // Every `*` opens and none closes; without memoizing failed openers this
+        // rescans the tail once per opener.
+        let start = std::time::Instant::now();
+        for src in ["*a ".repeat(2000), "*".repeat(2000), "**a *b ".repeat(1000)] {
+            let out = parse(&seg(&src));
+            assert_eq!(out, vec![text(&src)]);
+        }
+        assert!(start.elapsed() < std::time::Duration::from_secs(1), "{:?}", start.elapsed());
     }
 
     #[test]

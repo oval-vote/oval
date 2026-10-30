@@ -30,7 +30,7 @@ fn idempotent_and_model_preserving() {
         let name = path.file_name().unwrap().to_string_lossy().to_string();
         let text = std::fs::read_to_string(&path).unwrap();
         let before = oval_model::load(&text);
-        let has_syntax_errors = !before.parse.diagnostics.is_empty();
+        let has_syntax_errors = !oval_syntax::parse(&text).diagnostics.is_empty();
         match format(&text, &opts) {
             Err(_) if has_syntax_errors => {}
             Err(d) => failures.push(format!("{name}: refused without syntax errors: {d:?}")),

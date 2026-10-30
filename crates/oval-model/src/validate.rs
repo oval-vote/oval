@@ -1,29 +1,30 @@
 //! Value checks shared by the lowering pass.
 
-#[allow(clippy::many_single_char_names)]
+/// RFC 3339 full-date: `YYYY-MM-DD`, with the day checked against the month
+/// and leap years.
 pub fn is_full_date(s: &str) -> bool {
-    let b = s.as_bytes();
-    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+    let bytes = s.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return false;
+    }
+    if !bytes.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit()) {
         return false;
     }
     let num = |r: std::ops::Range<usize>| s[r].parse::<u32>().ok();
-    let (Some(y), Some(m), Some(d)) = (num(0..4), num(5..7), num(8..10)) else {
+    let (Some(year), Some(month), Some(day)) = (num(0..4), num(5..7), num(8..10)) else {
         return false;
     };
-    if !b.iter().enumerate().all(|(i, c)| if i == 4 || i == 7 { true } else { c.is_ascii_digit() }) {
+    if !(1..=12).contains(&month) || day == 0 {
         return false;
     }
-    if !(1..=12).contains(&m) || d == 0 {
-        return false;
-    }
-    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
-    let max = match m {
+    let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    let days_in_month = match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
         _ if leap => 29,
         _ => 28,
     };
-    d <= max
+    day <= days_in_month
 }
 
 pub fn is_http_url(s: &str) -> bool {

@@ -14,7 +14,7 @@ pub mod inline;
 pub mod kind;
 mod parser;
 
-pub use diagnostic::{Diagnostic, LineIndex, Severity};
+pub use diagnostic::{has_errors, Diagnostic, Diagnostics, LineIndex, Severity};
 pub use kind::{Lang, SyntaxKind};
 pub use parser::{parse, Parse};
 pub use rowan::{TextRange, TextSize};

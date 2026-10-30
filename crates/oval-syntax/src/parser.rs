@@ -3,12 +3,11 @@
 //! calls for. Nothing is ever dropped: a line that cannot appear where it is
 //! becomes an `ERROR` node wrapping its normal parse, with a diagnostic.
 
-use crate::diagnostic::Diagnostic;
+use crate::ast::SectionKind;
+use crate::diagnostic::{Diagnostic, Diagnostics};
 use crate::kind::SyntaxKind::{self, *};
 use crate::SyntaxNode;
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
-
-pub const KINDS: [&str; 4] = ["region", "contest", "measure", "retention"];
 
 /// The result of parsing: a lossless tree and the diagnostics found while
 /// building it. Semantic diagnostics (ids, decisions, counts) come from the
@@ -30,11 +29,11 @@ pub fn parse(src: &str) -> Parse {
         lines: split_lines(src),
         pos: 0,
         b: GreenNodeBuilder::new(),
-        diags: Vec::new(),
+        diags: Diagnostics::new(),
         open: Vec::new(),
     };
     p.file();
-    Parse { green: p.b.finish(), diagnostics: p.diags }
+    Parse { green: p.b.finish(), diagnostics: p.diags.into_vec() }
 }
 
 #[derive(Clone, Copy)]
@@ -84,6 +83,14 @@ enum LineKind {
     Candidate,
     Field,
     Prose,
+}
+
+impl LineKind {
+    /// Anything that is not trivia or a heading: a line that must belong to
+    /// the current section's body.
+    fn is_content(self) -> bool {
+        !matches!(self, LineKind::Blank | LineKind::Comment | LineKind::Heading)
+    }
 }
 
 fn classify(text: &str) -> LineKind {
@@ -142,11 +149,12 @@ fn field_key_len(text: &str) -> Option<usize> {
     }
 }
 
-/// The kind keyword when the line is a kind line.
-fn kind_keyword(text: &str) -> Option<&'static str> {
+/// The kind when the line is a kind line: a kind keyword followed by nothing
+/// or by a comma.
+fn kind_keyword(text: &str) -> Option<SectionKind> {
     let word = text.split([',', ' ']).next()?;
-    let k = KINDS.iter().find(|k| **k == word)?;
-    let rest = text[k.len()..].trim_start();
+    let k = SectionKind::parse(word)?;
+    let rest = text[k.as_str().len()..].trim_start();
     (rest.is_empty() || rest.starts_with(',')).then_some(k)
 }
 
@@ -156,29 +164,158 @@ pub fn is_valid_id(s: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
+/// What the parser knows about an open section's kind. The two recovery
+/// states never reach the tree; only `Known` has a kind line.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum SecKind {
+    /// No kind line (yet): holds only sections.
     Container,
-    Region,
-    Contest,
-    Measure,
-    Retention,
+    Known(SectionKind),
     /// Had content without a kind line; reported once, then parsed as a question.
     Unknown,
 }
 
 impl SecKind {
     fn is_question(self) -> bool {
-        matches!(self, SecKind::Contest | SecKind::Measure | SecKind::Retention | SecKind::Unknown)
+        match self {
+            SecKind::Container => false,
+            SecKind::Known(k) => k.is_question(),
+            SecKind::Unknown => true,
+        }
+    }
+    fn allows_candidates(self) -> bool {
+        matches!(self, SecKind::Known(SectionKind::Contest) | SecKind::Unknown)
     }
 }
 
+/// Where the parser is within a section's body. `AfterHeading` and
+/// `AfterDescription` only occur while the kind is still `Container`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Phase {
     AfterHeading,
     AfterDescription,
     Structure,
     Prose,
+}
+
+/// What `section_line` does with a line, decided once per line by `step`.
+enum Action {
+    Heading,
+    Blank,
+    Comment,
+    Description,
+    KindLine(SectionKind),
+    Field,
+    Candidate,
+    Paragraph,
+    /// Report `code`, then parse the construct normally inside an ERROR node.
+    Misplaced {
+        code: &'static str,
+        msg: &'static str,
+        construct: Construct,
+    },
+    /// Report `code` and keep the line as a bare ERROR node holding one TEXT token.
+    Stray {
+        code: &'static str,
+        msg: &'static str,
+    },
+}
+
+/// A construct that can be parsed in the wrong place.
+#[derive(Clone, Copy)]
+enum Construct {
+    Field,
+    Candidate,
+    Description,
+}
+
+/// One line's outcome: the action, the section state once it is taken, and
+/// whether this line is content in a section that never got a kind line
+/// (reported once, before the action runs).
+struct Step {
+    action: Action,
+    phase: Phase,
+    kind: SecKind,
+    missing_kind_line: bool,
+}
+
+/// The dispatch table for a line in a section body. Pure. `kind_line` is
+/// `Some` when the line reads `kind` or `kind, tags`; it is only consulted
+/// directly under the heading, so a later paragraph that starts with the
+/// word `measure` is prose.
+fn step(phase: Phase, kind: SecKind, line: LineKind, kind_line: Option<SectionKind>) -> Step {
+    match phase {
+        Phase::AfterHeading if line == LineKind::Desc => Step {
+            action: Action::Description,
+            phase: Phase::AfterDescription,
+            kind,
+            missing_kind_line: false,
+        },
+        Phase::AfterHeading | Phase::AfterDescription if line.is_content() => {
+            if let Some(k) = kind_line {
+                Step {
+                    action: Action::KindLine(k),
+                    phase: Phase::Structure,
+                    kind: SecKind::Known(k),
+                    missing_kind_line: false,
+                }
+            } else {
+                // Content without a kind line: report once, become a question,
+                // and dispatch this same line as structure.
+                let missing = kind == SecKind::Container;
+                let kind = if missing { SecKind::Unknown } else { kind };
+                Step { missing_kind_line: missing, ..body(Phase::Structure, kind, line) }
+            }
+        }
+        _ => body(phase, kind, line),
+    }
+}
+
+/// Dispatch once the section's kind is settled, and for trivia in any phase.
+fn body(phase: Phase, kind: SecKind, line: LineKind) -> Step {
+    let prose = phase == Phase::Prose;
+    let mut next = phase;
+    let action = match line {
+        LineKind::Heading => Action::Heading,
+        LineKind::Blank => Action::Blank,
+        LineKind::Comment => Action::Comment,
+        _ if kind == SecKind::Known(SectionKind::Region) => Action::Stray {
+            code: "content-in-container",
+            msg: "a region holds sections, not fields, candidates, or rationale",
+        },
+        LineKind::Field if !prose => Action::Field,
+        LineKind::Field => Action::Misplaced {
+            code: "structure-after-rationale",
+            msg: "fields must come before the rationale; move this line above the first paragraph",
+            construct: Construct::Field,
+        },
+        LineKind::Candidate if prose => Action::Misplaced {
+            code: "structure-after-rationale",
+            msg: "candidate lines must come before the rationale; move this line above the first paragraph",
+            construct: Construct::Candidate,
+        },
+        LineKind::Candidate if kind.allows_candidates() => Action::Candidate,
+        LineKind::Candidate => Action::Misplaced {
+            code: "candidate-in-non-contest",
+            msg: "candidate lines are only allowed in a contest",
+            construct: Construct::Candidate,
+        },
+        LineKind::Prose => {
+            next = Phase::Prose;
+            Action::Paragraph
+        }
+        LineKind::Desc => Action::Misplaced {
+            code: "description-misplaced",
+            msg: "a `>` description goes directly under the heading",
+            construct: Construct::Description,
+        },
+        LineKind::Continuation => Action::Stray {
+            code: "stray-continuation",
+            msg: "an indented line continues the field or candidate line directly above it; nothing is above this one",
+        },
+        LineKind::Tab => Action::Stray { code: "tab-indent", msg: "lines are indented with spaces, not tabs" },
+    };
+    Step { action, phase: next, kind, missing_kind_line: false }
 }
 
 struct Open {
@@ -191,7 +328,7 @@ struct Parser<'a> {
     lines: Vec<Line<'a>>,
     pos: usize,
     b: GreenNodeBuilder<'static>,
-    diags: Vec<Diagnostic>,
+    diags: Diagnostics,
     open: Vec<Open>,
 }
 
@@ -209,7 +346,7 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&mut self, range: TextRange, code: &'static str, msg: impl Into<String>) {
-        self.diags.push(Diagnostic::error(range, code, msg));
+        self.diags.error(range, code, msg);
     }
 
     fn peek(&self) -> Option<Line<'a>> {
@@ -266,8 +403,8 @@ impl<'a> Parser<'a> {
             }
         }
         self.b.finish_node(); // HEADER
-        while self.peek().is_some() {
-            self.section_line();
+        while let Some(line) = self.peek() {
+            self.section_line(line);
         }
         while self.open.pop().is_some() {
             self.b.finish_node();
@@ -332,106 +469,48 @@ impl<'a> Parser<'a> {
 
     // ----- sections -----
 
-    fn section_line(&mut self) {
-        let line = self.peek().unwrap();
-        let kind = classify(line.text);
-        if kind == LineKind::Heading {
+    fn section_line(&mut self, line: Line<'a>) {
+        let line_kind = classify(line.text);
+        if line_kind == LineKind::Heading {
             self.heading();
             return;
         }
-        let Some(cur) = self.open.last() else {
-            // Cannot happen: HEADER consumed everything before the first heading.
-            self.bump();
-            self.error_line(line);
-            return;
+        let (phase, kind) = {
+            let cur = self.open.last().expect("a section is open after the header");
+            (cur.phase, cur.kind)
         };
-        let (sec_kind, phase) = (cur.kind, cur.phase);
-        match kind {
-            LineKind::Blank => return self.blank(),
-            LineKind::Comment => return self.comment(),
-            _ => {}
+        let kind_line = if line_kind == LineKind::Prose { kind_keyword(line.text) } else { None };
+        let step = step(phase, kind, line_kind, kind_line);
+        if step.missing_kind_line {
+            self.error(line.range(), "content-in-container", "this section has no kind line, so it can only contain other sections; add `contest`, `measure`, `retention`, or `region` under the heading, or remove this");
         }
-        if phase == Phase::AfterHeading && kind == LineKind::Desc {
-            self.description();
-            self.open.last_mut().unwrap().phase = Phase::AfterDescription;
-            return;
+        // The state is written before the action runs. That is safe because
+        // no parse function below reads `open`.
+        if let Some(cur) = self.open.last_mut() {
+            cur.phase = step.phase;
+            cur.kind = step.kind;
         }
-        if matches!(phase, Phase::AfterHeading | Phase::AfterDescription) {
-            if kind == LineKind::Prose && kind_keyword(line.text).is_some() {
-                self.kind_line();
-                return;
+        match step.action {
+            Action::Heading => self.heading(),
+            Action::Blank => self.blank(),
+            Action::Comment => self.comment(),
+            Action::Description => self.description(),
+            Action::KindLine(k) => self.kind_line(k),
+            Action::Field => self.field(),
+            Action::Candidate => self.candidate(),
+            Action::Paragraph => self.paragraph(),
+            Action::Misplaced { code, msg, construct } => {
+                self.error(line.range(), code, msg);
+                self.wrap_error(match construct {
+                    Construct::Field => Parser::field,
+                    Construct::Candidate => Parser::candidate,
+                    Construct::Description => Parser::description,
+                });
             }
-            // Content without a kind line.
-            let cur = self.open.last_mut().unwrap();
-            if cur.kind == SecKind::Container {
-                cur.kind = SecKind::Unknown;
-                self.error(line.range(), "content-in-container", "this section has no kind line, so it can only contain other sections; add `contest`, `measure`, `retention`, or `region` under the heading, or remove this");
-            }
-            self.open.last_mut().unwrap().phase = Phase::Structure;
-            return self.section_line();
-        }
-        if sec_kind == SecKind::Region {
-            self.bump();
-            self.error(
-                line.range(),
-                "content-in-container",
-                "a region holds sections, not fields, candidates, or rationale",
-            );
-            self.error_line(line);
-            return;
-        }
-        match (phase, kind) {
-            (Phase::Structure, LineKind::Field) => self.field(),
-            (Phase::Structure, LineKind::Candidate) => {
-                if sec_kind != SecKind::Contest && sec_kind != SecKind::Unknown {
-                    self.error(
-                        line.range(),
-                        "candidate-in-non-contest",
-                        "candidate lines are only allowed in a contest",
-                    );
-                    self.wrap_error(Parser::candidate);
-                } else {
-                    self.candidate();
-                }
-            }
-            (Phase::Structure, LineKind::Prose) => {
-                self.open.last_mut().unwrap().phase = Phase::Prose;
-                self.paragraph();
-            }
-            (Phase::Prose, LineKind::Prose) => self.paragraph(),
-            (Phase::Prose, LineKind::Field) => {
-                self.error(
-                    line.range(),
-                    "structure-after-rationale",
-                    "fields must come before the rationale; move this line above the first paragraph",
-                );
-                self.wrap_error(Parser::field);
-            }
-            (Phase::Prose, LineKind::Candidate) => {
-                self.error(line.range(), "structure-after-rationale", "candidate lines must come before the rationale; move this line above the first paragraph");
-                self.wrap_error(Parser::candidate);
-            }
-            (_, LineKind::Desc) => {
-                self.error(
-                    line.range(),
-                    "description-misplaced",
-                    "a `>` description goes directly under the heading",
-                );
-                self.wrap_error(Parser::description);
-            }
-            (_, LineKind::Continuation) => {
+            Action::Stray { code, msg } => {
                 self.bump();
-                self.error(line.range(), "stray-continuation", "an indented line continues the field or candidate line directly above it; nothing is above this one");
+                self.error(line.range(), code, msg);
                 self.error_line(line);
-            }
-            (_, LineKind::Tab) => {
-                self.bump();
-                self.error(line.range(), "tab-indent", "lines are indented with spaces, not tabs");
-                self.error_line(line);
-            }
-            (_, LineKind::Heading | LineKind::Blank | LineKind::Comment) => unreachable!(),
-            (Phase::AfterHeading | Phase::AfterDescription, _) => {
-                unreachable!("phase advanced above")
             }
         }
     }
@@ -524,17 +603,9 @@ impl<'a> Parser<'a> {
         self.b.finish_node();
     }
 
-    fn kind_line(&mut self) {
+    fn kind_line(&mut self, k: SectionKind) {
         let line = self.bump();
-        let kw = kind_keyword(line.text).unwrap();
-        let cur = self.open.last_mut().unwrap();
-        cur.kind = match kw {
-            "region" => SecKind::Region,
-            "contest" => SecKind::Contest,
-            "measure" => SecKind::Measure,
-            _ => SecKind::Retention,
-        };
-        cur.phase = Phase::Structure;
+        let kw = k.as_str();
         self.b.start_node(KIND_LINE.into());
         self.tok(KEYWORD, kw);
         let mut rest = &line.text[kw.len()..];
@@ -733,5 +804,56 @@ impl<'a> Parser<'a> {
         self.trimmed(TEXT, line.text, None);
         self.nl(line);
         self.b.finish_node();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn codes(step: &Step) -> (Option<&'static str>, bool) {
+        let code = match &step.action {
+            Action::Misplaced { code, .. } | Action::Stray { code, .. } => Some(*code),
+            _ => None,
+        };
+        (code, step.missing_kind_line)
+    }
+
+    #[test]
+    fn description_after_a_gap_is_both_missing_kind_and_misplaced() {
+        let s = step(Phase::AfterDescription, SecKind::Container, LineKind::Desc, None);
+        assert_eq!(codes(&s), (Some("description-misplaced"), true));
+        assert_eq!((s.phase, s.kind), (Phase::Structure, SecKind::Unknown));
+    }
+
+    #[test]
+    fn tab_under_heading_is_both_missing_kind_and_tab() {
+        let s = step(Phase::AfterHeading, SecKind::Container, LineKind::Tab, None);
+        assert_eq!(codes(&s), (Some("tab-indent"), true));
+    }
+
+    #[test]
+    fn kind_word_in_rationale_stays_prose() {
+        let kind = SecKind::Known(SectionKind::Contest);
+        let s = step(Phase::Prose, kind, LineKind::Prose, Some(SectionKind::Measure));
+        assert!(matches!(s.action, Action::Paragraph));
+        assert_eq!(s.kind, kind);
+    }
+
+    #[test]
+    fn region_rejects_every_content_line() {
+        let kind = SecKind::Known(SectionKind::Region);
+        for line in [LineKind::Field, LineKind::Candidate, LineKind::Prose, LineKind::Desc] {
+            let s = step(Phase::Structure, kind, line, None);
+            assert_eq!(codes(&s), (Some("content-in-container"), false), "{line:?}");
+        }
+    }
+
+    #[test]
+    fn candidates_only_in_contests() {
+        let s = step(Phase::Structure, SecKind::Known(SectionKind::Measure), LineKind::Candidate, None);
+        assert_eq!(codes(&s).0, Some("candidate-in-non-contest"));
+        let s = step(Phase::Structure, SecKind::Unknown, LineKind::Candidate, None);
+        assert!(matches!(s.action, Action::Candidate));
     }
 }

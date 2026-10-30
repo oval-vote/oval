@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use oval_syntax::{Diagnostic, LineIndex, Severity};
+use oval_syntax::{has_errors, Diagnostic, Diagnostics, LineIndex, Severity};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -81,16 +81,12 @@ fn read(path: &Path) -> String {
     }
 }
 
-fn has_errors(d: &[Diagnostic]) -> bool {
-    d.iter().any(|d| d.severity == Severity::Error)
-}
-
 fn check(files: &[PathBuf], lint: bool) -> ExitCode {
     let (mut errors, mut warnings) = (0, 0);
     for file in files {
         let text = read(file);
         let loaded = oval_model::load(&text);
-        let mut diagnostics = loaded.diagnostics.clone();
+        let mut diagnostics = Diagnostics::from(loaded.diagnostics.clone());
         if lint {
             let (config, _) = match oval_lint::Config::discover(file) {
                 Ok(c) => c,
@@ -100,8 +96,9 @@ fn check(files: &[PathBuf], lint: bool) -> ExitCode {
                 }
             };
             diagnostics.extend(oval_lint::lint(&loaded, &config));
-            diagnostics.sort_by_key(|d| (d.range.start(), d.range.end()));
+            diagnostics.sort();
         }
+        let diagnostics = diagnostics.into_vec();
         print_diagnostics(file, &text, &diagnostics);
         errors += diagnostics.iter().filter(|d| d.severity == Severity::Error).count();
         warnings += diagnostics.iter().filter(|d| d.severity == Severity::Warning).count();

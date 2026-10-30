@@ -45,7 +45,7 @@ fn cases() {
         let text = std::fs::read_to_string(&path).unwrap();
         let loaded = oval_model::load(&text);
 
-        let round_trip = loaded.parse.syntax().text().to_string();
+        let round_trip = loaded.syntax().text().to_string();
         if round_trip != text {
             failures.push(format!("{name}: syntax tree does not round-trip the source"));
         }
@@ -86,7 +86,7 @@ fn examples_have_no_errors() {
     for path in oval_files(&dir) {
         let text = std::fs::read_to_string(&path).unwrap();
         let loaded = oval_model::load(&text);
-        assert_eq!(loaded.parse.syntax().text().to_string(), text, "{}: round trip", path.display());
+        assert_eq!(loaded.syntax().text().to_string(), text, "{}: round trip", path.display());
         let errors: Vec<_> = loaded.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
         assert!(errors.is_empty(), "{}: {errors:#?}", path.display());
     }

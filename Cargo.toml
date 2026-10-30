@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/oval-vote/oval"
-rust-version = "1.85"
+rust-version = "1.99.1"
 
 [workspace.dependencies]
 rowan = "0.16"
@@ -19,7 +19,7 @@ clap = { version = "4", features = ["derive"] }
 
 # Lint settings shared by every crate (each crate opts in with `[lints] workspace = true`).
 [workspace.lints.rust]
-unsafe_code = "warn"
+unsafe_code = "deny"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]

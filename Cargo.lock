@@ -286,6 +286,7 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "oval-syntax",
+ "rowan",
  "serde",
  "serde_json",
  "unicode-normalization",

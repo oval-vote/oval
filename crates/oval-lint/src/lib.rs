@@ -9,7 +9,7 @@
 
 use oval_model::{Candidate, Loaded, Node, Position};
 use oval_syntax::inline::Inline;
-use oval_syntax::{Diagnostic, Severity};
+use oval_syntax::{Diagnostic, Diagnostics};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -92,27 +92,26 @@ impl Config {
 }
 
 pub fn lint(loaded: &Loaded, config: &Config) -> Vec<Diagnostic> {
-    let mut l = Linter { config, out: Vec::new() };
+    let mut l = Linter { config, out: Diagnostics::new() };
     for n in &loaded.guide.children {
         l.node(n);
     }
-    l.out.sort_by_key(|d| (d.range.start(), d.range.end()));
-    l.out
+    l.out.sort();
+    l.out.into_vec()
 }
 
 struct Linter<'a> {
     config: &'a Config,
-    out: Vec<Diagnostic>,
+    out: Diagnostics,
 }
 
 impl Linter<'_> {
     fn report(&mut self, code: &'static str, range: oval_syntax::TextRange, msg: impl Into<String>) {
-        let severity = match self.config.level(code) {
-            Level::Off => return,
-            Level::Warn => Severity::Warning,
-            Level::Error => Severity::Error,
-        };
-        self.out.push(Diagnostic { range, severity, code, message: msg.into() });
+        match self.config.level(code) {
+            Level::Off => {}
+            Level::Warn => self.out.warning(range, code, msg),
+            Level::Error => self.out.error(range, code, msg),
+        }
     }
 
     fn node(&mut self, n: &Node) {

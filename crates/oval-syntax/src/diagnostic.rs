@@ -30,6 +30,47 @@ impl Diagnostic {
     }
 }
 
+/// Whether any diagnostic is an error.
+pub fn has_errors(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics.iter().any(|d| d.severity == Severity::Error)
+}
+
+/// The sink the parser, the model, and the linter report into.
+#[derive(Clone, Debug, Default)]
+pub struct Diagnostics(Vec<Diagnostic>);
+
+impl Diagnostics {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn error(&mut self, range: TextRange, code: &'static str, message: impl Into<String>) {
+        self.0.push(Diagnostic::error(range, code, message));
+    }
+    pub fn warning(&mut self, range: TextRange, code: &'static str, message: impl Into<String>) {
+        self.0.push(Diagnostic::warning(range, code, message));
+    }
+    pub fn extend(&mut self, more: impl IntoIterator<Item = Diagnostic>) {
+        self.0.extend(more);
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    /// Order by position. Stable, so diagnostics at one position keep the
+    /// order they were reported in.
+    pub fn sort(&mut self) {
+        self.0.sort_by_key(|d| (d.range.start(), d.range.end()));
+    }
+    pub fn into_vec(self) -> Vec<Diagnostic> {
+        self.0
+    }
+}
+
+impl From<Vec<Diagnostic>> for Diagnostics {
+    fn from(v: Vec<Diagnostic>) -> Self {
+        Self(v)
+    }
+}
+
 /// Maps byte offsets to 1-based line and column numbers.
 pub struct LineIndex {
     line_starts: Vec<TextSize>,

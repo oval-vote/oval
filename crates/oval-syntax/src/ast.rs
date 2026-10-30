@@ -108,9 +108,9 @@ impl Section {
     pub fn kind_line(&self) -> Option<KindLine> {
         child(&self.0, KindLine::cast)
     }
-    /// The kind keyword, or `None` for a plain container section.
-    pub fn kind(&self) -> Option<String> {
-        self.kind_line()?.keyword()
+    /// The kind line's keyword, or `None` for a plain container section.
+    pub fn kind(&self) -> Option<SectionKind> {
+        self.kind_line()?.kind()
     }
     pub fn items(&self) -> impl Iterator<Item = Item> + '_ {
         self.0.children().filter_map(|c| match c.kind() {
@@ -159,9 +159,43 @@ impl Description {
     }
 }
 
+/// The keyword of a kind line (spec section 4.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SectionKind {
+    Region,
+    Contest,
+    Measure,
+    Retention,
+}
+
+impl SectionKind {
+    pub const ALL: [SectionKind; 4] =
+        [SectionKind::Region, SectionKind::Contest, SectionKind::Measure, SectionKind::Retention];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SectionKind::Region => "region",
+            SectionKind::Contest => "contest",
+            SectionKind::Measure => "measure",
+            SectionKind::Retention => "retention",
+        }
+    }
+
+    /// The kind for an exact keyword; `None` for anything else.
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|k| k.as_str() == s)
+    }
+
+    /// A contest, measure, or retention: something the reader votes on. A
+    /// region is a container.
+    pub fn is_question(self) -> bool {
+        self != SectionKind::Region
+    }
+}
+
 impl KindLine {
-    pub fn keyword(&self) -> Option<String> {
-        Some(token(&self.0, KEYWORD)?.text().to_string())
+    pub fn kind(&self) -> Option<SectionKind> {
+        SectionKind::parse(token(&self.0, KEYWORD)?.text())
     }
     pub fn tags(&self) -> Vec<Segment> {
         self.0
@@ -197,6 +231,21 @@ pub enum Marker {
     Rank(u32),
 }
 
+impl Marker {
+    /// Canonical candidate order (spec 4.7): ranks ascending, then picks,
+    /// then listed, then avoid. Sorting by this key is stable within a group.
+    /// The formatter and the model both use it, so reordering candidate lines
+    /// never changes the model.
+    pub fn order_key(self) -> (u8, u32) {
+        match self {
+            Marker::Rank(n) => (0, n),
+            Marker::Pick => (1, 0),
+            Marker::Neutral => (2, 0),
+            Marker::Avoid => (3, 0),
+        }
+    }
+}
+
 impl Candidate {
     pub fn marker(&self) -> Option<Marker> {
         let m = self.0.children().find(|c| c.kind() == MARKER)?;
@@ -219,7 +268,7 @@ impl Candidate {
         self.0
             .children()
             .filter(|c| c.kind() == LABELS)
-            .flat_map(|l| l.children().collect::<Vec<_>>())
+            .flat_map(|l| l.children())
             .filter(|c| c.kind() == LABEL)
             .filter_map(|c| token(&c, TEXT))
             .map(|t| Segment { text: t.text().to_string(), range: t.text_range() })

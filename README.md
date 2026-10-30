@@ -30,10 +30,11 @@ cargo run -p oval-cli -- tree examples/sample.oval      # syntax tree dump
 cargo test                                              # unit tests, conformance suite, formatter checks
 ```
 
-Developing: `mise run fmt` formats the Rust code and the example guides, `mise run lint`
-runs clippy with warnings denied plus the guide linter, `mise run check` runs everything
-CI runs, and `mise run hooks` installs a pre-commit hook that refuses unformatted or
-warning-producing Rust. Lint levels are set once in the workspace `Cargo.toml`
+Developing: `mise run format` formats everything (`format:mise`, `format:rust`, and
+`format:oval` run one each), `mise run lint` runs every linter (`lint:rust` is clippy
+with warnings denied, `lint:oval` is the guide linter on the examples), `mise run test`
+runs the tests, `mise run check` runs everything CI runs, and `mise run hooks` installs
+a pre-commit hook that refuses unformatted or warning-producing Rust. Lint levels are set once in the workspace `Cargo.toml`
 (clippy pedantic, with a short allow list) and `rustfmt.toml` holds the style.
 
 Status: pre-release. The parser and model exist and pass the conformance suite;

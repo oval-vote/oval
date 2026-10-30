@@ -17,7 +17,7 @@
 //!
 //! A file with syntax errors is not formatted: fix the errors first.
 
-use oval_syntax::ast::{self, Marker};
+use oval_syntax::ast::{self, Marker, SectionKind};
 use oval_syntax::kind::SyntaxKind::*;
 use oval_syntax::{join_segments, parse, Diagnostic, SyntaxNode};
 
@@ -59,16 +59,21 @@ const RETENTION_ORDER: &[&str] = &["designation", "note", "vote"];
 pub fn wrap(text: &str, width: usize, first: &str, rest: &str) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::from(first);
+    let mut chars = first.chars().count();
     let mut lead = first.len();
     for word in text.split_whitespace() {
-        if line.len() > lead && line.chars().count() + 1 + word.chars().count() > width {
+        let word_chars = word.chars().count();
+        if line.len() > lead && chars + 1 + word_chars > width {
             lines.push(std::mem::replace(&mut line, String::from(rest)));
+            chars = rest.chars().count();
             lead = rest.len();
         }
         if line.len() > lead {
             line.push(' ');
+            chars += 1;
         }
         line.push_str(word);
+        chars += word_chars;
     }
     if line.len() > lead || lines.is_empty() {
         lines.push(line);
@@ -80,6 +85,28 @@ pub fn wrap(text: &str, width: usize, first: &str, rest: &str) -> Vec<String> {
 struct Item<T> {
     comments: Vec<String>,
     node: T,
+}
+
+/// Everything that can appear in a section body, for `collect`.
+enum Body {
+    Description(ast::Description),
+    KindLine(ast::KindLine),
+    Field(ast::Field),
+    Candidate(ast::Candidate),
+    Paragraph(ast::Paragraph),
+    Section(ast::Section),
+}
+
+fn cast_body(node: SyntaxNode) -> Option<Body> {
+    Some(match node.kind() {
+        DESCRIPTION => Body::Description(ast::Description::cast(node)?),
+        KIND_LINE => Body::KindLine(ast::KindLine::cast(node)?),
+        FIELD => Body::Field(ast::Field::cast(node)?),
+        CANDIDATE => Body::Candidate(ast::Candidate::cast(node)?),
+        PARAGRAPH => Body::Paragraph(ast::Paragraph::cast(node)?),
+        SECTION => Body::Section(ast::Section::cast(node)?),
+        _ => return None,
+    })
 }
 
 struct Fmt {
@@ -136,35 +163,31 @@ impl Fmt {
             self.line(&line);
         }
         let kind = s.kind();
-        let field_order: &[&str] = match kind.as_deref() {
-            Some("contest") => CONTEST_ORDER,
-            Some("measure") => MEASURE_ORDER,
-            Some("retention") => RETENTION_ORDER,
-            _ => &[],
+        let field_order: &[&str] = match kind {
+            Some(SectionKind::Contest) => CONTEST_ORDER,
+            Some(SectionKind::Measure) => MEASURE_ORDER,
+            Some(SectionKind::Retention) => RETENTION_ORDER,
+            None | Some(SectionKind::Region) => &[],
         };
 
-        // Gather the body in source order, attaching comments to what follows.
-        let mut pending: Vec<String> = Vec::new();
+        // Bucket the body by construct; each item keeps its leading comments.
+        let (items, trailing) = collect(s.syntax(), cast_body);
         let mut description: Option<Item<ast::Description>> = None;
         let mut kind_line: Option<Item<ast::KindLine>> = None;
         let mut fields: Vec<Item<ast::Field>> = Vec::new();
         let mut candidates: Vec<Item<ast::Candidate>> = Vec::new();
         let mut paragraphs: Vec<Item<ast::Paragraph>> = Vec::new();
         let mut children: Vec<Item<ast::Section>> = Vec::new();
-        for c in s.syntax().children() {
-            let comments = std::mem::take(&mut pending);
-            match c.kind() {
-                COMMENT => pending.push(c.text().to_string().trim_end().to_string()),
-                DESCRIPTION => description = ast::Description::cast(c).map(|node| Item { comments, node }),
-                KIND_LINE => kind_line = ast::KindLine::cast(c).map(|node| Item { comments, node }),
-                FIELD => fields.extend(ast::Field::cast(c).map(|node| Item { comments, node })),
-                CANDIDATE => candidates.extend(ast::Candidate::cast(c).map(|node| Item { comments, node })),
-                PARAGRAPH => paragraphs.extend(ast::Paragraph::cast(c).map(|node| Item { comments, node })),
-                SECTION => children.extend(ast::Section::cast(c).map(|node| Item { comments, node })),
-                _ => pending = comments,
+        for Item { comments, node } in items {
+            match node {
+                Body::Description(node) => description = Some(Item { comments, node }),
+                Body::KindLine(node) => kind_line = Some(Item { comments, node }),
+                Body::Field(node) => fields.push(Item { comments, node }),
+                Body::Candidate(node) => candidates.push(Item { comments, node }),
+                Body::Paragraph(node) => paragraphs.push(Item { comments, node }),
+                Body::Section(node) => children.push(Item { comments, node }),
             }
         }
-        let trailing = pending;
 
         if let Some(d) = &description {
             self.comments(&d.comments);
@@ -175,9 +198,9 @@ impl Fmt {
         }
         if let Some(k) = &kind_line {
             self.comments(&k.comments);
-            self.kind_line(&k.node, kind.as_deref());
+            self.kind_line(&k.node, kind);
         }
-        let is_contest = kind.as_deref() == Some("contest");
+        let is_contest = kind == Some(SectionKind::Contest);
         let (vote, fields): (Vec<_>, Vec<_>) =
             fields.into_iter().partition(|f| is_contest && f.node.key().is_some_and(|k| k.text == "vote"));
         let fields = ordered(fields, |f| key_rank(f, field_order));
@@ -187,12 +210,7 @@ impl Fmt {
         }
         if !candidates.is_empty() {
             self.blank();
-            let candidates = ordered(candidates, |c| match c.marker() {
-                Some(Marker::Rank(n)) => (0, n),
-                Some(Marker::Pick) => (1, 0),
-                Some(Marker::Neutral) | None => (2, 0),
-                Some(Marker::Avoid) => (3, 0),
-            });
+            let candidates = ordered(candidates, |c| c.marker().unwrap_or(Marker::Neutral).order_key());
             for c in &candidates {
                 self.comments(&c.comments);
                 self.candidate(&c.node);
@@ -216,9 +234,11 @@ impl Fmt {
         }
     }
 
-    fn kind_line(&mut self, k: &ast::KindLine, kind: Option<&str>) {
+    fn kind_line(&mut self, k: &ast::KindLine, kind: Option<SectionKind>) {
         let order: &[&str] = match kind {
-            Some("contest") => &["partisan", "ranked", "seats", "rank up to", "write-ins", "unverified"],
+            Some(SectionKind::Contest) => {
+                &["partisan", "ranked", "seats", "rank up to", "write-ins", "unverified"]
+            }
             _ => &["unverified"],
         };
         let rank = |t: &str| {
@@ -233,7 +253,7 @@ impl Fmt {
         };
         let mut tags: Vec<String> = k.tags().into_iter().map(|t| t.text).collect();
         tags.sort_by_key(|t| rank(t));
-        let mut line = k.keyword().unwrap_or_default();
+        let mut line = kind.map_or_else(String::new, |k| k.as_str().to_string());
         for t in tags {
             line.push_str(", ");
             line.push_str(&t);
