@@ -1,0 +1,76 @@
+(* Oval Vote format, version 1. Line-oriented grammar.
+   Notation: ISO 14977 EBNF with these terminals:
+     EOL      = LF | CR LF
+     SP       = " "
+     ALPHA    = "A".."Z" | "a".."z"
+     LCALPHA  = "a".."z"
+     DIGIT    = "0".."9"
+     TEXT     = any characters to end of line, leading/trailing whitespace trimmed, non-empty
+   Trailing whitespace before EOL is ignored everywhere.
+   Which lines count as field/candidate/prose is decided by the first characters
+   of the line, in the order the alternatives are listed. *)
+
+file         = magic, header, { section } ;
+
+magic        = "oval", SP, "1", EOL ;
+
+header       = { field | comment | blank } ;
+
+section      = heading, { blank | comment }, [ description ], body ;
+
+heading      = hashes, SP, name, [ SP, "@", id ], EOL ;
+hashes       = "#", [ "#", [ "#", [ "#", [ "#", [ "#" ] ] ] ] ] ;
+name         = TEXT ;                       (* must not end in a "@id" token *)
+
+description  = descline, { descline } ;
+descline     = ">", [ SP, TEXT ], EOL ;
+
+body         = { blank | comment }, [ kindline, structure, rationale ] ;
+             (* a section with no kindline is a container: body is empty
+                apart from blank lines and comments *)
+
+kindline     = kind, { ",", { SP }, tag }, EOL ;
+kind         = "region" | "contest" | "measure" | "retention" ;
+tag          = "partisan" | "ranked" | integer, SP, "seats"
+             | "rank", SP, "up", SP, "to", SP, integer
+             | "write-ins" | "unverified" | "x-", TEXT ;
+
+structure    = { field | candidate | comment | blank } ;
+
+field        = key, ":", [ SP, TEXT ], EOL, { continuation } ;
+key          = LCALPHA, { LCALPHA | SP, LCALPHA } ;
+continuation = SP, { SP }, TEXT, EOL ;
+
+candidate    = marker, SP, cname, [ SP, "(", labels, ")" ],
+               [ ":", SP, designation ], [ SP, "@", id ], EOL,
+               { continuation } ;
+marker       = "+" | "-" | "*" | integer, "." ;
+cname        = TEXT ;                       (* up to the first " (", ":", or " @" *)
+labels       = label, { ",", { SP }, label } ;
+label        = "incumbent" | "write-in" | TEXT ;   (* TEXT here excludes "," and ")" *)
+designation  = TEXT ;                       (* up to " @" if present *)
+
+rationale    = { paragraph | blank | comment } ;
+paragraph    = firstline, { proseline | comment } ;
+firstline    = TEXT, EOL ;                  (* not blank, not a heading, not a comment,
+                                               and does not begin with ">", "+ ", "- ",
+                                               "* ", digits ". ", a key ":", or a space.
+                                               Begin with "\" to escape. *)
+proseline    = TEXT, EOL ;                  (* any line that is not blank, not a
+                                               heading, and not a comment *)
+
+comment      = "//", { ? any character ? }, EOL ;
+blank        = { SP }, EOL ;
+
+id           = ( ALPHA | DIGIT ), { ALPHA | DIGIT | "." | "_" | "-" } ;
+integer      = DIGIT, { DIGIT } ;
+
+(* Inline markup, applied to the joined text of paragraphs, descriptions,
+   notes, and candidate notes. *)
+inline       = { text | emphasis | strong | code | link | ref | escape } ;
+emphasis     = "*", inline, "*" ;           (* flanking rules: see spec 7 *)
+strong       = "**", inline, "**" ;
+code         = "`", { ? any character except "`" ? }, "`" ;
+link         = "[", inline, "](", url, ")" ;
+ref          = "[", inline, "](@", id, ")" ;
+escape       = "\", ( "\" | "*" | "_" | "`" | "[" | "]" | "(" | ")" | "#" | ">" | "+" | "-" | "@" | "/" ) ;

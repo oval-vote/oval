@@ -1,0 +1,90 @@
+oval 1
+name: Sample Election
+date: 2026-11-03
+author: Example Author <https://example.org/votes>
+updated: 2026-10-30
+
+// Every construct in the format appears at least once in this file.
+
+# Example State @state
+> A made-up state, used to show every construct the format has.
+region
+
+## Statewide @statewide
+
+### Governor @governor
+contest, partisan
+note: Open seat.
+
++ Alice Alvarez (Democratic)
+* Bob Brown (Republican)
+- Carol Chen (Independent): perennial candidate
+  Ran in 2018 and 2022 and lost both times.
+
+Alvarez has the record. See [the Senate race](@senate) for why the pairing
+matters, and *read the fine print* on **both** bonds below.
+
+### State Senate, District 3 @senate
+contest, partisan, write-ins
+
++ Dana Dubois (write-in)
+- Eve Evans (Democratic, incumbent)
+
+Evans is the only name printed; write in Dubois.
+
+## Example City @city
+> City elections use ranked choice for single seats.
+region
+
+### Mayor @mayor
+contest, ranked, rank up to 3
+
+1. Frank Fox: small business owner
+2. Grace Garcia: council member
+2. Hank Hill: school board trustee
+- Ivy Ito
+
+Fox first. Garcia and Hill are interchangeable for the remaining spots.
+
+### School Board @school-board
+contest, 2 seats, unverified
+
+* Jo Jones
+* Kim Kaur
+* Lee Lopez
+
+vote: undecided
+
+### City Treasurer @treasurer
+contest
+
+* Max Moore
+* Nia Nkemelu
+
+vote: none
+
+Both are fine. Vote for whoever you like.
+
+### Measure A @measure-a
+> Parks bond
+measure
+placed by: City Council, unanimous
+yes: Authorizes $50 million in bonds for park maintenance.
+no: Keeps park funding at current levels.
+threshold: two-thirds
+supporters: Friends of the Parks, the Chamber of Commerce
+opponents: Taxpayers United
+vote: yes
+
+Cheap money for a real backlog. The \*literal asterisk\* is escaped here.
+
+### Measure B @measure-b
+> Sales tax increase
+measure
+yes: Raises the sales tax by a quarter cent for ten years.
+vote: undecided
+
+### Judge Olivia Ortiz @ortiz
+retention
+designation: Superior Court Judge
+vote: yes

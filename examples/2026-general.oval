@@ -1,0 +1,1260 @@
+oval 1
+name: 2026 General Election
+date: 2026-11-03
+author: Varun Santhanam <https://varunvotes.fyi>
+
+# United States @us
+region
+
+## United States House of Representatives @federal-united-states-house-of-representatives
+> There is no United States Senate race in California this year.
+
+### United States House of Representatives, District 11 @federal-united-states-house-of-representatives-district-11
+> San Francisco
+contest, partisan
+note: Open seat after Nancy Pelosi's retirement. Two Democrats advanced from the
+  June top-two primary.
+
++ Scott Wiener (Democratic)
+- Connie Chan (Democratic)
+
+Scott Wiener is the most accomplished legislator in the State Senate. He has
+single-handedly passed some of the most important housing legislation in
+California, and he is more responsible than anyone for the state's wholesale
+rethinking of housing policy.
+
+Chan, by contrast, has been one of the worst, most anti-urban members of the San
+Francisco Board of Supervisors. Her main accomplishments include opposing bike
+lanes, wanting to reopen the Great Highway to cars, and a general hostility to
+the idea of urban density. Her candidacy is only viable at all because of some
+stupid Pelosi-Wiener beef, which is not a reason to send her to Congress. She
+fucking sucks. Do not vote for her.
+
+### United States House of Representatives, District 12 @federal-united-states-house-of-representatives-district-12
+> Oakland Hills
+contest, partisan
+
++ Lateefah Simon (Democratic, incumbent)
+* Jamie Joyce (Democratic)
+
+### United States House of Representatives, District 16 @federal-united-states-house-of-representatives-district-16
+> Palo Alto
+contest, partisan
+
++ Sam Liccardo (Democratic, incumbent)
+* Peter Sundin Soulé (Republican)
+
+### United States House of Representatives, District 15 @federal-united-states-house-of-representatives-district-15
+> San Mateo
+contest, partisan
+
++ Kevin Mullin (Democratic, incumbent)
+* Charles Hoelter (Republican)
+
+## California @california
+region
+
+### Statewide Offices @california-statewide-offices
+
+#### Governor @california-governor
+contest, partisan
+note: Open seat. Gavin Newsom is term-limited.
+
++ Xavier Becerra (Democratic)
+- Steve Hilton (Republican)
+
+Becerra is an extremely mediocre politician who won the nomination basically by
+accident. I do not have high hopes for him to be anything other than an average
+governor. Hilton is batshit crazy tho.
+
+#### Lieutenant Governor @california-lieutenant-governor
+contest, partisan
+
++ Fiona Ma (Democratic)
+* Gloria Romero (Republican)
+
+#### Secretary of State @california-secretary-of-state
+contest, partisan
+
++ Shirley N. Weber (Democratic, incumbent)
+* Don Wagner (Republican)
+
+#### Controller @california-controller
+contest, partisan
+
++ Malia M. Cohen (Democratic, incumbent)
+* Herb W. Morgan (Republican)
+
+#### Treasurer @california-treasurer
+contest, partisan
+
++ Eleni Kounalakis (Democratic)
+* Jennifer Hawks (Republican)
+
+#### Attorney General @california-attorney-general
+contest, partisan
+
++ Rob Bonta (Democratic, incumbent)
+* Michael E. Gates (Republican)
+
+#### Insurance Commissioner @california-insurance-commissioner
+contest, partisan
+note: Open seat. Ricardo Lara is term-limited. Two Democrats advanced.
+
++ Ben Allen (Democratic)
+* Jane Kim (Democratic)
+
+#### Superintendent of Public Instruction @california-superintendent-of-public-instruction
+contest
+note: Nonpartisan office. Nobody cleared 50% in June, so this is a runoff.
+
+* Richard Barrera
+* Sonja Shaw
+
+vote: none
+
+#### Board of Equalization, District 2 @california-board-of-equalization-district-2
+contest, partisan
+note: District 2 is the coastal district from Del Norte to Ventura and covers
+  the whole Bay Area.
+
+* Sally J. Lieber (Democratic, incumbent)
+* John Pimentel (Democratic)
+
+vote: none
+
+### California State Assembly @california-california-state-assembly
+> Only even-numbered State Senate districts are up in 2026, so Senate districts
+> 7, 11, and 13 (which also covers San Mateo) are not on this ballot.
+
+#### California State Assembly, District 14 @california-california-state-assembly-district-14
+> Oakland Hills
+contest, partisan
+
++ Buffy Wicks (Democratic, incumbent)
+- Mark Rendon (Green)
+
+Wicks is one of if not the very best legislators in the state assembly and a
+good representative for her district. Rendon is a fucking moron.
+
+#### California State Assembly, District 17 @california-california-state-assembly-district-17
+> San Francisco
+contest, partisan
+
++ Matt Haney (Democratic, incumbent)
+- Manuel Noris-Barrera (Republican)
+
+Haney is one of the best pro-housing legislators in the state. Losing him would
+be a travesty.
+
+#### California State Assembly, District 19 @california-california-state-assembly-district-19
+> San Francisco
+contest, partisan
+
++ Catherine Stefani (Democratic, incumbent)
+* Philip Louis Wing (Republican)
+
+#### California State Assembly, District 23 @california-california-state-assembly-district-23
+> Palo Alto
+contest, partisan
+
++ Marc Berman (Democratic, incumbent)
+* David G. Johnson (Republican)
+
+#### California State Assembly, District 21 @california-california-state-assembly-district-21
+> San Mateo
+contest, partisan
+
++ Diane Papan (Democratic, incumbent)
+* Jabra J. Muhawieh (Republican)
+
+### Judicial Retention @california-judicial-retention
+> Retention votes are yes-or-no on each justice. The two Supreme Court justices
+> appear on every ballot in the state. San Francisco, Oakland, and San Mateo
+> voters also see eleven First District Court of Appeal justices; Palo Alto
+> voters see two Sixth District justices instead.
+region
+
+#### Supreme Court of California @california-supreme-court-of-california
+
+##### Kelli M. Evans @california-supreme-court-of-california-kelli-m-evans
+retention
+designation: Associate Justice
+vote: yes
+
+##### Joshua Groban @california-supreme-court-of-california-joshua-groban
+retention
+designation: Associate Justice
+vote: yes
+
+#### Court of Appeal, First District @california-court-of-appeal-first-district
+> Appears on ballots in San Francisco, Oakland, and San Mateo.
+> *Justice list not yet verified against the official sample ballot.*
+
+##### Smiley @california-court-of-appeal-first-district-smiley
+retention
+vote: yes
+
+##### Banke @california-court-of-appeal-first-district-banke
+retention
+vote: yes
+
+##### Langhorne Wilson @california-court-of-appeal-first-district-langhorne-wilson
+retention
+vote: yes
+
+##### Stewart @california-court-of-appeal-first-district-stewart
+retention
+vote: yes
+
+##### Desautels @california-court-of-appeal-first-district-desautels
+retention
+vote: yes
+
+##### Petrou @california-court-of-appeal-first-district-petrou
+retention
+vote: yes
+
+##### Rodriguez @california-court-of-appeal-first-district-rodriguez
+retention
+vote: yes
+
+##### Brown @california-court-of-appeal-first-district-brown
+retention
+vote: yes
+
+##### Simons @california-court-of-appeal-first-district-simons
+retention
+vote: yes
+
+##### Chou @california-court-of-appeal-first-district-chou
+retention
+vote: yes
+
+##### Burns @california-court-of-appeal-first-district-burns
+retention
+vote: yes
+
+#### Court of Appeal, Sixth District @california-court-of-appeal-sixth-district
+> Appears on ballots in Palo Alto.
+
+##### Daniel H. Bromberg @california-court-of-appeal-sixth-district-daniel-h-bromberg
+retention
+vote: yes
+
+##### Charles E. Wilson II @california-court-of-appeal-sixth-district-charles-e-wilson-ii
+retention
+vote: yes
+
+### California Ballot Propositions @california-california-ballot-propositions
+
+#### Proposition 1 @california-proposition-1
+> Housing affordability bonds
+measure
+placed by: Legislature
+yes: Lets the state borrow $11.25 billion in general obligation bonds for
+  affordable housing and veterans' home loans.
+supporters: U.S. Vets, California Federation of Teachers, Habitat for Humanity
+  California, carpenters' councils, Airbnb, Meta
+vote: yes
+
+Borrows money to build housing, especially the kind of housing that is difficult
+to finance privately.
+
+#### Proposition 2 @california-proposition-2
+> Larger rainy day fund
+measure
+placed by: Legislature
+yes: Changes the constitution so the state deposits more into budget reserves
+  and keeps making extra debt payments for longer.
+supporters: Gov. Gavin Newsom, Xavier Becerra, California Professional
+  Firefighters, LA Chamber of Commerce
+opponents: Asm. David Tangipa and legislative Republicans, who argue surpluses
+  should go back to taxpayers
+vote: yes
+
+Makes the state save more in good years. California's budget is boom and bust,
+and this helps smooth it out.
+
+#### Proposition 3 @california-proposition-3
+> Make the high-income tax surcharge permanent
+measure
+placed by: Initiative
+yes: Makes permanent the Prop 30/55 income tax surcharge on earnings above
+  roughly $360,000, which otherwise expires in 2031, to fund schools and health
+  care.
+supporters: California Teachers Association, California State PTA, Planned
+  Parenthood Affiliates of California
+opponents: California Taxpayers Association, Family Business Association of
+  California, California Hispanic Chambers of Commerce
+vote: yes
+
+Keeps the existing tax on income over $360k that pays for schools and health
+care. It's been in place since 2012 and should not be allowed to expire.
+
+#### Proposition 4 @california-proposition-4
+> Allow public campaign financing
+measure
+placed by: Legislature
+yes: Repeals the state ban so the state and local governments may create public
+  campaign financing programs for candidates.
+supporters: League of Women Voters of California, California Nurses Association,
+  ACLU of Northern California, California Democratic Party
+opponents: California Taxpayers Association, Howard Jarvis Taxpayers Association
+vote: no
+
+I'm not opposed to public campaign financing. San Francisco has run a program
+since 2000 and the sky hasn't fallen. The problem with Prop 4 is that it doesn't
+actually establish anything. It just repeals the 1988 ban and leaves every
+design question for later: whether participating candidates have to give up
+private money, how many candidates can qualify, how much they can draw, and
+where the money comes from. Voters would be signing off on an idea with no terms
+attached, and the terms are what matter. A public financing program that still
+lets candidates take special interest money alongside public money is worse than
+no program at all. California has rejected this twice before, in 2000 and 2010,
+and the Legislature's answer was to come back with something even vaguer. Bring
+back a real proposal with a real program in it and I'll vote for it.
+
+#### Proposition 5 @california-proposition-5
+> Change the statewide recall process
+measure
+placed by: Legislature
+yes: Removes the replacement-candidate question from statewide recall ballots,
+  so a vacancy after a successful recall is filled by special election or
+  appointment.
+supporters: Sen. Josh Newman, League of Women Voters of California, California
+  Common Cause
+vote: yes
+
+Recalls are usually anti-democratic. They let a motivated minority force a
+do-over of an election the rest of us already held, at enormous cost, on a
+timeline the recall backers get to choose. California's version is especially
+bad because of the replacement question: a governor can be removed by 50% plus
+one and then replaced by whoever leads a field of dozens with a fraction of that
+support. That is how we nearly handed the state to a radio host in 2021. Prop 5
+fixes the worst part. If a recall succeeds, the office is filled by a special
+election or an appointment, the same way any other vacancy is, instead of by a
+simultaneous free-for-all. I'd rather raise the bar for recalls altogether, but
+this is a step in the right direction.
+
+#### Proposition 37 @california-proposition-37
+> State loans for middle-income homebuyers
+measure
+placed by: Initiative
+yes: Creates a state down payment and loan assistance program for middle-income
+  buyers of new homes, funded by up to $25 billion in revenue bonds repaid by
+  borrowers.
+supporters: California Association of Realtors, carpenters' unions, Treasurer
+  Fiona Ma, Xavier Becerra, California Teachers Association
+vote: yes
+
+This one is close to free. The program is funded by revenue bonds that the
+borrowers themselves pay back, not by the general fund, so taxpayers aren't on
+the hook for the loans. It's opt-in on both ends: nobody has to use it, and no
+builder has to participate. And it only applies to new construction, which means
+every loan it makes is a unit that got built. California's housing problem is a
+supply problem, and the state's middle class is the group that has been squeezed
+out of ownership the hardest, so a program that nudges demand toward new homes
+rather than bidding up existing ones is pointed in the right direction. I don't
+expect it to move the needle much on its own, but there's no real downside. Vote
+yes.
+
+#### Proposition 38 @california-proposition-38
+> Immunology research bonds
+measure
+placed by: Initiative
+yes: Lets the state borrow $8.4 billion for immunology and immunotherapy
+  research at California institutions, about half earmarked for the California
+  Institute for Immunology and Immunotherapy.
+supporters: Gary K. Michelson, Michael J. Fox Foundation, Alzheimer's Los
+  Angeles
+opponents: League of Women Voters of California, GrowSF
+vote: no
+
+The very existence of this proposition is an indictment of California's ballot
+initiative system. Prop 38 borrows $8.4 billion, which costs the state $500 to
+$600 million a year for twenty years, and hands half of it, about $4.2 billion,
+to a single nonprofit research institute. The measure was written, qualified,
+and almost entirely bankrolled by Gary Michelson, the billionaire who co-founded
+that same institute. The eligibility rules are drafted so narrowly that UCLA
+itself confirmed only his institute qualifies. He has put more than $60 million
+into the campaign. There is essentially no money on the other side, because
+there is no constituency against immunology research. That's the point: nobody
+is going to run ads against curing cancer, so the only check on a ballot measure
+like this is voters noticing what it actually does. It's truly insane that the
+CA democratic party endorsed this measure. The party that will tell you with a
+straight face that billionaires have too much influence over our politics is
+endorsing a law that lets a random rich guy unilaterally loot the state
+treasury. It's fucking embarrassing. Research funding should go through the
+budget and through competitive grants, not through an initiative that names its
+own beneficiary. If you want the state to fund immunotherapy research, this is
+the most expensive and least accountable way to do it. Vote no.
+
+#### Proposition 39 @california-proposition-39
+> Voter ID requirement
+measure
+placed by: Initiative
+yes: Amends the constitution to require government-issued ID and citizenship
+  verification each time a person votes, replacing signature verification.
+supporters: Reform California, Howard Jarvis Taxpayers Association, California
+  Republican Party
+opponents: ACLU California Action, Common Cause, League of Women Voters of
+  California, California Democratic Party, SEIU 2015
+vote: no
+
+California already checks who you are when you vote. You need a driver's license
+number or the last four of your social security number to register, and the
+state verifies it against the DMV. Mail ballots get signature-matched.
+Non-citizens voting is a felony and it basically never happens. So Prop 39
+doesn't add any protection that doesn't already exist, it just adds a step at
+the polls that will mostly trip up people who moved recently, lost their wallet,
+or don't drive. The real reason to vote no is what happens *after* election day.
+Once voter ID is in the state constitution, every close race turns into a
+lawsuit about whether some county checked IDs correctly or whether a batch of
+ballots should get tossed. That's the whole point. The guy bankrolling this
+measure (Richard Uihlein) funds the exact same playbook in other states, and
+it's not because he's worried about election security. Vote No.
+
+#### Proposition 40 @california-proposition-40
+> One-time billionaire wealth tax
+measure
+placed by: Initiative
+yes: Imposes a one-time 5% tax on the net worth of California billionaires to
+  fund health care, education, and food assistance.
+supporters: SEIU-United Healthcare Workers West, California Democratic Party,
+  Teamsters California
+opponents: Building a Better California, California Taxpayers Association,
+  California Primary Care Association, Planned Parenthood, both Becerra and
+  Hilton oppose
+vote: no
+
+The thing to know about Prop 40 is that it was never really meant to pass.
+SEIU-UHW, the union behind it, routinely qualifies ballot measures as bargaining
+chips. You might remember these guys from their series of random dialysis
+initiatives. In June the union offered to withdraw this one if Newsom backed a
+smaller 2% tax through the Legislature. He declined, the deadline passed, and
+the bargaining chip ended up on your ballot. That's also why the groups you'd
+expect to support a health care tax, including the Medical Association, the
+community clinics, and Planned Parenthood, are against it — they weren't
+consulted. On the merits, a one-time wealth tax is a poor fit for a permanent
+funding gap, and wealth is the easiest tax base to move, which is why the
+state's own estimate comes in well under the union's and expects some ongoing
+income tax loss. Income, property, and land value taxes do the same job with far
+less leakage. It will almost certainly lose to a legislative challenge. If you
+are truly concerned with creating a more equatable tax system, focus on
+increasing property taxes and capital gains taxes, as well as closing loopholes
+that impact income classification. Vote no.
+
+#### Proposition 41 @california-proposition-41
+> Audits and spending-limit rules for new special taxes
+measure
+placed by: Initiative
+yes: Requires State Auditor review of initiative special taxes and bars
+  excluding new special-tax revenue from the state spending limit. Drafted as a
+  rival to Proposition 40.
+supporters: Building a Better California, California Taxpayers Association,
+  CalCPA
+opponents: SEIU-United Healthcare Workers West
+vote: no
+
+Prop 41 is one of two measures the business lobby put on the ballot to cancel
+out Prop 40 (if it gets more votes, Prop 40 dies). I'm voting no on 40 anyway,
+so the question is whether 41 is good on its own, and it isn't. The part people
+will miss is the Gann Limit. In 1979 voters capped how much the state is allowed
+to spend each year, growing only with population and inflation, and anything
+collected above the cap has to be refunded or split off to schools. That sounds
+fine until you realize it means the state can't bank a windfall, can't build a
+reserve, and can't catch up on infrastructure in a good year even when it has
+the money. It's a big reason California's budget swings from surplus to crisis
+every few years. Until now, voters could at least approve a new tax and exempt
+it from the cap. Prop 41 locks that door permanently. Vote No.
+
+#### Proposition 42 @california-proposition-42
+> Ban new state wealth and retroactive taxes
+measure
+placed by: Initiative
+yes: Constitutionally bars the state from creating new taxes on ownership of
+  financial assets or other personal property, and certain retroactive taxes. A
+  rival to Proposition 40.
+supporters: Building a Better California, California Professional Firefighters,
+  State Building and Construction Trades Council
+opponents: SEIU-United Healthcare Workers West
+vote: yes
+
+This is the other anti-Prop 40 measure, and unlike 41 it's actually good policy
+in a vacuum. It does two things: bans new taxes on simply owning stuff (wealth
+taxes), which I covered under Prop 40, and bans retroactive taxes. The
+retroactive part is the one worth caring about. Good tax policy is predictable:
+you set the rules, people plan around them, and the revenue shows up on
+schedule. A retroactive tax breaks that. It can't change any behavior because
+the behavior already happened, so it raises no money going forward and just hits
+whoever happened to be standing there when the rule changed. Worse, it's
+unstable money. It gets litigated for years, the people it targets restructure
+or leave, and the Legislature ends up budgeting around revenue that may never
+arrive. Vote Yes.
+
+#### Proposition 43 @california-proposition-43
+> Two-thirds vote for citizen-initiative local taxes
+measure
+placed by: Legislature
+yes: Requires two-thirds voter approval instead of a simple majority for local
+  special taxes placed on the ballot by citizen initiative, closing the Upland
+  loophole.
+supporters: California Business Roundtable, California Taxpayers Association
+opponents: California Professional Firefighters, California Federation of
+  Teachers, SEIU California, building trades
+vote: none
+
+Local special taxes (ones earmarked for a specific purpose) normally need a
+two-thirds vote. In 2017 the state Supreme Court ruled in the Upland case that
+this only applies when the city council puts the tax on the ballot. If a citizen
+initiative does it, a simple majority is enough. Since then the move has been
+for whichever interest group wants money to gather signatures, write the tax so
+it funds their thing, and skip the council entirely. That's genuinely bad
+governance: the tax is drafted by its beneficiaries, nobody weighs it against
+other priorities, and it's locked in forever. Prop 43 closes the loophole by
+making initiatives clear two-thirds too. The problem is that two-thirds is a
+brutal threshold, and most of the things I actually want cities to fund
+(transit, housing, Muni) only pass because of the loophole. I don't love either
+outcome, so I'm not taking a position. Vote your conscience.
+
+#### Proposition 44 @california-proposition-44
+> Community clinic spending requirement
+measure
+placed by: Initiative
+yes: Requires certain private nonprofit community health clinics to spend at
+  least 90% of annual revenue on direct patient care.
+supporters: SEIU-United Healthcare Workers West
+opponents: California Medical Association, California Primary Care Association,
+  California Hospital Association, California Democratic Party
+vote: no
+
+From the people who brought us Prop 40 comes another attempt to use the
+initiative process for the benefit of a single interest group. SEIU-UHW is the
+only funder, and the measure is the leverage they use when they want clinic
+operators at the bargaining table. Who opposes this measure? The community
+clinics themselves, through the California Primary Care Association, plus the
+pediatricians, the Medical Association, and the hospitals. Nobody who actually
+runs a clinic thinks a hard 90% rule makes sense, because the stuff that doesn't
+count as "direct patient care" is things like the billing staff that gets them
+paid by Medi-Cal, the electronic records system, and the building. These clinics
+run on razor thin margins serving mostly low-income people, and forcing them to
+hit an arbitrary ratio or face penalties means fewer clinics, not better ones.
+If the union wants a contract, it should go negotiate one. It's not the state's
+job to pickup the slack. Vote No. ***In general, a good rule of thumb is that if
+a ballot measure is primarily sponsored by SEIU-UHW, you should probably kill it
+with fire.***
+
+#### Proposition 45 @california-proposition-45
+> Narrow CEQA review for certain projects
+measure
+placed by: Initiative
+yes: Narrows California Environmental Quality Act review for specified public
+  and private projects, with tighter deadlines and limits on court challenges.
+supporters: California Chamber of Commerce, California Building Industry
+  Association, California Association of Realtors, PG&E
+opponents: Sierra Club California, California Environmental Voters, California
+  Labor Federation, State Building Trades
+vote: yes
+
+**Weakens CEQA. CEQA is bad.**
+
+### The Bay Area @bay-area
+> One measure appears on the ballot in all five counties covered by this guide
+> and is counted as a single tally across San Francisco, Alameda, Contra Costa,
+> San Mateo, and Santa Clara counties.
+region
+
+#### Regional Measures @bay-area-regional-measures
+
+##### Regional Measure RTM @bay-area-regional-measure-rtm
+> Regional transit sales tax
+measure
+placed by: Multi-county signature petition under SB 63
+yes: Enacts a 14-year sales tax of 1% in San Francisco and 0.5% in Alameda,
+  Contra Costa, San Mateo, and Santa Clara counties, raising about $980 million
+  a year, mainly to prevent service cuts at BART, Muni, Caltrain, AC Transit,
+  VTA, and SamTrans.
+supporters: Connect Bay Area Transit coalition, Scott Wiener, Jesse Arreguín,
+  Nancy Pelosi, SPUR, Seamless Bay Area, Transform, SEIU 1021, the transit
+  agencies, GrowSF
+opponents: Committee for Affordable Bay Area Transit, Contra Costa Taxpayers
+  Association, Debora Allen, Steve Glazer, Quentin Kopp, Mercury News and Daily
+  Post editorial boards
+note: Each county's share goes to its own agencies. San Francisco's goes mostly
+  to Muni and BART, Alameda's about 65% to BART, Santa Clara's mostly to VTA and
+  Caltrain, and San Mateo's to Caltrain and SamTrans. Needs 50%+1 across all
+  five counties combined to pass.
+vote: yes
+
+### City of San Francisco @san-francisco
+region
+
+#### Executive Offices @san-francisco-executive-offices
+
+##### Assessor-Recorder @san-francisco-assessor-recorder
+contest
+note: Uncontested.
+
++ Joaquín Torres (incumbent)
+
+##### Public Defender @san-francisco-public-defender
+contest
+note: Uncontested.
+
++ Mano Raju (incumbent)
+
+#### San Francisco Board of Supervisors @san-francisco-san-francisco-board-of-supervisors
+
+##### San Francisco Board of Supervisors, District 2 @san-francisco-san-francisco-board-of-supervisors-district-2
+contest, ranked
+
+1. Stephen Sherrill (incumbent)
+  Appointed Dec 2024, won the June 2026 special election.
+2. Guy McCoy: manager, retired military
+2. Monthanus Ratanapakdee: community advocate
+- Nicholas Berg
+
+##### San Francisco Board of Supervisors, District 4 @san-francisco-san-francisco-board-of-supervisors-district-4
+contest, ranked
+
+1. Alan Wong (incumbent)
+  Appointed Dec 2025, won the June 2026 special election.
+2. Albert Chow: hardware store owner
+- Jeremy Julian Greco: campus coordinator
+
+##### San Francisco Board of Supervisors, District 6 @san-francisco-san-francisco-board-of-supervisors-district-6
+contest, ranked
+
+1. Matt Dorsey (incumbent)
+- Alex Behrend: organizer
+
+##### San Francisco Board of Supervisors, District 8 @san-francisco-san-francisco-board-of-supervisors-district-8
+contest, ranked
+note: Open seat. Rafael Mandelman is term-limited. Manny Yekutiel dropped out
+  after sexual assault allegations but remains on the ballot.
+
+1. Darshini Patel: community advocate
+2. Gary McCoy: healthcare policy advocate
+- Michael T. Nguyen: attorney, drag activist
+- Emanuel "Manny" Yekutiel
+  Withdrew. Credibly accused of sexual assault, dropped out, still on the
+  ballot.
+
+##### San Francisco Board of Supervisors, District 10 @san-francisco-san-francisco-board-of-supervisors-district-10
+contest, ranked, unverified
+note: Open seat. Shamann Walton is term-limited. Ten candidates.
+
+1. Theo Ellington: executive director, Bayview Opera House
+2. Deandra Bryant: community advocate
+2. Ellsworth "Ell" M. Jennison, Jr.: carpenter
+2. Mike Trouble Lin: small business consultant
+2. Jamo Muhammad
+2. Jessica Pessecow: legal representative, nurse
+2. Shawn M. Richard: nonprofit CEO
+- Pearci "PJ" Bastiany III: MPA graduate student
+- Dion-Jay "DJ" Brookter: former CEO, Young Community Developers
+- J.R. Eppler
+  Small business attorney, Board of Appeals commissioner.
+
+#### San Francisco Board of Education @san-francisco-san-francisco-board-of-education
+
+##### Members of the Board @san-francisco-members-of-the-board
+contest, 3 seats
+
++ Autumn Brown Garibay: PTA vice president
++ Phil Kim (incumbent): board president
++ Tim Tung: research analyst
+* Virginia Cheung: nonprofit executive
+* Alida Fisher (incumbent)
+* Ryan Hazelton: children's nonprofit director
+* Laurance Lee: general contractor
+* Reina Tello: community organizer
+
+#### Trustees of the City College of San Francisco @san-francisco-trustees-of-the-city-college-of-san-francisco
+
+##### College Trustees @san-francisco-college-trustees
+contest, 3 seats
+note: Full four-year terms. No incumbents are running.
+
++ Elijah Ball: college campus planner
++ Monroe Lace: public school teacher
++ Erwin Tam: municipal financial advisor
+* Rome Moses Jones: nonprofit executive
+* Leah LaCroix: administrative analyst
+* Jeremy Lee: asset manager
+* Bunny McFadden: educator, journalist
+* Lisa Palagi Wynn II: equity researcher
+
+##### College Trustee, remainder of term ending January 2029 @san-francisco-college-trustee-remainder-of-term-ending-january-2029
+contest
+note: Uncontested. Appointed to Alan Wong's vacated seat.
+
++ Ruth Ferguson (incumbent)
+
+#### Bay Area Rapid Transit Board of Directors @san-francisco-bay-area-rapid-transit-board-of-directors
+
+##### BART Director, District 8 @san-francisco-bart-director-district-8
+contest
+note: The only BART seat on the San Francisco ballot this year. District 8
+  covers North Beach, Chinatown, the Marina, the Richmond, the Sunset, and
+  Ingleside. Janice Li is not running. Uncontested.
+
++ Sara Barz: transportation planner
+
+#### San Francisco Ballot Measures @san-francisco-san-francisco-ballot-measures
+> Every local measure this year needs a simple majority to pass.
+
+##### Proposition A @san-francisco-proposition-a
+> Charter changes to City departments and commissions
+measure
+placed by: Board of Supervisors, 9 to 2
+yes: Eliminates or reorganizes certain commissions, moves many commissions from
+  the Charter into the Municipal Code, expands the City Administrator's real
+  estate role, and changes how legal settlements are approved.
+supporters: Mayor Daniel Lurie, as part of the "Clean Up City Hall" package with
+  D, E, F, GrowSF
+opponents: Coalition on Homelessness
+vote: yes
+
+Some history. In 2024 there were two competing commission reform measures: Prop
+D, which would have capped the city at 65 commissions outright, and Peskin's
+Prop E, which created a task force to study the problem instead. I voted for D
+and called E feckless. D lost, E won, and credit where it's due, the task force
+did its job. It produced the first complete inventory of every commission in the
+city, which nobody had ever bothered to make, and recommended a long list of
+cuts and mergers. Prop A is the Board of Supervisors acting on those
+recommendations. It takes the charter from 55 commissions to 38, moving nine
+into the Municipal Code where they can be changed by ordinance instead of a
+ballot measure, and eliminating or merging eight more. The Board adopted a
+narrower version than the task force wanted, so this is less than D would have
+done, but it's real progress and it came out of a process that I didn't think
+would deliver. Vote Yes.
+
+##### Proposition B @san-francisco-proposition-b
+> Municipal finance corporation and public bank
+measure
+placed by: Board of Supervisors, 9 to 2
+yes: Authorizes the City to create a city-owned non-deposit lender that could
+  later convert into a public bank after profitable operation and regulatory
+  approval.
+supporters: SF Public Bank Coalition, San Francisco Foundation, SF Labor Council
+opponents: GrowSF and individual opponents
+vote: no
+
+##### Proposition C @san-francisco-proposition-c
+> Housing Trust Fund contributions
+measure
+placed by: Board of Supervisors, 11 to 0
+yes: Gradually raises the City's annual Housing Trust Fund contribution to $125
+  million, expands eligible uses to include social housing and co-ops, raises
+  the down payment loan income limit to 200% of area median income, and extends
+  the fund from 2043 to 2058.
+supporters: Non-Profit Housing Association of Northern California, San
+  Franciscans for Social Housing, SF Democratic Party, GrowSF
+opponents: SF Republican Party
+vote: yes
+
+##### Proposition D @san-francisco-proposition-d
+> Changes to the ballot measure process
+measure
+placed by: Signature petition, sponsored by Mayor Lurie
+yes: Raises the signature requirement for citizen initiatives from 2% to 8% of
+  registered voters, raises the threshold for calling special elections to 10%,
+  allows initiatives to be withdrawn before an election, and removes the ability
+  of the Mayor or four Supervisors to place measures on the ballot.
+supporters: Mayor Daniel Lurie, SF Democratic Party, Teamsters Local 665, Gov.
+  Gavin Newsom, GrowSF
+opponents: SF Labor Council, Senior and Disability Action, United Educators of
+  SF, SF Tenants Union, Indivisible SF
+vote: yes
+
+##### Proposition E @san-francisco-proposition-e
+> City Administrator authority and contracting
+measure
+placed by: Signature petition, sponsored by Mayor Lurie
+yes: Centralizes purchasing and contracting authority under the City
+  Administrator, raises the contract values requiring Board approval from $10
+  million to $25 million, and extends the City Administrator's term from 5 to 10
+  years.
+supporters: Mayor Daniel Lurie, SF Democratic Party, Firefighters Local 798, SF
+  Building Trades, GrowSF
+opponents: SF Labor Council and allied groups
+vote: yes
+
+##### Proposition F @san-francisco-proposition-f
+> Executive branch management
+measure
+placed by: Signature petition, sponsored by Mayor Lurie
+yes: Expands the Mayor's authority to transfer responsibilities between
+  departments, hire deputy mayors, hire and fire most department heads including
+  the Police Chief, and lets appointing authorities remove most commissioners
+  without cause.
+supporters: Mayor Daniel Lurie, SF Democratic Party, SPUR, SF Chamber of
+  Commerce, Firefighters Local 798, SEIU 87, GrowSF
+opponents: Small Business Forward, DSA SF, SF Labor Council
+vote: yes
+
+##### Proposition G @san-francisco-proposition-g
+> Private vehicles on the Upper Great Highway
+measure
+placed by: Signature petition
+yes: Closes Sunset Dunes Park to recreation on weekdays and reopens the Upper
+  Great Highway to private vehicles Monday 4 a.m. through Friday 6 p.m.,
+  reversing part of 2024's Prop K.
+supporters: Chinese American Democratic Club, SF Taxpayers Association, Richmond
+  District Democratic Club, Supervisor Alan Wong
+opponents: Sierra Club, SPUR, Surfrider SF, Outer Sunset Neighbors, Scott
+  Wiener, GrowSF
+vote: no
+
+Puts cars back on the Great Highway. Cars are still bad.
+
+##### Proposition H @san-francisco-proposition-h
+> Parcel tax for Muni operations
+measure
+placed by: Signature petition
+yes: Creates a 15-year parcel tax based on property type and square footage,
+  from $129 per single-family parcel up to $400,000, with senior exemptions,
+  raising about $177 million a year for Muni service.
+supporters: SF Democratic Party, SF Labor Council, SF Chamber of Commerce, SF
+  Tenants Union, Seamless Bay Area, GrowSF
+opponents: SF Republican Party, Business League
+vote: yes
+
+Raises property taxes to fund public transit. My two favorite things.
+
+##### Proposition I @san-francisco-proposition-i
+> Transfer tax dedication for affordable housing
+measure
+placed by: Signature petition, backed by DSA SF and Dean Preston
+yes: Permanently dedicates half of transfer tax revenue from property sales over
+  $10 million to a new House SF Fund for affordable and social housing. Prevails
+  over Prop J if both pass and conflict.
+supporters: Affordable Housing Alliance, SF Tenants Union, SEIU 1021, Small
+  Business Forward, DSA SF
+opponents: SF Taxpayers Association, SF Building and Construction Trades
+  Council, GrowSF
+vote: undecided
+
+##### Proposition J @san-francisco-proposition-j
+> End the foreclosure exemption for the transfer tax
+measure
+placed by: Board of Supervisors, 10 to 0
+yes: Starting in 2027, ends the transfer tax exemption for commercial,
+  industrial, and large residential properties transferred to a lender in or to
+  avoid foreclosure, for an estimated $100 million to $150 million a year.
+supporters: Mayor Daniel Lurie, SF Democratic Party, SEIU 1021, SEIU 2015,
+  GrowSF
+opponents: SF Taxpayers Association
+vote: undecided
+
+### City of Oakland @oakland
+> Nothing county-level is on the November ballot for an Oakland voter. The
+> District Attorney race was settled outright in June, and the Supervisor,
+> Sheriff, Assessor, and Treasurer seats all run through 2028.
+region
+
+#### Oakland Executive Offices @oakland-oakland-executive-offices
+
+##### Mayor of Oakland @oakland-mayor-of-oakland
+contest, partisan, ranked
+note: Full four-year term. Barbara Lee won the April 2025 special election for
+  the remainder of Sheng Thao's term.
+
+1. Barbara Lee (Democratic, incumbent)
+* Julius Robinson: community investment executive
+- Brenda F. Grisham
+  East Oakland business owner, officer of the Price recall committee.
+- Mindy Ruth Pechenuk (Republican)
+  Ran for Assembly as a Republican in 2022 and 2024.
+
+##### Oakland City Auditor @oakland-oakland-city-auditor
+contest
+note: Uncontested.
+
++ Michael C. Houston (incumbent)
+
+#### Oakland City Council @oakland-oakland-city-council
+
+##### Oakland City Council, District 4 @oakland-oakland-city-council-district-4
+> Oakland Hills
+contest, ranked
+note: Uncontested. District 4 covers Montclair, Piedmont Pines, Dimond, Laurel,
+  Glenview, and Redwood Heights.
+
+1. Janani Ramachandran (incumbent)
+
+##### Oakland City Council, District 2 @oakland-oakland-city-council-district-2
+> Chinatown, Jack London, Lake Merritt east side
+contest, ranked
+
+1. Charlene Wang (incumbent)
+  Won the April 2025 special election, author of Measure FF.
+- Nate Adams: community organizer
+
+##### Oakland City Council, District 6 @oakland-oakland-city-council-district-6
+> East Oakland
+contest, ranked
+
+1. Kevin E. Jenkins (incumbent): council president, co-sponsor of Measure EE
+- Nancy S. Sidebotham: tax preparer
+
+#### Oakland Unified School District @oakland-oakland-unified-school-district
+> Ranked choice. Oakland residents 16 and older may vote in school board races
+> this year. All three incumbents are running.
+
+##### OUSD Director, District 4 @oakland-ousd-director-district-4
+> Oakland Hills
+contest, ranked
+
+* Mike Hutchinson (incumbent): seeking a third term
+* Kathryn Camp: Glenview Elementary PTA president
+* Sylvia Pfeiffer Williams: former OUSD adult-ed teacher
+
+vote: undecided
+
+##### OUSD Director, District 2 @oakland-ousd-director-district-2
+contest, ranked
+
+* Jennifer Brouhard (incumbent): board president
+* Arielle Fleisher
+  OUSD parent, policy at Waymo, formerly SPUR and SFMTA.
+
+vote: undecided
+
+##### OUSD Director, District 6 @oakland-ousd-director-district-6
+contest, ranked
+
+* Valarie Bachelor (incumbent): board vice president
+* LeAna Powell: Burckhalter Elementary parent
+* Alexandra Williams: math teacher at AIMS College Prep
+
+vote: undecided
+
+#### East Bay Municipal Utility District @oakland-east-bay-municipal-utility-district
+
+##### EBMUD Director, Ward 3 @oakland-ebmud-director-ward-3
+> Piedmont and the Oakland Hills
+contest, unverified
+note: Ward 3 covers Piedmont, a large share of Oakland, Orinda, and Moraga.
+  Confirm your ward on the county sample ballot.
+
++ Marguerite Young (incumbent): board president, on the board since 2014
+* Don Gray: retired wastewater manager
+
+#### AC Transit Board of Directors @oakland-ac-transit-board-of-directors
+> First election under the new seven-ward map.
+
+##### AC Transit Director, Ward 3 @oakland-ac-transit-director-ward-3
+> North Oakland, Montclair, Piedmont, Lake Merritt, Alameda
+contest
+
++ Joel B. Young (incumbent)
+  At-large director since 2009, found to have violated the agency's harassment
+  policy.
+* Adriana Valencia: Temescal transit rider and product manager
+
+##### AC Transit Director, Ward 4 @oakland-ac-transit-director-ward-4
+> Central and East Oakland
+contest
+
++ Sarah Syed (incumbent): transportation planner
+* Gabriel Morales: teacher and principal
+
+#### Bay Area Rapid Transit Board of Directors @oakland-bay-area-rapid-transit-board-of-directors
+> District 4 is the only BART seat up this year that touches Oakland. District
+> 7, which covers downtown, Rockridge, and MacArthur, is not up until 2028. No
+> East Bay Regional Park District ward covering Oakland is on the ballot.
+
+##### BART Director, District 4 @oakland-bart-director-district-4
+> Fruitvale, East Oakland, San Leandro
+contest, unverified
+note: Whether a given Montclair address falls in District 4 or District 7 is
+  unconfirmed. Check the county sample ballot.
+
+* Robert Raburn (incumbent): director since 2010
+* Luis Reynoso: former Chabot-Las Positas trustee
+
+vote: undecided
+
+#### Oakland Ballot Measures @oakland-oakland-ballot-measures
+
+##### Measure EE @oakland-measure-ee
+> Strong mayor charter amendment
+measure
+placed by: City Council on a 4 to 4 vote, with Mayor Lee breaking the tie
+yes: Replaces Oakland's hybrid mayor and city administrator system with a
+  strong-mayor system. The mayor becomes chief executive with a legislative veto
+  and a line-item budget veto, overridable by six of eight councilmembers, and
+  loses the council tie-breaking vote. The council gains confirmation power over
+  key department heads, subpoena power, and a full-time role.
+supporters: Mayor Barbara Lee, Council President Kevin Jenkins, former mayor
+  Libby Schaaf, Empower Oakland, San Francisco Foundation
+opponents: Councilmembers Zac Unger, Janani Ramachandran, Noel Gallo, Ken
+  Houston, former councilmember Loren Taylor, Supervisor Nate Miley, Oakland
+  NAACP
+note: The City Auditor estimates a first-year implementation cost of $2 million
+  to $2.6 million.
+vote: undecided
+
+##### Measure FF @oakland-measure-ff
+> End the transfer tax foreclosure exemption
+measure
+placed by: City Council, unanimous
+yes: Starting in 2027, removes the real property transfer tax exemption for most
+  transfers through foreclosure, keeping exemptions for individuals acquiring
+  small residential property and for community banks, generating an estimated $4
+  million to $13 million a year.
+supporters: Councilmember Charlene Wang, SPUR, Empower Oakland
+vote: undecided
+
+### City of Palo Alto @palo-alto
+> No Santa Clara County offices are on the November ballot for Palo Alto voters.
+> The District Attorney, Sheriff, and Assessor were settled in June, Supervisor
+> District 5 is not up until 2028, and the County Superintendent is appointed.
+region
+
+#### Palo Alto City Council @palo-alto-palo-alto-city-council
+
+##### Council Members @palo-alto-council-members
+contest, 3 seats
+note: Three four-year seats. Ed Lauing and Vicki Veenker are running again;
+  Julie Lythcott-Haims is not.
+
+* Bryna Chang: chair, Planning and Transportation Commission
+* Yu "Yudy" Deng: Parks and Recreation commissioner
+* Henry Etzkowitz: sociologist, Stanford research fellow
+* Gary Gechlik: physician
+* Raymond Lee Goins: youth justice advocate
+* Brian Hamachek: software engineer
+* Ed Lauing (incumbent): former mayor
+* Vicki Veenker (incumbent): current mayor
+
+vote: undecided
+
+#### Palo Alto Unified School District @palo-alto-palo-alto-unified-school-district
+
+##### Board Members @palo-alto-board-members
+contest, 2 seats
+note: Shounak Dharap and Shana Segal are not running. Leor Melamedov withdrew
+  before filing.
+
+* John Craig
+  PAUSD parent, engineering and management consulting.
+* Linda Henigin
+  Former Duveneck math teacher, backed by the teachers' union.
+* Avery Wang
+  Shazam co-founder, parent of three PAUSD alumni.
+
+vote: undecided
+
+#### Special Districts @palo-alto-special-districts
+
+##### Santa Clara Valley Water District Director, District 7 @palo-alto-santa-clara-valley-water-district-director-district-7
+contest
+note: District 7 covers Palo Alto, Mountain View, Los Altos, and nearby areas.
+
+* Rebecca Eisenberg (incumbent)
+  Subject of a district investigation finding harassment of colleagues, which
+  she disputes.
+* Pete Dailey: Los Altos councilmember
+
+vote: undecided
+
+##### Midpeninsula Regional Open Space District Director, Ward 5 @palo-alto-midpeninsula-regional-open-space-district-director-ward-5
+contest, unverified
+note: Only Palo Alto voters living in Ward 5 see this contest. Ward 2, which
+  covers the rest of Palo Alto, had a single qualified candidate and is expected
+  to be filled by appointment.
+
+* Karen C. Holman (incumbent): former Palo Alto mayor
+* Shannon M. Ramiro: Sunnyvale
+
+vote: undecided
+
+#### Palo Alto Ballot Measure @palo-alto-palo-alto-ballot-measure
+
+##### Measure J @palo-alto-measure-j
+> Half-cent sales tax for Cubberley
+measure
+placed by: City Council, unanimous
+yes: Raises Palo Alto's sales tax by 0.5% with no sunset, about $15.6 million a
+  year as a general tax, which the Council says it intends to use to buy PAUSD's
+  seven acres of Cubberley Community Center and modernize it.
+supporters: All five council members, the PAUSD board, teachers' union, Joe
+  Simitian, League of Women Voters of Palo Alto, Palo Alto Forward
+opponents: Former mayor Lydia Kou, Silicon Valley Taxpayers Association, Mercury
+  News and Daily Post editorial boards
+note: Because it is a general tax, nothing legally binds the money to Cubberley.
+  Combined with RTM, Palo Alto's sales tax would exceed 10%.
+vote: undecided
+
+### City of San Mateo @san-mateo
+> A short local ballot this year. Nothing countywide reaches a San Mateo voter
+> in November: the Assessor, County Superintendent, Controller, Treasurer,
+> Coroner, and Supervisor District 2 were all settled in June, and there is no
+> Sheriff or District Attorney election until 2028. Ken Binder was appointed
+> Sheriff through January 2029 after the Board removed Christina Corpus.
+region
+
+#### San Mateo City Council @san-mateo-san-mateo-city-council
+> District elections. Districts 1, 3, and 5 are up this year; 2 and 4 follow in
+> 2028. No certified write-ins.
+
+##### San Mateo City Council, District 1 @san-mateo-san-mateo-city-council-district-1
+contest
+
+* Lisa Diaz Nash (incumbent)
+* Taso Zografos
+  Business executive, author of the argument against Measure H.
+
+vote: undecided
+
+##### San Mateo City Council, District 3 @san-mateo-san-mateo-city-council-district-3
+contest
+
+* Robert G. Newsom Jr. (incumbent)
+* Seema Patel: planning commissioner
+
+vote: undecided
+
+##### San Mateo City Council, District 5 @san-mateo-san-mateo-city-council-district-5
+contest
+
+* Adam Loraine (incumbent): current mayor
+* Dave Johnson: pastor and coach
+* Dana Yates Sahae: community advocate
+
+vote: undecided
+
+#### San Mateo Union High School District @san-mateo-san-mateo-union-high-school-district
+> The only school board contests that can reach a San Mateo city ballot. Which
+> one you see depends on your address. Area 3 is reported as Hillsborough and
+> the Highlands, so most city voters will see Area 5 or neither. San
+> Mateo-Foster City School District, the community college district, and the
+> County Board of Education all had single qualified candidates for the seats
+> covering the city, so none are on the ballot.
+
+##### San Mateo Union High School District, Trustee Area 3 @san-mateo-san-mateo-union-high-school-district-trustee-area-3
+contest, unverified
+note: Confirm whether your precinct is in Area 3.
+
+* Jennifer Jacobson (incumbent)
+* Diana Harris: teacher in the San Mateo-Foster City district
+
+vote: undecided
+
+##### San Mateo Union High School District, Trustee Area 5 @san-mateo-san-mateo-union-high-school-district-trustee-area-5
+contest, unverified
+note: Open seat. Robert Griffin did not run. Confirm whether your precinct is in
+  Area 5.
+
+* Alison Proctor: current San Mateo-Foster City trustee
+* Kimo Rosenbaum: parent, software engineer
+
+vote: undecided
+
+#### San Mateo Ballot Measures @san-mateo-san-mateo-ballot-measures
+> No special district contest reaches a city ballot this year. Peninsula Health
+> Care District and the Harbor District seats were uncontested, and the city is
+> outside the open space district.
+
+##### Measure H @san-mateo-measure-h
+> Quarter-cent city sales tax increase
+measure
+placed by: City Council, 4 to 0
+yes: Raises San Mateo's local sales tax from 0.25% to 0.50%, about $7 million a
+  year for general city services, with no sunset, annual audits, and groceries
+  and prescriptions exempt.
+supporters: Former police chief Susan Manheimer, former councilmember Richard
+  Hedges, Parks and Recreation chair Sabrina Ocampo, San Mateo Daily Journal
+opponents: Council candidate Taso Zografos and two co-signers, no organized
+  committee
+note: The city projects a structural deficit of about $17 million.
+vote: undecided
+
+##### Measure F @san-mateo-measure-f
+> City charter cleanup
+measure
+placed by: City Council
+yes: Updates the City Charter to formally recognize district elections and
+  redistricting, extends the window to fill council vacancies from 30 to 60
+  days, modernizes meeting and notice rules, and removes council approval of the
+  Finance Director appointment.
+supporters: Councilmember Danielle Cwirko-Godycki, Deputy Mayor Nicole
+  Fernandez, former councilmember Richard Hedges, San Mateo Daily Journal
+vote: undecided
+
+##### Measure W @san-mateo-measure-w
+> San Mateo-Foster City schools bond, $498 million
+measure
+placed by: San Mateo-Foster City School District board
+yes: Authorizes $498 million in general obligation bonds, about $29 per $100,000
+  of assessed value, to replace windowless classrooms, roofs, and windows,
+  upgrade STEM and career classrooms and emergency systems, and build roughly 80
+  workforce housing units for staff at the Knolls campus.
+supporters: SMFC Education Foundation, PTA Council, Supervisor Noelia Corzo,
+  Councilmember Rob Newsom Jr., San Mateo Daily Journal
+opponents: Thomas Weissmiller and co-signers, who cite the existing Measures T
+  and X on the same tax bill
+note: Needs 55% to pass.
+vote: undecided
+
+##### Measure V @san-mateo-measure-v
+> Community college district bond, $848 million
+measure
+placed by: San Mateo County Community College District board
+yes: Authorizes $848 million in bonds, about $18 per $100,000 of assessed value,
+  to repair and build science, engineering, trades, and career classrooms and
+  fix roofs, plumbing, and electrical systems at College of San Mateo, Cañada
+  College, and Skyline College, keeping the current tax rate rather than raising
+  it.
+supporters: SMCCD Federation of Teachers, county firefighters, San Mateo County
+  Central Labor Council, Silicon Valley Community Foundation
+opponents: Silicon Valley Taxpayers Association and co-signers, who note it is
+  the district's fifth bond since 2001 and cite the Galatolo bond scandal
+note: Needs 55% to pass.
+vote: undecided
+
+##### Measure U @san-mateo-measure-u
+> Independent redistricting commission
+measure
+placed by: Board of Supervisors
+yes: Creates an independent commission to draw and adopt the five supervisorial
+  district boundaries after each census, replacing the current system where the
+  Board of Supervisors adopts maps on the advice of an advisory committee.
+supporters: Supervisors Jackie Speier, Noelia Corzo, Lisa Gauthier, League of
+  Women Voters chapters
+vote: undecided
+
+##### Measure J @san-mateo-measure-j
+> Time to fill county vacancies
+measure
+placed by: Board of Supervisors
+yes: Extends from 30 to 60 days the time the Board of Supervisors has to appoint
+  a replacement or call a special election when a non-supervisor elected county
+  office becomes vacant, and requires a noticed public meeting before any
+  appointment.
+supporters: Board of Supervisors and the Charter Review Committee
+vote: none
+
+##### Measure L @san-mateo-measure-l
+> Charter preamble on extreme weather
+measure
+placed by: Board of Supervisors
+yes: Adds a paragraph to the County Charter preamble declaring long-term
+  resilience to fire, flood, heat, drought, and sea level rise a county
+  priority.
+supporters: Board of Supervisors and the Charter Review Committee
+vote: yes
+
+##### Measure AA @san-mateo-measure-aa
+> Charter preamble affirming rights
+measure
+placed by: Board of Supervisors
+yes: Adds a paragraph to the County Charter preamble affirming the county's
+  commitment to the dignity, civil rights, and equal protection of all
+  residents. No other changes.
+supporters: Board of Supervisors and the Charter Review Committee
+vote: yes
