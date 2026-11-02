@@ -1,0 +1,6 @@
+# Pins the toolchain for everyone working on this repo, including CI.
+# rustup reads this file automatically; mise does too.
+# Bump deliberately, in its own PR, and update rust-version in Cargo.toml to match.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
