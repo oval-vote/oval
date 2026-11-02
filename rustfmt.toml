@@ -1,4 +1,3 @@
-# Only stable rustfmt options are used, so `cargo fmt` works on the pinned stable toolchain.
 style_edition = "2024"
 max_width = 100
 newline_style = "Unix"

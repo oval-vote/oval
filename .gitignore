@@ -1,12 +1,7 @@
-# Cargo build output
 /target
-# Cargo.lock is committed: this workspace produces binaries.
-
-# rustfmt backups and Windows debug info
 **/*.rs.bk
 *.pdb
 
-# Editors. Shared VS Code settings are allowed; personal ones are not.
 .idea/
 .vscode/*
 !.vscode/settings.json
@@ -14,10 +9,8 @@
 *.swp
 *~
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Local environment
 .env
 .env.*
