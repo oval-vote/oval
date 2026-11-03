@@ -2,17 +2,19 @@
 
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
-use crate::SyntaxKind::ContestRecommend;
 use crate::SyntaxKind::{
     self, AbbreviationKeyword, AsKeyword, Ballot, BallotKeyword, Block, Campaign, CampaignKeyword,
-    Candidate, CandidateKeyword, Colon, Contest, ContestKeyword, ContestKind, DateField,
-    DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document, ElectionKeyword,
-    EligibilityKeyword, ErrorNode, Flag, GuideKeyword, Identifier, IncumbentKeyword, Indent,
-    IntegerLiteral, JustificationKeyword, MarkdownBlock, MarkdownField, MaxKeyword, MeasureKeyword,
-    Member, MultipleKeyword, Newline, NoPositionKeyword, NoteKeyword, Oppose, OpposeKeyword, Party,
-    PartyKeyword, PartyReference, RankedKeyword, RecommendKeyword, RetentionKeyword, Section,
-    SectionKeyword, SingleKeyword, StringField, StringLiteral, SubtitleKeyword, Support,
-    SupportKeyword, TabulationKeyword, UrlField, UrlLiteral, WebsiteKeyword, WithdrawnKeyword,
+    Candidate, CandidateKeyword, Colon, Comma, Contest, ContestKeyword, ContestKind,
+    ContestRecommend, DateField, DateKeyword, DateLiteral, Dedent, DescriptionKeyword,
+    DesignationKeyword, Document, ElectionKeyword, EligibilityKeyword, ErrorNode,
+    FiscalImpactKeyword, Flag, GuideKeyword, Identifier, IfNoKeyword, IfYesKeyword,
+    IncumbentKeyword, Indent, IntegerLiteral, JustificationKeyword, MarkdownBlock, MarkdownField,
+    MaxKeyword, Measure, MeasureKeyword, MeasureRecommend, Member, MultipleKeyword, Newline,
+    NoKeyword, NoPositionKeyword, NoneValueKeyword, NoteKeyword, OpponentsKeyword, Oppose,
+    OpposeKeyword, Party, PartyKeyword, PartyReference, PlacementKeyword, RankedKeyword,
+    RecommendKeyword, RetentionKeyword, Section, SectionKeyword, SingleKeyword, StringField,
+    StringListField, StringLiteral, SubtitleKeyword, Support, SupportKeyword, SupportersKeyword,
+    TabulationKeyword, UrlField, UrlLiteral, WebsiteKeyword, WithdrawnKeyword, YesKeyword,
 };
 use crate::SyntaxNode;
 use crate::lexer::{LexError, Token, lex};
@@ -176,6 +178,7 @@ impl Parser<'_> {
             SectionKeyword => self.section(),
             BallotKeyword => self.ballot(),
             ContestKeyword => self.contest(),
+            MeasureKeyword => self.measure(),
             EligibilityKeyword | NoteKeyword => return self.simple_field(kind),
             _ => return false,
         }
@@ -194,10 +197,63 @@ impl Parser<'_> {
     fn section_item(&mut self, kind: SyntaxKind) -> bool {
         match kind {
             ContestKeyword => self.contest(),
+            MeasureKeyword => self.measure(),
             NoteKeyword => return self.simple_field(kind),
             _ => return false,
         }
         true
+    }
+
+    fn measure(&mut self) {
+        self.start_node(Measure);
+        self.bump();
+        self.declaration_header();
+        self.required_block(MEASURE_FIELDS, &[RecommendKeyword], Self::measure_item);
+        self.finish_node();
+    }
+
+    fn measure_item(&mut self, kind: SyntaxKind) -> bool {
+        match kind {
+            RecommendKeyword => self.measure_recommend(),
+            SupportersKeyword | OpponentsKeyword => self.string_list_field(),
+            _ if MEASURE_FIELDS.contains(&kind) => return self.simple_field(kind),
+            _ => return false,
+        }
+        true
+    }
+
+    fn string_list_field(&mut self) {
+        self.start_node(StringListField);
+        self.bump();
+        if self.eat(StringLiteral) {
+            while self.eat(Comma) {
+                self.expect_value(StringLiteral);
+            }
+            if !self.at_line_end() {
+                self.recover_line(&[Comma, Newline]);
+            }
+        } else if !self.eat(NoneValueKeyword) {
+            if self.at_line_end() {
+                self.error(&[StringLiteral, NoneValueKeyword]);
+            } else {
+                self.recover_line(&[StringLiteral, NoneValueKeyword]);
+            }
+        }
+        self.end_of_line();
+        self.finish_node();
+    }
+
+    fn measure_recommend(&mut self) {
+        self.start_node(MeasureRecommend);
+        self.bump();
+        match self.current() {
+            Some(YesKeyword | NoKeyword | NoPositionKeyword) => self.bump(),
+            _ if self.at_line_end() => self.error(MEASURE_POSITIONS),
+            _ => self.recover_line(MEASURE_POSITIONS),
+        }
+        self.end_of_line();
+        self.block(RECOMMEND_FIELDS, &[], Self::recommend_field);
+        self.finish_node();
     }
 
     fn contest(&mut self) {
@@ -478,7 +534,8 @@ impl Parser<'_> {
         let (node, value) = match kind {
             DateKeyword => (DateField, DateLiteral),
             WebsiteKeyword => (UrlField, UrlLiteral),
-            NoteKeyword | JustificationKeyword => (MarkdownField, MarkdownBlock),
+            NoteKeyword | JustificationKeyword | DescriptionKeyword | IfYesKeyword
+            | IfNoKeyword => (MarkdownField, MarkdownBlock),
             _ => (StringField, StringLiteral),
         };
         self.start_node(node);
@@ -696,6 +753,19 @@ const CONTEST_KINDS: &[SyntaxKind] = &[
 const CONTEST_FIELDS: &[SyntaxKind] = &[SubtitleKeyword, TabulationKeyword, NoteKeyword];
 const CONTEST_ITEMS: &[SyntaxKind] = &[CampaignKeyword, RecommendKeyword];
 const RECOMMEND_FIELDS: &[SyntaxKind] = &[JustificationKeyword, NoteKeyword];
+const MEASURE_FIELDS: &[SyntaxKind] = &[
+    SubtitleKeyword,
+    DescriptionKeyword,
+    IfYesKeyword,
+    IfNoKeyword,
+    PlacementKeyword,
+    TabulationKeyword,
+    FiscalImpactKeyword,
+    SupportersKeyword,
+    OpponentsKeyword,
+    NoteKeyword,
+];
+const MEASURE_POSITIONS: &[SyntaxKind] = &[YesKeyword, NoKeyword, NoPositionKeyword];
 const CAMPAIGN_FIELDS: &[SyntaxKind] = &[
     WebsiteKeyword,
     NoteKeyword,
@@ -1462,8 +1532,8 @@ Document
     }
 
     #[test]
-    fn contests_and_measures_are_named_as_expected_items_until_they_parse() {
-        let source = "ballot @a \"A\"\n  section \"S\"\n    measure @m \"M\"\n";
+    fn unknown_lines_in_a_section_name_note_contest_and_measure() {
+        let source = "ballot @a \"A\"\n  section \"S\"\n    campaign @x \"X\"\n";
         let parse = parse(source);
         assert_eq!(
             parse.errors(),
@@ -1473,8 +1543,8 @@ Document
                     SyntaxKind::ContestKeyword,
                     SyntaxKind::MeasureKeyword,
                 ],
-                found: Some(SyntaxKind::MeasureKeyword),
-                range: span(source, "measure @m \"M\"\n"),
+                found: Some(SyntaxKind::CampaignKeyword),
+                range: span(source, "campaign @x \"X\"\n"),
             })]
         );
     }
@@ -2104,5 +2174,179 @@ ContestRecommend
             .filter(|n| n.kind() == SyntaxKind::ContestRecommend)
             .count();
         assert_eq!(recommends, 2);
+    }
+
+    #[test]
+    fn measure_from_the_spec_example() {
+        let source = in_ballot(
+            "measure @prop1 \"Proposition 1\"\n  subtitle \"Affordable Housing Bond\"\n  description:\n    Authorizes $2 billion in bonds.\n  if_yes:\n    Bonds may be sold.\n  if_no:\n    They may not.\n  placement \"Legislative referral\"\n  tabulation \"Simple majority\"\n  fiscal_impact \"About $140 million a year\"\n  supporters \"Franklin Housing Coalition\", \"Franklin Labor Federation\"\n  opponents none\n\n  recommend yes\n    justification:\n      The only funded plan.\n",
+        );
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        assert_eq!(
+            dump(&first(&result, SyntaxKind::Measure)),
+            "\
+Measure
+  MeasureKeyword \"measure\"
+  Identifier \"@prop1\"
+  StringLiteral \"\\\"Proposition 1\\\"\"
+  Newline \"\\n\"
+  Block
+    Indent \"\"
+    StringField
+      SubtitleKeyword \"subtitle\"
+      StringLiteral \"\\\"Affordable Housing Bond\\\"\"
+      Newline \"\\n\"
+    MarkdownField
+      DescriptionKeyword \"description\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"      Authorizes $2 billion in bonds.\\n\"
+    MarkdownField
+      IfYesKeyword \"if_yes\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"      Bonds may be sold.\\n\"
+    MarkdownField
+      IfNoKeyword \"if_no\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"      They may not.\\n\"
+    StringField
+      PlacementKeyword \"placement\"
+      StringLiteral \"\\\"Legislative referral\\\"\"
+      Newline \"\\n\"
+    StringField
+      TabulationKeyword \"tabulation\"
+      StringLiteral \"\\\"Simple majority\\\"\"
+      Newline \"\\n\"
+    StringField
+      FiscalImpactKeyword \"fiscal_impact\"
+      StringLiteral \"\\\"About $140 million a year\\\"\"
+      Newline \"\\n\"
+    StringListField
+      SupportersKeyword \"supporters\"
+      StringLiteral \"\\\"Franklin Housing Coalition\\\"\"
+      Comma \",\"
+      StringLiteral \"\\\"Franklin Labor Federation\\\"\"
+      Newline \"\\n\"
+    StringListField
+      OpponentsKeyword \"opponents\"
+      NoneValueKeyword \"none\"
+      Newline \"\\n\"
+    MeasureRecommend
+      RecommendKeyword \"recommend\"
+      YesKeyword \"yes\"
+      Newline \"\\n\"
+      Block
+        Indent \"\"
+        MarkdownField
+          JustificationKeyword \"justification\"
+          Colon \":\"
+          Newline \"\\n\"
+          MarkdownBlock \"        The only funded plan.\\n\"
+        Dedent \"\"
+    Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn string_lists() {
+        let source = in_ballot(
+            "measure @m \"M\"\n  supporters \"a\"\n  opponents \"a\", \"b\", \"c\"\n  recommend no\n",
+        );
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+
+        let source =
+            in_ballot("measure @m \"M\"\n  supporters\n  opponents \"a\",\n  recommend no\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [
+                SyntaxError::Parse(ParseError {
+                    expected: vec![SyntaxKind::StringLiteral, SyntaxKind::NoneValueKeyword],
+                    found: Some(SyntaxKind::Newline),
+                    range: TextRange::empty(span(&source, "supporters").end()),
+                }),
+                SyntaxError::Parse(ParseError {
+                    expected: vec![SyntaxKind::StringLiteral],
+                    found: Some(SyntaxKind::Newline),
+                    range: TextRange::empty(span(&source, "\"a\",").end()),
+                }),
+            ]
+        );
+
+        let source = in_ballot("measure @m \"M\"\n  supporters \"a\" \"b\"\n  recommend no\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 1);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.expected == [SyntaxKind::Comma, SyntaxKind::Newline]
+                && e.range == span(&source, "\"b\"")
+        ));
+    }
+
+    #[test]
+    fn measure_positions() {
+        for position in ["yes", "no", "no-position"] {
+            let source = in_ballot(&format!("measure @m \"M\"\n  recommend {position}\n"));
+            let result = parse(&source);
+            assert_eq!(result.errors(), [], "{position}");
+        }
+
+        let source = in_ballot("measure @m \"M\"\n  recommend\n    support @a\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 2);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.expected == MEASURE_POSITIONS_FOR_TEST
+                && e.range == TextRange::empty(span(&source, "recommend").end())
+        ));
+        assert!(matches!(
+            &result.errors()[1],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::SupportKeyword)
+                && e.expected == [SyntaxKind::JustificationKeyword, SyntaxKind::NoteKeyword]
+        ));
+
+        let source = in_ballot("measure @m \"M\"\n  recommend maybe\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 2);
+        assert!(matches!(&result.errors()[0], SyntaxError::Lex(_)));
+        assert!(matches!(
+            &result.errors()[1],
+            SyntaxError::Parse(e) if e.expected == MEASURE_POSITIONS_FOR_TEST && e.range == span(&source, "maybe")
+        ));
+    }
+
+    const MEASURE_POSITIONS_FOR_TEST: [SyntaxKind; 3] = [
+        SyntaxKind::YesKeyword,
+        SyntaxKind::NoKeyword,
+        SyntaxKind::NoPositionKeyword,
+    ];
+
+    #[test]
+    fn measures_live_in_ballots_and_sections_with_fields_once() {
+        let source = "ballot @b \"B\"\n  measure @a \"A\"\n    recommend yes\n  section \"S\"\n    measure @c \"C\"\n      subtitle \"x\"\n      subtitle \"y\"\n      recommend no\n";
+        let result = parse(source);
+        let measures = result
+            .syntax()
+            .descendants()
+            .filter(|n| n.kind() == SyntaxKind::Measure)
+            .count();
+        assert_eq!(measures, 2);
+        assert_eq!(result.errors().len(), 1);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::SubtitleKeyword)
+                && e.expected.first() == Some(&SyntaxKind::DescriptionKeyword)
+        ));
+    }
+
+    #[test]
+    fn the_embedded_sample_parses_clean() {
+        let result = parse(SAMPLE);
+        assert_eq!(result.errors(), []);
     }
 }
