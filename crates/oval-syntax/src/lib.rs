@@ -1,5 +1,6 @@
 //! Lexer, parser, and lossless syntax tree for the Oval voting guide format.
 
+pub mod ast;
 pub mod lexer;
 pub mod parser;
 mod syntax_kind;
