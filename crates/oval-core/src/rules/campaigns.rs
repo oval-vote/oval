@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use oval_syntax::SyntaxKind;
 use oval_syntax::ast::{AstNode, Campaign, Member};
 
@@ -7,9 +9,29 @@ use crate::{Diagnostic, Rule};
 
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
+        let mut in_contest: HashSet<String> = HashSet::new();
         for campaign in contest.campaigns() {
+            let mut in_campaign: HashSet<String> = HashSet::new();
             for member in campaign.members() {
                 member_block(&member, out);
+                if let Some(id) = member.id() {
+                    if !in_campaign.insert(id.name().to_owned()) {
+                        out.push(error(
+                            Rule::NoDuplicateMembers,
+                            id.range(),
+                            format!("`@{}` is already a member of this campaign", id.name()),
+                        ));
+                    } else if !in_contest.insert(id.name().to_owned()) {
+                        out.push(error(
+                            Rule::OneCampaignPerCandidate,
+                            id.range(),
+                            format!(
+                                "`@{}` is already in another campaign of this contest",
+                                id.name()
+                            ),
+                        ));
+                    }
+                }
             }
             candidate_fields(&campaign, out);
         }

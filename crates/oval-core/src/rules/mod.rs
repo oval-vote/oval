@@ -1,4 +1,5 @@
 mod campaigns;
+mod contests;
 mod guide;
 mod identifiers;
 mod recommendations;
@@ -14,6 +15,7 @@ pub(crate) fn check(document: &Document, index: &Index) -> Vec<Diagnostic> {
     identifiers::check(index, &mut diagnostics);
     guide::check(document, &mut diagnostics);
     campaigns::check(index, &mut diagnostics);
+    contests::check(index, &mut diagnostics);
     recommendations::check(index, &mut diagnostics);
     diagnostics
 }

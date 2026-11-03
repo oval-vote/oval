@@ -341,4 +341,106 @@ ballot @b \"B\"
             assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
         }
     }
+
+    #[test]
+    fn v6_named_candidates_must_be_in_the_contest() {
+        let source = "\
+candidate @elsewhere \"E\"
+party @dem \"D\"
+ballot @b \"B\"
+  contest @x \"X\" single
+    campaign @c \"C\"
+    recommend
+      support @c @elsewhere
+      oppose @nobody @dem
+";
+        assert_eq!(
+            rule_messages(source, Rule::RecommendationReferencesInContest),
+            ["`@elsewhere` is not in any campaign of this contest"]
+        );
+    }
+
+    #[test]
+    fn v7_and_v8_membership_duplicates() {
+        let source = "\
+candidate @a \"A\"
+ballot @b \"B\"
+  contest @x \"X\" single
+    campaign
+      @a
+      @a
+    campaign @a
+    campaign
+      @p \"P\"
+      @p
+    recommend
+      support @a
+";
+        assert_eq!(
+            rule_messages(source, Rule::NoDuplicateMembers),
+            [
+                "`@a` is already a member of this campaign",
+                "`@p` is already a member of this campaign"
+            ]
+        );
+        assert_eq!(
+            rule_messages(source, Rule::OneCampaignPerCandidate),
+            ["`@a` is already in another campaign of this contest"]
+        );
+    }
+
+    #[test]
+    fn v9_kind_arguments() {
+        let source = "\
+ballot @b \"B\"
+  contest @m \"M\" multiple 1
+    campaign @a \"A\"
+    recommend
+      support @a
+  contest @r \"R\" ranked max 0
+    campaign @c \"C\"
+    recommend
+      support @c
+  contest @j \"J\" retention
+    campaign @d \"D\"
+    campaign @e \"E\"
+    recommend
+      support @d
+  contest @k \"K\" retention
+    recommend no-position
+  contest @ok \"OK\" multiple 2
+    campaign @f \"F\"
+    recommend
+      support @f
+";
+        assert_eq!(
+            rule_messages(source, Rule::ContestKindArguments),
+            [
+                "`multiple` needs at least 2 seats; a one-seat contest is `single`",
+                "`max` must be at least 1",
+                "a retention contest has exactly one campaign, not 2",
+                "a retention contest has exactly one campaign, not 0",
+            ]
+        );
+        let report = check(source);
+        let first = report
+            .diagnostics()
+            .iter()
+            .find(|d| d.code == DiagnosticCode::Rule(Rule::ContestKindArguments))
+            .unwrap();
+        let expected = source.find("multiple 1").unwrap();
+        assert_eq!(usize::from(first.range.start()), expected);
+    }
+
+    #[test]
+    fn v6_through_v9_are_silent_on_the_fixture() {
+        for rule in [
+            Rule::RecommendationReferencesInContest,
+            Rule::OneCampaignPerCandidate,
+            Rule::NoDuplicateMembers,
+            Rule::ContestKindArguments,
+        ] {
+            assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+        }
+    }
 }
