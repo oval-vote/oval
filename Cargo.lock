@@ -175,6 +175,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "oval-format"
+version = "0.0.0"
+dependencies = [
+ "oval-syntax",
+]
+
+[[package]]
 name = "oval-syntax"
 version = "0.0.0"
 dependencies = [
