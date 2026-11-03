@@ -1,6 +1,6 @@
 [package]
 name = "oval-syntax"
-version = "0.0.0"
+version.workspace = true
 description = "Lexer, parser, and lossless syntax tree for the Oval voting guide format"
 edition.workspace = true
 rust-version.workspace = true

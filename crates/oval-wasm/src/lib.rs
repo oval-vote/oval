@@ -34,3 +34,14 @@ fn diagnostics(report: &Report) -> Result<JsValue, JsValue> {
 fn into_js(error: serde_wasm_bindgen::Error) -> JsValue {
     JsValue::from(error)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_npm_package_has_the_workspace_version() {
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("../../../packages/oval/package.json"))
+                .expect("package.json is JSON");
+        assert_eq!(manifest["version"], env!("CARGO_PKG_VERSION"));
+    }
+}
