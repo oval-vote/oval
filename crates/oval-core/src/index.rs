@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use oval_syntax::TextRange;
 use oval_syntax::ast::{
     Ballot, BallotItem, Campaign, Contest, Document, Identifier, Measure, Member, PartyReference,
-    SectionItem,
+    Section, SectionItem,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +49,8 @@ pub(crate) struct Index {
     pub(crate) duplicates: Vec<usize>,
     pub(crate) contests: Vec<Contest>,
     pub(crate) measures: Vec<Measure>,
+    pub(crate) ballots: Vec<Ballot>,
+    pub(crate) sections: Vec<Section>,
 }
 
 impl Index {
@@ -85,10 +87,12 @@ impl Index {
     }
 
     fn ballot(&mut self, ballot: &Ballot) {
+        self.ballots.push(ballot.clone());
         self.declare(ballot.id(), EntityKind::Ballot);
         for item in ballot.items() {
             match item {
                 BallotItem::Section(section) => {
+                    self.sections.push(section.clone());
                     for item in section.items() {
                         match item {
                             SectionItem::Contest(contest) => self.contest(&contest),

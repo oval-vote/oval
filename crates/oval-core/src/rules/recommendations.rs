@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use oval_syntax::ast::{AstNode, Contest, ContestRecommend};
+use oval_syntax::ast::{AstNode, Contest, ContestKind, ContestRecommend};
 
-use super::error;
+use super::{error, warning};
 use crate::index::{EntityKind, Index};
 use crate::{Diagnostic, Rule};
 
@@ -12,7 +12,59 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
         for recommendation in contest.recommendations() {
             in_contest(index, &recommendation, &campaign_of, out);
             shape(&recommendation, &campaign_of, out);
+            if let Some(kind) = contest.kind() {
+                kind_specific(kind, &recommendation, out);
+            }
         }
+    }
+}
+
+fn kind_specific(kind: ContestKind, recommendation: &ContestRecommend, out: &mut Vec<Diagnostic>) {
+    let tiers: Vec<_> = recommendation.support().collect();
+    let named: usize = tiers.iter().map(|t| t.candidates().count()).sum();
+    let opposed: usize = recommendation
+        .oppose()
+        .map(|o| o.candidates().count())
+        .sum();
+    match kind {
+        ContestKind::Single => {
+            for tier in tiers.iter().skip(1) {
+                out.push(error(
+                    Rule::KindSpecificRecommendation,
+                    tier.range(),
+                    "a vote-for-one contest takes one `support` line; put interchangeable choices on it together".to_owned(),
+                ));
+            }
+        }
+        ContestKind::Multiple { seats: Some(seats) } if named > seats as usize => {
+            out.push(warning(
+                Rule::KindSpecificRecommendation,
+                recommendation.range(),
+                format!("this recommendation supports {named} candidates for {seats} seats; later tiers are fallbacks"),
+            ));
+        }
+        ContestKind::Ranked { max: Some(max) } if named > max as usize => {
+            let mut running = 0;
+            for tier in &tiers {
+                running += tier.candidates().count();
+                if running > max as usize {
+                    out.push(error(
+                        Rule::KindSpecificRecommendation,
+                        tier.range(),
+                        format!("this recommendation ranks {named} candidates but voters may rank only {max}"),
+                    ));
+                    break;
+                }
+            }
+        }
+        ContestKind::Retention if named + opposed > 1 || (named == 1 && opposed == 1) => {
+            out.push(error(
+                Rule::KindSpecificRecommendation,
+                recommendation.range(),
+                "a retention recommendation is one `support` or one `oppose` of the single campaign".to_owned(),
+            ));
+        }
+        _ => {}
     }
 }
 
