@@ -35,6 +35,15 @@ pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic
         }
     }
     for contest in &index.contests {
+        for campaign in contest.campaigns() {
+            if campaign.members().next().is_none() {
+                out.push(error(
+                    Rule::BallotStructure,
+                    campaign.range(),
+                    "this campaign has no members".to_owned(),
+                ));
+            }
+        }
         if contest.kind() != Some(ContestKind::Retention) && contest.campaigns().next().is_none() {
             let range = contest
                 .id()

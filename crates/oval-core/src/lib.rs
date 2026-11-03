@@ -1,10 +1,12 @@
 //! Resolution and validation for the Oval voting guide format.
 
+pub mod compile;
 mod diagnostic;
 mod index;
 mod rules;
 mod syntax;
 
+pub use compile::Compiled;
 pub use diagnostic::{Diagnostic, DiagnosticCode, Rule, Severity};
 
 use oval_syntax::ast::{AstNode, Document};
@@ -34,6 +36,16 @@ impl Report {
             .iter()
             .any(|d| d.severity == Severity::Error)
     }
+}
+
+/// Parses, validates, and compiles `source`. Fails with the report when the document has errors.
+pub fn compile(source: &str) -> Result<Compiled, Report> {
+    let report = check(source);
+    if report.has_errors() {
+        return Err(report);
+    }
+    let compiled = Document::cast(report.parse.syntax()).and_then(|d| compile::compile(&d));
+    compiled.ok_or(report)
 }
 
 /// Parses and validates `source`.
@@ -766,5 +778,139 @@ ballot @b \"B\"
             assert_eq!(warnings(FIXTURE, rule), [] as [String; 0], "{rule:?}");
         }
         assert_eq!(check(FIXTURE).diagnostics(), []);
+    }
+
+    #[test]
+    fn the_fixture_compiles() {
+        let compiled = super::compile(FIXTURE).expect("fixture compiles");
+        assert_eq!(compiled.oval, "0.1");
+        assert_eq!(compiled.guide.name, "Franklin Voter Guide");
+        assert_eq!(compiled.guide.date, "2026-11-03");
+        assert_eq!(compiled.ballots.len(), 6);
+        assert_eq!(compiled.counts.contests, 44);
+        assert_eq!(compiled.counts.measures, 28);
+        assert_eq!(compiled.counts.parties, 6);
+        assert_eq!(compiled.questions.len(), 72);
+        assert_eq!(compiled.counts.candidates, compiled.candidates.len());
+        assert!(compiled.candidates.iter().all(|c| !c.contests.is_empty()));
+
+        let president = compiled
+            .questions
+            .iter()
+            .find(|q| q.id == "president")
+            .expect("president in the index");
+        assert_eq!(president.location.path, ["federal"]);
+        assert_eq!(
+            president.location.section.as_deref(),
+            Some("Executive Offices")
+        );
+    }
+
+    #[test]
+    fn compiled_tickets_recommendations_and_stances() {
+        let source = "\
+guide \"G\"
+election \"E\"
+date 2026-11-03
+party @dem \"Democratic\"
+  abbreviation \"D\"
+ballot @state \"State\"
+  contest @gov \"Governor\" single
+    campaign incumbent
+      @jlee \"Jordan Lee\" as \"Governor\"
+        party @dem
+      @mpatel \"Maya Patel\" as \"Lieutenant Governor\"
+        party @dem
+    campaign @rkim \"Riley Kim\"
+      party @gop \"Republican\"
+    recommend
+      support @jlee
+      justification:
+        Why.
+  ballot @city \"City\"
+    contest @mayor \"Mayor\" ranked max 5
+      campaign incumbent @b \"Bea\"
+      campaign @a \"Ada\"
+      campaign withdrawn @c \"Cas\"
+      recommend
+        support @a
+        support @b
+        oppose @c
+    measure @m \"M\"
+      supporters none
+      recommend no-position
+";
+        let compiled = super::compile(source).expect("compiles");
+        let super::compile::BallotEntry::Contest(gov) = &compiled.ballots[0].items[0] else {
+            panic!("governor first");
+        };
+        assert_eq!(gov.campaigns[0].label, "Jordan Lee / Maya Patel");
+        assert_eq!(gov.campaigns[0].head, "jlee");
+        assert_eq!(gov.campaigns[0].party.as_deref(), Some("dem"));
+        assert_eq!(
+            gov.campaigns[0].members[1].role.as_deref(),
+            Some("Lieutenant Governor")
+        );
+        assert_eq!(
+            gov.campaigns[0].stance,
+            super::compile::Stance::Support { tier: 0 }
+        );
+        assert_eq!(gov.campaigns[1].stance, super::compile::Stance::None);
+        assert_eq!(gov.recommendation.support_campaigns, [[0]]);
+        assert_eq!(gov.location.path, ["state"]);
+
+        let super::compile::BallotEntry::Ballot(city) = &compiled.ballots[0].items[1] else {
+            panic!("city second");
+        };
+        assert_eq!(city.path, ["state"]);
+        let super::compile::BallotEntry::Contest(mayor) = &city.items[0] else {
+            panic!("mayor first");
+        };
+        assert_eq!(
+            mayor.method,
+            super::compile::Method::Ranked { max: Some(5) }
+        );
+        assert_eq!(mayor.location.path, ["state", "city"]);
+        assert_eq!(
+            mayor.campaigns[0].stance,
+            super::compile::Stance::Support { tier: 1 }
+        );
+        assert_eq!(
+            mayor.campaigns[1].stance,
+            super::compile::Stance::Support { tier: 0 }
+        );
+        assert_eq!(mayor.campaigns[2].stance, super::compile::Stance::Oppose);
+        assert!(mayor.campaigns[2].withdrawn);
+        assert_eq!(mayor.recommendation.oppose_campaigns, [2]);
+        let super::compile::BallotEntry::Measure(m) = &city.items[1] else {
+            panic!("measure second");
+        };
+        assert_eq!(m.supporters, Some(vec![]));
+        assert_eq!(m.opponents, None);
+        assert_eq!(
+            m.recommendation.position,
+            super::compile::Position::NoPosition
+        );
+
+        let dem = compiled.parties.iter().find(|p| p.id == "dem").unwrap();
+        assert_eq!(dem.candidates, ["jlee", "mpatel"]);
+        assert_eq!(
+            compiled
+                .parties
+                .iter()
+                .map(|p| p.id.as_str())
+                .collect::<Vec<_>>(),
+            ["dem", "gop"]
+        );
+        let lee = compiled.candidates.iter().find(|c| c.id == "jlee").unwrap();
+        assert_eq!(lee.contests, ["gov"]);
+        assert_eq!(compiled.counts.campaigns, 5);
+        assert_eq!(compiled.counts.sections, 0);
+    }
+
+    #[test]
+    fn documents_with_errors_do_not_compile() {
+        let report = super::compile("guide \"G\"\n").expect_err("missing fields");
+        assert!(report.has_errors());
     }
 }
