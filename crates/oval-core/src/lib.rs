@@ -443,4 +443,179 @@ ballot @b \"B\"
             assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
         }
     }
+
+    #[test]
+    fn v10_every_question_has_exactly_one_recommendation() {
+        let source = "\
+ballot @b \"B\"
+  contest @none \"None\" single
+    campaign @a \"A\"
+  contest @two \"Two\" single
+    campaign @c \"C\"
+    recommend
+      support @c
+    recommend no-position
+  measure @m \"M\"
+    subtitle \"S\"
+  measure @n \"N\"
+    recommend yes
+    recommend no
+";
+        assert_eq!(
+            rule_messages(source, Rule::EveryQuestionHasARecommendation),
+            [
+                "this contest has no recommendation; write `recommend no-position` to take none",
+                "this contest already has a recommendation",
+                "this measure has no recommendation; write `recommend no-position` to take none",
+                "this measure already has a recommendation",
+            ]
+        );
+    }
+
+    #[test]
+    fn v11_shapes_allowed_by_each_kind() {
+        let source = "\
+ballot @b \"B\"
+  contest @s \"S\" single
+    campaign @a \"A\"
+    campaign @c \"C\"
+    recommend
+      support @a
+      support @c
+  contest @m \"M\" multiple 2
+    campaign @d \"D\"
+    campaign @e \"E\"
+    campaign @f \"F\"
+    recommend
+      support @d @e
+      support @f
+  contest @r \"R\" ranked max 2
+    campaign @g \"G\"
+    campaign @h \"H\"
+    campaign @i \"I\"
+    recommend
+      support @g
+      support @h
+      support @i
+  contest @j \"J\" retention
+    campaign @k \"K\"
+    recommend
+      support @k
+      oppose @k
+";
+        let report = check(source);
+        let v11: Vec<(Severity, &str)> = report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code == DiagnosticCode::Rule(Rule::KindSpecificRecommendation))
+            .map(|d| (d.severity, d.message.as_str()))
+            .collect();
+        assert_eq!(
+            v11,
+            [
+                (
+                    Severity::Error,
+                    "a vote-for-one contest takes one `support` line; put interchangeable choices on it together"
+                ),
+                (
+                    Severity::Warning,
+                    "this recommendation supports 3 candidates for 2 seats; later tiers are fallbacks"
+                ),
+                (
+                    Severity::Error,
+                    "this recommendation ranks 3 candidates but voters may rank only 2"
+                ),
+                (
+                    Severity::Error,
+                    "a retention recommendation is one `support` or one `oppose` of the single campaign"
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn v11_accepts_the_legal_shapes() {
+        let source = "\
+ballot @b \"B\"
+  contest @s \"S\" single
+    campaign @a \"A\"
+    campaign @c \"C\"
+    recommend
+      support @a @c
+  contest @r \"R\" ranked max 3
+    campaign @g \"G\"
+    campaign @h \"H\"
+    campaign @i \"I\"
+    recommend
+      support @g
+      support @h @i
+  contest @j \"J\" retention
+    campaign @k \"K\"
+    recommend
+      oppose @k
+";
+        assert_eq!(
+            rule_messages(source, Rule::KindSpecificRecommendation),
+            [] as [String; 0]
+        );
+    }
+
+    #[test]
+    fn v12_empty_containers() {
+        let source = "\
+ballot @empty \"Empty\"
+  note:
+    Nothing here.
+ballot @b \"B\"
+  section \"Only a note\"
+    note:
+      x
+  contest @c \"C\" single
+    recommend no-position
+  contest @j \"J\" retention
+    recommend no-position
+";
+        assert_eq!(
+            rule_messages(source, Rule::BallotStructure),
+            [
+                "this ballot has no contests, measures, sections, or sub-ballots",
+                "this section has no contests or measures",
+                "this contest has no campaigns",
+            ]
+        );
+    }
+
+    #[test]
+    fn v13_calendar_dates() {
+        for (date, valid) in [
+            ("2026-11-03", true),
+            ("2024-02-29", true),
+            ("2023-02-29", false),
+            ("2000-02-29", true),
+            ("1900-02-29", false),
+            ("2026-13-01", false),
+            ("2026-04-31", false),
+            ("2026-00-10", false),
+            ("2026-06-00", false),
+        ] {
+            let messages = rule_messages(&format!("date {date}\n"), Rule::Dates);
+            if valid {
+                assert_eq!(messages, [] as [String; 0], "{date}");
+            } else {
+                assert_eq!(messages, [format!("{date} is not a calendar date")]);
+            }
+        }
+    }
+
+    #[test]
+    fn v10_through_v13_are_silent_on_the_fixture() {
+        for rule in [
+            Rule::EveryQuestionHasARecommendation,
+            Rule::KindSpecificRecommendation,
+            Rule::BallotStructure,
+            Rule::Dates,
+        ] {
+            assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+        }
+    }
 }
