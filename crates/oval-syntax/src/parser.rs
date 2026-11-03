@@ -3,9 +3,10 @@
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
 use crate::SyntaxKind::{
-    self, BallotKeyword, CandidateKeyword, Colon, DateField, DateKeyword, DateLiteral, Dedent,
-    Document, ElectionKeyword, ErrorNode, GuideKeyword, Indent, MarkdownBlock, MarkdownField,
-    Newline, NoteKeyword, PartyKeyword, StringField, StringLiteral,
+    self, AbbreviationKeyword, BallotKeyword, Block, Candidate, CandidateKeyword, Colon, DateField,
+    DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document, ElectionKeyword, ErrorNode,
+    GuideKeyword, Identifier, Indent, MarkdownBlock, MarkdownField, Newline, NoteKeyword, Party,
+    PartyKeyword, PartyReference, StringField, StringLiteral, UrlField, UrlLiteral, WebsiteKeyword,
 };
 use crate::SyntaxNode;
 use crate::lexer::{LexError, Token, lex};
@@ -95,36 +96,120 @@ struct Parser<'a> {
 impl Parser<'_> {
     fn document(&mut self) {
         self.builder.start_node(Document.into());
-        let mut allowed = vec![
-            GuideKeyword,
-            ElectionKeyword,
-            DateKeyword,
-            NoteKeyword,
-            PartyKeyword,
-            CandidateKeyword,
-            BallotKeyword,
-        ];
+        let mut remaining = TOP_LEVEL.to_vec();
         while let Some(kind) = self.current() {
-            let field = match kind {
-                GuideKeyword | ElectionKeyword => Some((StringField, StringLiteral)),
-                DateKeyword => Some((DateField, DateLiteral)),
-                NoteKeyword => Some((MarkdownField, MarkdownBlock)),
-                _ => None,
-            };
-            match field {
-                Some(_) if !allowed.contains(&kind) => self.duplicate_field(kind, &allowed),
-                Some((node, value)) => {
-                    allowed.retain(|k| *k != kind);
-                    self.field(node, value);
+            match kind {
+                GuideKeyword | ElectionKeyword | DateKeyword | NoteKeyword => {
+                    self.field_once(kind, &mut remaining, Self::simple_field);
                 }
-                None => self.recover_item(&allowed),
+                PartyKeyword | CandidateKeyword => {
+                    remaining.retain(|k| !GUIDE_FIELDS.contains(k));
+                    if kind == PartyKeyword {
+                        self.party();
+                    } else {
+                        self.candidate();
+                    }
+                }
+                _ => self.recover_item(&remaining),
             }
         }
         self.eat_trivia();
         self.finish_node();
     }
 
-    fn field(&mut self, node: SyntaxKind, value: SyntaxKind) {
+    fn party(&mut self) {
+        self.start_node(Party);
+        self.bump();
+        self.declaration_header();
+        self.block(PARTY_FIELDS, Self::simple_field);
+        self.finish_node();
+    }
+
+    fn candidate(&mut self) {
+        self.start_node(Candidate);
+        self.bump();
+        self.declaration_header();
+        self.block(CANDIDATE_FIELDS, Self::candidate_field);
+        self.finish_node();
+    }
+
+    fn candidate_field(&mut self, kind: SyntaxKind) {
+        if kind == PartyKeyword {
+            self.party_reference();
+        } else {
+            self.simple_field(kind);
+        }
+    }
+
+    fn party_reference(&mut self) {
+        self.start_node(PartyReference);
+        self.bump();
+        self.expect(Identifier);
+        if self.eat(StringLiteral) {
+            self.end_of_line();
+            self.block(PARTY_FIELDS, Self::simple_field);
+        } else {
+            self.end_of_line();
+        }
+        self.finish_node();
+    }
+
+    fn declaration_header(&mut self) {
+        self.expect(Identifier);
+        self.expect_value(StringLiteral);
+        self.end_of_line();
+    }
+
+    fn block(&mut self, fields: &[SyntaxKind], parse: fn(&mut Self, SyntaxKind)) {
+        if !self.at(Indent) {
+            return;
+        }
+        self.start_node(Block);
+        self.bump();
+        let mut remaining = fields.to_vec();
+        while let Some(kind) = self.current() {
+            if kind == Dedent {
+                break;
+            }
+            if fields.contains(&kind) {
+                self.field_once(kind, &mut remaining, parse);
+            } else {
+                self.recover_item(&remaining);
+            }
+        }
+        self.expect(Dedent);
+        self.finish_node();
+    }
+
+    fn field_once(
+        &mut self,
+        kind: SyntaxKind,
+        remaining: &mut Vec<SyntaxKind>,
+        parse: fn(&mut Self, SyntaxKind),
+    ) {
+        if remaining.contains(&kind) {
+            remaining.retain(|k| *k != kind);
+            parse(self, kind);
+            return;
+        }
+        self.start_node(ErrorNode);
+        let start = self.offset;
+        parse(self, kind);
+        self.finish_node();
+        self.errors.push(ParseError {
+            expected: remaining.clone(),
+            found: Some(kind),
+            range: TextRange::new(text_size(start), text_size(self.offset)),
+        });
+    }
+
+    fn simple_field(&mut self, kind: SyntaxKind) {
+        let (node, value) = match kind {
+            DateKeyword => (DateField, DateLiteral),
+            WebsiteKeyword => (UrlField, UrlLiteral),
+            NoteKeyword => (MarkdownField, MarkdownBlock),
+            _ => (StringField, StringLiteral),
+        };
         self.start_node(node);
         self.bump();
         if value == MarkdownBlock {
@@ -149,23 +234,6 @@ impl Parser<'_> {
         } else {
             self.end_of_line();
         }
-    }
-
-    fn duplicate_field(&mut self, kind: SyntaxKind, allowed: &[SyntaxKind]) {
-        self.start_node(ErrorNode);
-        let start = self.offset;
-        let (node, value) = match kind {
-            DateKeyword => (DateField, DateLiteral),
-            NoteKeyword => (MarkdownField, MarkdownBlock),
-            _ => (StringField, StringLiteral),
-        };
-        self.field(node, value);
-        self.finish_node();
-        self.errors.push(ParseError {
-            expected: allowed.to_vec(),
-            found: Some(kind),
-            range: TextRange::new(text_size(start), text_size(self.offset)),
-        });
     }
 
     fn expect_value(&mut self, kind: SyntaxKind) {
@@ -285,7 +353,7 @@ impl Parser<'_> {
         let start = self.offset;
         let found = self.current();
         if self.at(Indent) {
-            self.block();
+            self.skip_block();
         } else {
             while !matches!(self.current(), None | Some(Newline | Indent | Dedent)) {
                 self.bump();
@@ -294,7 +362,7 @@ impl Parser<'_> {
                 self.bump();
             }
             if self.at(Indent) {
-                self.block();
+                self.skip_block();
             }
             if self.offset == start && self.current().is_some() {
                 self.bump();
@@ -308,7 +376,7 @@ impl Parser<'_> {
         });
     }
 
-    fn block(&mut self) {
+    fn skip_block(&mut self) {
         let mut depth = 0usize;
         while let Some(kind) = self.current() {
             self.bump();
@@ -325,6 +393,19 @@ impl Parser<'_> {
         }
     }
 }
+
+const GUIDE_FIELDS: &[SyntaxKind] = &[GuideKeyword, ElectionKeyword, DateKeyword, NoteKeyword];
+const TOP_LEVEL: &[SyntaxKind] = &[
+    GuideKeyword,
+    ElectionKeyword,
+    DateKeyword,
+    NoteKeyword,
+    PartyKeyword,
+    CandidateKeyword,
+    BallotKeyword,
+];
+const PARTY_FIELDS: &[SyntaxKind] = &[AbbreviationKeyword, WebsiteKeyword, NoteKeyword];
+const CANDIDATE_FIELDS: &[SyntaxKind] = &[DesignationKeyword, PartyKeyword, NoteKeyword];
 
 fn text_size(offset: usize) -> TextSize {
     TextSize::try_from(offset).expect("source longer than 4 GiB")
@@ -616,13 +697,13 @@ Document
 
     #[test]
     fn an_unknown_top_level_line_names_everything_that_could_start_one() {
-        let parse = parse("party @d \"D\"\n");
+        let parse = parse("ballot @b \"B\"\n");
         assert_eq!(
             parse.errors(),
             [SyntaxError::Parse(ParseError {
                 expected: TOP_LEVEL.to_vec(),
-                found: Some(SyntaxKind::PartyKeyword),
-                range: range(0, 13),
+                found: Some(SyntaxKind::BallotKeyword),
+                range: range(0, 14),
             })]
         );
     }
@@ -722,5 +803,217 @@ Document
             })
             .collect();
         assert_eq!(kinds, ["tab", "parse", "ident", "parse"]);
+    }
+
+    #[test]
+    fn party_declaration_from_the_spec_example() {
+        let parse = parse("party @dem \"Democratic\"\n  abbreviation \"D\"\n");
+        assert_eq!(parse.errors(), []);
+        assert_eq!(
+            dump(&parse.syntax()),
+            "\
+Document
+  Party
+    PartyKeyword \"party\"
+    Identifier \"@dem\"
+    StringLiteral \"\\\"Democratic\\\"\"
+    Newline \"\\n\"
+    Block
+      Indent \"\"
+      StringField
+        AbbreviationKeyword \"abbreviation\"
+        StringLiteral \"\\\"D\\\"\"
+        Newline \"\\n\"
+      Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn party_fields_in_any_order_and_a_party_without_a_block() {
+        let parse = parse(
+            "party @a \"A\"\n  note:\n    x\n  website https://a.example\n  abbreviation \"A\"\nparty @b \"B\"\n",
+        );
+        assert_eq!(parse.errors(), []);
+        let root = parse.syntax();
+        let parties: Vec<_> = root.children().collect();
+        assert_eq!(parties.len(), 2);
+        let block = parties[0].last_child().expect("block");
+        assert_eq!(block.kind(), SyntaxKind::Block);
+        let kinds: Vec<SyntaxKind> = block.children().map(|n| n.kind()).collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::MarkdownField,
+                SyntaxKind::UrlField,
+                SyntaxKind::StringField
+            ]
+        );
+        assert_eq!(parties[1].children().count(), 0);
+    }
+
+    #[test]
+    fn candidate_declaration_from_the_spec_example() {
+        let parse = parse(
+            "candidate @nreyes \"Nadia Reyes\"\n  designation \"United States Senator\"\n  party @dem\n  note:\n    Appointed in January 2025.\n",
+        );
+        assert_eq!(parse.errors(), []);
+        assert_eq!(
+            dump(&parse.syntax()),
+            "\
+Document
+  Candidate
+    CandidateKeyword \"candidate\"
+    Identifier \"@nreyes\"
+    StringLiteral \"\\\"Nadia Reyes\\\"\"
+    Newline \"\\n\"
+    Block
+      Indent \"\"
+      StringField
+        DesignationKeyword \"designation\"
+        StringLiteral \"\\\"United States Senator\\\"\"
+        Newline \"\\n\"
+      PartyReference
+        PartyKeyword \"party\"
+        Identifier \"@dem\"
+        Newline \"\\n\"
+      MarkdownField
+        NoteKeyword \"note\"
+        Colon \":\"
+        Newline \"\\n\"
+        MarkdownBlock \"    Appointed in January 2025.\\n\"
+      Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn a_party_may_be_declared_inline_on_a_candidate() {
+        let parse = parse("candidate @c \"C\"\n  party @green \"Green\"\n    abbreviation \"G\"\n");
+        assert_eq!(parse.errors(), []);
+        assert_eq!(
+            dump(&parse.syntax()),
+            "\
+Document
+  Candidate
+    CandidateKeyword \"candidate\"
+    Identifier \"@c\"
+    StringLiteral \"\\\"C\\\"\"
+    Newline \"\\n\"
+    Block
+      Indent \"\"
+      PartyReference
+        PartyKeyword \"party\"
+        Identifier \"@green\"
+        StringLiteral \"\\\"Green\\\"\"
+        Newline \"\\n\"
+        Block
+          Indent \"\"
+          StringField
+            AbbreviationKeyword \"abbreviation\"
+            StringLiteral \"\\\"G\\\"\"
+            Newline \"\\n\"
+          Dedent \"\"
+      Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn a_party_reference_takes_no_block() {
+        let parse = parse("candidate @c \"C\"\n  party @d\n    abbreviation \"D\"\n");
+        assert_eq!(parse.errors().len(), 1);
+        assert!(matches!(
+            &parse.errors()[0],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::Indent)
+                && e.expected == [SyntaxKind::DesignationKeyword, SyntaxKind::NoteKeyword]
+        ));
+    }
+
+    #[test]
+    fn declaration_headers_report_each_missing_part_once() {
+        let result = parse("party \"D\"\n");
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::Identifier],
+                found: Some(SyntaxKind::StringLiteral),
+                range: range(6, 6),
+            })]
+        );
+        let result = parse("party @d\n");
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::StringLiteral],
+                found: Some(SyntaxKind::Newline),
+                range: range(8, 8),
+            })]
+        );
+    }
+
+    #[test]
+    fn unknown_and_repeated_fields_inside_a_block() {
+        let parse = parse(
+            "party @d \"D\"\n  designation \"x\"\n  abbreviation \"A\"\n  abbreviation \"B\"\n",
+        );
+        let block = parse.syntax().first_child().unwrap().last_child().unwrap();
+        let kinds: Vec<SyntaxKind> = block.children().map(|n| n.kind()).collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::ErrorNode,
+                SyntaxKind::StringField,
+                SyntaxKind::ErrorNode
+            ]
+        );
+        assert_eq!(
+            parse.errors(),
+            [
+                SyntaxError::Parse(ParseError {
+                    expected: vec![
+                        SyntaxKind::AbbreviationKeyword,
+                        SyntaxKind::WebsiteKeyword,
+                        SyntaxKind::NoteKeyword,
+                    ],
+                    found: Some(SyntaxKind::DesignationKeyword),
+                    range: range(15, 31),
+                }),
+                SyntaxError::Parse(ParseError {
+                    expected: vec![SyntaxKind::WebsiteKeyword, SyntaxKind::NoteKeyword],
+                    found: Some(SyntaxKind::AbbreviationKeyword),
+                    range: range(52, 69),
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn guide_fields_must_precede_declarations() {
+        let parse = parse("party @d \"D\"\nguide \"g\"\n");
+        let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(kinds, [SyntaxKind::Party, SyntaxKind::ErrorNode]);
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![
+                    SyntaxKind::PartyKeyword,
+                    SyntaxKind::CandidateKeyword,
+                    SyntaxKind::BallotKeyword,
+                ],
+                found: Some(SyntaxKind::GuideKeyword),
+                range: range(13, 23),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_broken_declaration_does_not_damage_its_neighbors() {
+        let parse = parse(
+            "party @a \"A\"\n  abbreviation 3\n  yes\ncandidate @c \"C\"\n  designation \"d\"\n",
+        );
+        let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(kinds, [SyntaxKind::Party, SyntaxKind::Candidate]);
+        assert_eq!(parse.errors().len(), 2);
     }
 }
