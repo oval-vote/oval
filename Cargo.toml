@@ -11,6 +11,8 @@ authors = ["Varun Santhanam"]
 publish = false
 
 [workspace.dependencies]
+clap = { version = "4.6", features = ["derive"] }
+oval-core = { path = "crates/oval-core" }
 oval-syntax = { path = "crates/oval-syntax" }
 rowan = "0.17"
 
