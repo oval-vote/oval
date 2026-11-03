@@ -2,16 +2,17 @@
 
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
+use crate::SyntaxKind::ContestRecommend;
 use crate::SyntaxKind::{
     self, AbbreviationKeyword, AsKeyword, Ballot, BallotKeyword, Block, Campaign, CampaignKeyword,
     Candidate, CandidateKeyword, Colon, Contest, ContestKeyword, ContestKind, DateField,
     DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document, ElectionKeyword,
     EligibilityKeyword, ErrorNode, Flag, GuideKeyword, Identifier, IncumbentKeyword, Indent,
-    IntegerLiteral, MarkdownBlock, MarkdownField, MaxKeyword, MeasureKeyword, Member,
-    MultipleKeyword, Newline, NoteKeyword, Party, PartyKeyword, PartyReference, RankedKeyword,
-    RecommendKeyword, RetentionKeyword, Section, SectionKeyword, SingleKeyword, StringField,
-    StringLiteral, SubtitleKeyword, TabulationKeyword, UrlField, UrlLiteral, WebsiteKeyword,
-    WithdrawnKeyword,
+    IntegerLiteral, JustificationKeyword, MarkdownBlock, MarkdownField, MaxKeyword, MeasureKeyword,
+    Member, MultipleKeyword, Newline, NoPositionKeyword, NoteKeyword, Oppose, OpposeKeyword, Party,
+    PartyKeyword, PartyReference, RankedKeyword, RecommendKeyword, RetentionKeyword, Section,
+    SectionKeyword, SingleKeyword, StringField, StringLiteral, SubtitleKeyword, Support,
+    SupportKeyword, TabulationKeyword, UrlField, UrlLiteral, WebsiteKeyword, WithdrawnKeyword,
 };
 use crate::SyntaxNode;
 use crate::lexer::{LexError, Token, lex};
@@ -76,6 +77,7 @@ pub fn parse(source: &str) -> ParseResult {
         tokens: lexed.tokens,
         pos: 0,
         offset: 0,
+        stances: 0,
         builder: GreenNodeBuilder::new(),
         errors: Vec::new(),
     };
@@ -94,6 +96,7 @@ struct Parser<'a> {
     tokens: Vec<Token>,
     pos: usize,
     offset: usize,
+    stances: usize,
     builder: GreenNodeBuilder<'static>,
     errors: Vec<ParseError>,
 }
@@ -237,10 +240,82 @@ impl Parser<'_> {
     fn contest_item(&mut self, kind: SyntaxKind) -> bool {
         match kind {
             CampaignKeyword => self.campaign(),
+            RecommendKeyword => self.contest_recommend(),
             SubtitleKeyword | TabulationKeyword | NoteKeyword => return self.simple_field(kind),
             _ => return false,
         }
         true
+    }
+
+    fn contest_recommend(&mut self) {
+        self.start_node(ContestRecommend);
+        let start = self.offset;
+        self.bump();
+        let keyword_end = self.offset;
+        if self.eat(NoPositionKeyword) {
+            self.end_of_line();
+            self.block(RECOMMEND_FIELDS, &[], Self::recommend_field);
+        } else if self.at_line_end() {
+            self.end_of_line();
+            if self.at(Indent) {
+                let stances = self.stances;
+                self.block(
+                    RECOMMEND_FIELDS,
+                    &[SupportKeyword, OpposeKeyword],
+                    Self::recommend_item,
+                );
+                if self.stances == stances {
+                    self.errors.push(ParseError {
+                        expected: vec![SupportKeyword, OpposeKeyword, NoPositionKeyword],
+                        found: Some(RecommendKeyword),
+                        range: TextRange::new(text_size(start), text_size(keyword_end)),
+                    });
+                }
+            } else {
+                self.error(&[Indent]);
+            }
+        } else {
+            self.recover_line(&[NoPositionKeyword, Newline]);
+            self.end_of_line();
+            self.block(
+                RECOMMEND_FIELDS,
+                &[SupportKeyword, OpposeKeyword],
+                Self::recommend_item,
+            );
+        }
+        self.finish_node();
+    }
+
+    fn recommend_item(&mut self, kind: SyntaxKind) -> bool {
+        match kind {
+            SupportKeyword => self.references(Support),
+            OpposeKeyword => self.references(Oppose),
+            _ => return self.recommend_field(kind),
+        }
+        true
+    }
+
+    fn recommend_field(&mut self, kind: SyntaxKind) -> bool {
+        matches!(kind, JustificationKeyword | NoteKeyword) && self.simple_field(kind)
+    }
+
+    fn references(&mut self, node: SyntaxKind) {
+        self.start_node(node);
+        self.bump();
+        self.stances += 1;
+        if !self.at(Identifier) {
+            if self.at_line_end() {
+                self.error(&[Identifier]);
+            } else {
+                self.recover_line(&[Identifier]);
+            }
+        }
+        while self.eat(Identifier) {}
+        if !self.at_line_end() {
+            self.recover_line(&[Identifier, Newline]);
+        }
+        self.expect(Newline);
+        self.finish_node();
     }
 
     fn campaign(&mut self) {
@@ -403,7 +478,7 @@ impl Parser<'_> {
         let (node, value) = match kind {
             DateKeyword => (DateField, DateLiteral),
             WebsiteKeyword => (UrlField, UrlLiteral),
-            NoteKeyword => (MarkdownField, MarkdownBlock),
+            NoteKeyword | JustificationKeyword => (MarkdownField, MarkdownBlock),
             _ => (StringField, StringLiteral),
         };
         self.start_node(node);
@@ -620,6 +695,7 @@ const CONTEST_KINDS: &[SyntaxKind] = &[
 ];
 const CONTEST_FIELDS: &[SyntaxKind] = &[SubtitleKeyword, TabulationKeyword, NoteKeyword];
 const CONTEST_ITEMS: &[SyntaxKind] = &[CampaignKeyword, RecommendKeyword];
+const RECOMMEND_FIELDS: &[SyntaxKind] = &[JustificationKeyword, NoteKeyword];
 const CAMPAIGN_FIELDS: &[SyntaxKind] = &[
     WebsiteKeyword,
     NoteKeyword,
@@ -1609,19 +1685,14 @@ Contest
                 SyntaxKind::StringField,
                 SyntaxKind::Campaign,
                 SyntaxKind::ErrorNode,
-                SyntaxKind::ErrorNode
+                SyntaxKind::ContestRecommend
             ]
         );
-        assert_eq!(result.errors().len(), 2);
+        assert_eq!(result.errors().len(), 1);
         assert!(matches!(
             &result.errors()[0],
             SyntaxError::Parse(e) if e.found == Some(SyntaxKind::SubtitleKeyword)
                 && e.expected == [SyntaxKind::TabulationKeyword, SyntaxKind::NoteKeyword]
-        ));
-        assert!(matches!(
-            &result.errors()[1],
-            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::RecommendKeyword)
-                && e.range == span(&source, "recommend\n      support @x\n")
         ));
     }
 
@@ -1852,5 +1923,186 @@ Campaign
         assert_eq!(result.errors(), []);
         let member = first(&result, SyntaxKind::Member);
         assert!(member.children().any(|n| n.kind() == SyntaxKind::Block));
+    }
+
+    #[test]
+    fn contest_recommendation_from_the_spec_example() {
+        let source = in_contest(
+            "recommend\n  support @aokafor\n  support @bsantos @dwright\n  oppose @cfox\n  justification:\n    Okafor is our first choice.\n  note:\n    Do not rank Fox.\n",
+        );
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        assert_eq!(
+            dump(&first(&result, SyntaxKind::ContestRecommend)),
+            "\
+ContestRecommend
+  RecommendKeyword \"recommend\"
+  Newline \"\\n\"
+  Block
+    Indent \"\"
+    Support
+      SupportKeyword \"support\"
+      Identifier \"@aokafor\"
+      Newline \"\\n\"
+    Support
+      SupportKeyword \"support\"
+      Identifier \"@bsantos\"
+      Identifier \"@dwright\"
+      Newline \"\\n\"
+    Oppose
+      OpposeKeyword \"oppose\"
+      Identifier \"@cfox\"
+      Newline \"\\n\"
+    MarkdownField
+      JustificationKeyword \"justification\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"        Okafor is our first choice.\\n\"
+    MarkdownField
+      NoteKeyword \"note\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"        Do not rank Fox.\\n\"
+    Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn no_position_with_and_without_a_block() {
+        let source = in_contest("recommend no-position\n  justification:\n    Split board.\n");
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        assert_eq!(
+            dump(&first(&result, SyntaxKind::ContestRecommend)),
+            "\
+ContestRecommend
+  RecommendKeyword \"recommend\"
+  NoPositionKeyword \"no-position\"
+  Newline \"\\n\"
+  Block
+    Indent \"\"
+    MarkdownField
+      JustificationKeyword \"justification\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"        Split board.\\n\"
+    Dedent \"\"
+"
+        );
+
+        let source = in_contest("recommend no-position\n");
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        assert_eq!(
+            first(&result, SyntaxKind::ContestRecommend)
+                .children()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn a_recommendation_with_no_stance_must_say_no_position() {
+        let source = in_contest("recommend\n  justification:\n    Why.\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![
+                    SyntaxKind::SupportKeyword,
+                    SyntaxKind::OpposeKeyword,
+                    SyntaxKind::NoPositionKeyword,
+                ],
+                found: Some(SyntaxKind::RecommendKeyword),
+                range: span(&source, "recommend"),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_bare_recommend_needs_a_block() {
+        let source = in_contest("recommend\ncampaign @x \"X\"\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::Indent],
+                found: Some(SyntaxKind::CampaignKeyword),
+                range: TextRange::empty(span(&source, "campaign @x").start()),
+            })]
+        );
+    }
+
+    #[test]
+    fn support_and_oppose_need_identifiers_and_nothing_else() {
+        let source = in_contest("recommend\n  support\n  oppose @a \"x\"\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [
+                SyntaxError::Parse(ParseError {
+                    expected: vec![SyntaxKind::Identifier],
+                    found: Some(SyntaxKind::Newline),
+                    range: TextRange::empty(span(&source, "support").end()),
+                }),
+                SyntaxError::Parse(ParseError {
+                    expected: vec![SyntaxKind::Identifier, SyntaxKind::Newline],
+                    found: Some(SyntaxKind::StringLiteral),
+                    range: span(&source, "\"x\""),
+                }),
+            ]
+        );
+        let kinds: Vec<SyntaxKind> = first(&result, SyntaxKind::ContestRecommend)
+            .last_child()
+            .unwrap()
+            .children()
+            .map(|n| n.kind())
+            .collect();
+        assert_eq!(kinds, [SyntaxKind::Support, SyntaxKind::Oppose]);
+    }
+
+    #[test]
+    fn a_measure_style_position_is_rejected_in_a_contest() {
+        let source = in_contest("recommend yes\n  justification:\n    Why.\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 1);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.expected == [SyntaxKind::NoPositionKeyword, SyntaxKind::Newline]
+                && e.range == span(&source, "yes")
+        ));
+        assert!(
+            first(&result, SyntaxKind::ContestRecommend)
+                .children()
+                .any(|n| n.kind() == SyntaxKind::Block)
+        );
+    }
+
+    #[test]
+    fn stances_are_not_allowed_under_no_position() {
+        let source = in_contest("recommend no-position\n  support @a\n  note:\n    x\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::JustificationKeyword, SyntaxKind::NoteKeyword],
+                found: Some(SyntaxKind::SupportKeyword),
+                range: span(&source, "support @a\n"),
+            })]
+        );
+    }
+
+    #[test]
+    fn repeated_oppose_and_recommend_are_left_to_validation() {
+        let source = in_contest("recommend\n  oppose @a\n  oppose @b\nrecommend\n  support @c\n");
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        let recommends = result
+            .syntax()
+            .descendants()
+            .filter(|n| n.kind() == SyntaxKind::ContestRecommend)
+            .count();
+        assert_eq!(recommends, 2);
     }
 }
