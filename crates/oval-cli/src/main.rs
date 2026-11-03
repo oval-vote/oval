@@ -2,6 +2,7 @@
 
 mod line_index;
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -25,12 +26,54 @@ enum Command {
         #[arg(required = true)]
         files: Vec<PathBuf>,
     },
+    /// Compile a document to its canonical JSON form.
+    Compile {
+        /// The file to compile.
+        file: PathBuf,
+        /// Indent the output for reading.
+        #[arg(long)]
+        pretty: bool,
+    },
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
         Command::Check { files } => check(&files),
+        Command::Compile { file, pretty } => compile(&file, pretty),
+    }
+}
+
+fn compile(path: &PathBuf, pretty: bool) -> ExitCode {
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("oval: cannot read {}: {error}", path.display());
+            return ExitCode::from(2);
+        }
+    };
+    match oval_core::compile(&source) {
+        Ok(compiled) => {
+            let json = if pretty {
+                compiled.to_json_pretty()
+            } else {
+                compiled.to_json()
+            };
+            match json {
+                Ok(json) => {
+                    println!("{json}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("oval: cannot serialize {}: {error}", path.display());
+                    ExitCode::from(2)
+                }
+            }
+        }
+        Err(report) => {
+            print_report(&mut std::io::stderr(), path, &source, &report);
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -45,7 +88,7 @@ fn check(files: &[PathBuf]) -> ExitCode {
             }
         };
         let report = oval_core::check(&source);
-        print_report(path, &source, &report);
+        print_report(&mut std::io::stdout(), path, &source, &report);
         if report.has_errors() {
             worst = ExitCode::FAILURE;
         }
@@ -53,7 +96,7 @@ fn check(files: &[PathBuf]) -> ExitCode {
     worst
 }
 
-fn print_report(path: &std::path::Path, source: &str, report: &Report) {
+fn print_report(out: &mut impl Write, path: &std::path::Path, source: &str, report: &Report) {
     let index = LineIndex::new(source);
     for diagnostic in report.diagnostics() {
         let (line, column) = index.line_column(diagnostic.range.start());
@@ -61,7 +104,8 @@ fn print_report(path: &std::path::Path, source: &str, report: &Report) {
             Severity::Error => "error",
             Severity::Warning => "warning",
         };
-        println!(
+        let _ = writeln!(
+            out,
             "{}:{line}:{column}: {severity}[{}]: {}",
             path.display(),
             diagnostic.code,

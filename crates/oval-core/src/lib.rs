@@ -909,8 +909,119 @@ ballot @state \"State\"
     }
 
     #[test]
+    fn optional_fields_inside_unions_are_omitted() {
+        let source = "\
+guide \"G\"
+election \"E\"
+date 2026-11-03
+ballot @b \"B\"
+  contest @r \"R\" ranked
+    campaign @a \"A\"
+    recommend
+      support @a
+";
+        let compiled = super::compile(source).expect("compiles");
+        let json: serde_json::Value = serde_json::from_str(&compiled.to_json().unwrap()).unwrap();
+        assert_eq!(
+            json["ballots"][0]["items"][0]["method"],
+            serde_json::json!({ "kind": "ranked" })
+        );
+    }
+
+    #[test]
     fn documents_with_errors_do_not_compile() {
         let report = super::compile("guide \"G\"\n").expect_err("missing fields");
         assert!(report.has_errors());
+    }
+
+    #[test]
+    fn compiled_json_matches_the_schema_conventions() {
+        let source = "\
+guide \"G\"
+election \"E\"
+date 2026-11-03
+party @dem \"Democratic\"
+ballot @state \"State\"
+  section \"Offices\"
+    contest @gov \"Governor\" multiple 2
+      campaign incumbent
+        @j \"J\" as \"Governor\"
+          party @dem
+        @m \"M\" as \"Lieutenant Governor\"
+          party @dem
+      campaign @r \"R\"
+      recommend
+        support @j
+        oppose @r
+  ballot @city \"City\"
+    measure @p \"P\"
+      supporters none
+      recommend no-position
+";
+        let compiled = super::compile(source).expect("compiles");
+        let json: serde_json::Value = serde_json::from_str(&compiled.to_json().unwrap()).unwrap();
+        let expected = serde_json::json!({
+            "oval": "0.1",
+            "guide": { "name": "G", "election": "E", "date": "2026-11-03" },
+            "parties": [{ "id": "dem", "name": "Democratic", "candidates": ["j", "m"] }],
+            "candidates": [
+                { "id": "j", "name": "J", "party": "dem", "contests": ["gov"] },
+                { "id": "m", "name": "M", "party": "dem", "contests": ["gov"] },
+                { "id": "r", "name": "R", "contests": ["gov"] }
+            ],
+            "ballots": [{
+                "kind": "ballot", "id": "state", "title": "State", "path": [],
+                "items": [
+                    { "kind": "section", "title": "Offices", "items": [{
+                        "kind": "contest", "id": "gov", "title": "Governor",
+                        "method": { "kind": "multiple", "seats": 2 },
+                        "location": { "ballot": "state", "section": "Offices", "path": ["state"] },
+                        "campaigns": [
+                            {
+                                "index": 0, "label": "J / M", "head": "j", "party": "dem",
+                                "members": [
+                                    { "candidate": "j", "role": "Governor" },
+                                    { "candidate": "m", "role": "Lieutenant Governor" }
+                                ],
+                                "incumbent": true, "withdrawn": false,
+                                "stance": { "position": "support", "tier": 0 }
+                            },
+                            {
+                                "index": 1, "label": "R", "head": "r",
+                                "members": [{ "candidate": "r" }],
+                                "incumbent": false, "withdrawn": false,
+                                "stance": { "position": "oppose" }
+                            }
+                        ],
+                        "recommendation": {
+                            "no_position": false,
+                            "support": [["j"]], "oppose": ["r"],
+                            "support_campaigns": [[0]], "oppose_campaigns": [1]
+                        }
+                    }]},
+                    { "kind": "ballot", "id": "city", "title": "City", "path": ["state"], "items": [{
+                        "kind": "measure", "id": "p", "title": "P",
+                        "supporters": [],
+                        "location": { "ballot": "city", "path": ["state", "city"] },
+                        "recommendation": { "position": "no-position" }
+                    }]}
+                ]
+            }],
+            "questions": [
+                { "kind": "contest", "id": "gov", "title": "Governor",
+                  "location": { "ballot": "state", "section": "Offices", "path": ["state"] } },
+                { "kind": "measure", "id": "p", "title": "P",
+                  "location": { "ballot": "city", "path": ["state", "city"] } }
+            ],
+            "counts": { "ballots": 2, "sections": 1, "contests": 1, "measures": 1,
+                        "campaigns": 2, "candidates": 3, "parties": 1 }
+        });
+        assert_eq!(json, expected);
+        assert!(
+            compiled
+                .to_json_pretty()
+                .unwrap()
+                .contains("\n  \"guide\": {")
+        );
     }
 }

@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use oval_syntax::ast::{self, BallotItem, SectionItem};
+use serde::{Serialize, Serializer};
 
 /// A compiled guide. The shape is fixed by the specification's `guide.schema.json`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Compiled {
     /// The specification version the document was compiled under.
     pub oval: String,
@@ -16,6 +17,7 @@ pub struct Compiled {
     /// Every candidate, in document order.
     pub candidates: Vec<Candidate>,
     /// Root ballots, in presentation order.
+    #[serde(serialize_with = "serialize_roots")]
     pub ballots: Vec<Ballot>,
     /// Every contest and measure in ballot order, with its location.
     pub questions: Vec<QuestionEntry>,
@@ -24,7 +26,7 @@ pub struct Compiled {
 }
 
 /// Guide-level fields.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Guide {
     /// The guide's own name.
     pub name: String,
@@ -33,53 +35,62 @@ pub struct Guide {
     /// Election day, `YYYY-MM-DD`.
     pub date: String,
     /// Guide-level commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
 /// A party.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Party {
     /// The identifier without `@`.
     pub id: String,
     /// The name as printed on the ballot.
     pub name: String,
     /// Short form for compact rendering.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub abbreviation: Option<String>,
     /// The party's website.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub website: Option<String>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Identifiers of every candidate whose party this is, in document order.
     pub candidates: Vec<String>,
 }
 
 /// A candidate.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Candidate {
     /// The identifier without `@`.
     pub id: String,
     /// The name as printed on the ballot.
     pub name: String,
     /// The ballot designation.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub designation: Option<String>,
     /// The party's identifier.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub party: Option<String>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Identifiers of every contest in which the candidate is a campaign member, in ballot order.
     pub contests: Vec<String>,
 }
 
 /// A ballot: a node in the electorate tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Ballot {
     /// The identifier without `@`.
     pub id: String,
     /// The jurisdiction or grouping this ballot covers.
     pub title: String,
     /// Who votes on this ballot, when the title does not say.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub eligibility: Option<String>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Identifiers of the enclosing ballots, outermost first. Empty for a root.
     pub path: Vec<String>,
@@ -88,7 +99,8 @@ pub struct Ballot {
 }
 
 /// One entry in a ballot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum BallotEntry {
     /// A titled group of questions.
     Section(Section),
@@ -101,18 +113,20 @@ pub enum BallotEntry {
 }
 
 /// A titled group of questions within a ballot.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
     /// The heading.
     pub title: String,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Questions in ballot order.
     pub items: Vec<Question>,
 }
 
 /// A contest or a measure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Question {
     /// A contest.
     Contest(Contest),
@@ -121,18 +135,20 @@ pub enum Question {
 }
 
 /// Where a question sits in the ballot tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Location {
     /// The innermost enclosing ballot.
     pub ballot: String,
     /// The enclosing section's title, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
     /// Every enclosing ballot, outermost first, ending with `ballot`.
     pub path: Vec<String>,
 }
 
 /// A contest's voting method.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Method {
     /// Vote for one.
     Single,
@@ -144,6 +160,7 @@ pub enum Method {
     /// Rank choices, optionally capped.
     Ranked {
         /// How many may be ranked, when capped.
+        #[serde(skip_serializing_if = "Option::is_none")]
         max: Option<u32>,
     },
     /// Yes or no on one officeholder.
@@ -151,19 +168,22 @@ pub enum Method {
 }
 
 /// A contest.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Contest {
     /// The identifier without `@`.
     pub id: String,
     /// The contest as named on the ballot.
     pub title: String,
     /// Secondary ballot text.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
     /// The voting method.
     pub method: Method,
     /// How the winner is decided, in plain words.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tabulation: Option<String>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Where the contest sits.
     pub location: Location,
@@ -174,7 +194,7 @@ pub struct Contest {
 }
 
 /// A campaign.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Campaign {
     /// Position in the contest's campaigns.
     pub index: usize,
@@ -183,6 +203,7 @@ pub struct Campaign {
     /// The first member's identifier.
     pub head: String,
     /// The party every member shares, when they all share one.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub party: Option<String>,
     /// The members, head first.
     pub members: Vec<Member>,
@@ -191,26 +212,31 @@ pub struct Campaign {
     /// Whether the campaign has withdrawn.
     pub withdrawn: bool,
     /// The campaign's website.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub website: Option<String>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// What the recommendation says about this campaign.
     pub stance: Stance,
 }
 
 /// A member of a campaign.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Member {
     /// The candidate's identifier.
     pub candidate: String,
     /// The role on the ticket.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
 /// What a recommendation says about one campaign.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "position", rename_all = "snake_case")]
 pub enum Stance {
     /// Supported, in the given zero-based tier.
     Support {
@@ -224,7 +250,7 @@ pub enum Stance {
 }
 
 /// A contest's recommendation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ContestRecommendation {
     /// Whether the author takes no position.
     pub no_position: bool,
@@ -237,37 +263,49 @@ pub struct ContestRecommendation {
     /// The opposed campaigns as indices.
     pub oppose_campaigns: Vec<usize>,
     /// The argument for the advice.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub justification: Option<String>,
     /// Additional content.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
 /// A measure.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Measure {
     /// The identifier without `@`.
     pub id: String,
     /// The measure as named on the ballot.
     pub title: String,
     /// Secondary ballot text.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
     /// Official description.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Official statement of a yes vote's effect.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub if_yes: Option<String>,
     /// Official statement of a no vote's effect.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub if_no: Option<String>,
     /// How the measure reached the ballot.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub placement: Option<String>,
     /// The passage rule, in plain words.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tabulation: Option<String>,
     /// A one-line fiscal summary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fiscal_impact: Option<String>,
     /// Notable supporters; `None` when not researched, empty when none known.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub supporters: Option<Vec<String>>,
     /// Notable opponents; `None` when not researched, empty when none known.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub opponents: Option<Vec<String>>,
     /// Author commentary.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Where the measure sits.
     pub location: Location,
@@ -276,18 +314,21 @@ pub struct Measure {
 }
 
 /// A measure's recommendation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MeasureRecommendation {
     /// How the author advises voting.
     pub position: Position,
     /// The argument for the advice.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub justification: Option<String>,
     /// Additional content.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
 
 /// How the author advises voting on a measure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Position {
     /// Vote yes.
     Yes,
@@ -298,7 +339,7 @@ pub enum Position {
 }
 
 /// One row of the flat question index.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QuestionEntry {
     /// Whether this is a contest or a measure.
     pub kind: QuestionKind,
@@ -311,7 +352,8 @@ pub struct QuestionEntry {
 }
 
 /// The two kinds of question.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum QuestionKind {
     /// A contest.
     Contest,
@@ -320,7 +362,7 @@ pub enum QuestionKind {
 }
 
 /// Totals across the document.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct Counts {
     /// All ballots, including nested ones.
     pub ballots: usize,
@@ -336,6 +378,22 @@ pub struct Counts {
     pub candidates: usize,
     /// Parties.
     pub parties: usize,
+}
+
+fn serialize_roots<S: Serializer>(ballots: &[Ballot], serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(ballots.iter().cloned().map(BallotEntry::Ballot))
+}
+
+impl Compiled {
+    /// The canonical JSON form, compact.
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(self)
+    }
+
+    /// The canonical JSON form, indented for reading.
+    pub fn to_json_pretty(&self) -> serde_json::Result<String> {
+        serde_json::to_string_pretty(self)
+    }
 }
 
 pub(crate) fn compile(document: &ast::Document) -> Option<Compiled> {
