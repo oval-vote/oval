@@ -1,4 +1,4 @@
-# oval
+# Oval
 
 Reference implementation of [Oval](https://oval.vote), a plain-text file format for voting
 guides. The language is specified in [oval-spec](https://github.com/oval-vote/oval-spec).
