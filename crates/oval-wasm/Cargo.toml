@@ -1,0 +1,22 @@
+[package]
+name = "oval-wasm"
+version = "0.0.0"
+description = "WebAssembly bindings for the Oval voting guide format"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+oval-core.workspace = true
+oval-format.workspace = true
+serde-wasm-bindgen.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true

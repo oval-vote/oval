@@ -278,7 +278,7 @@ mod tests {
             .map(|t| (t.kind(), t.text().to_owned()))
             .collect();
         tokens.sort();
-        return tokens;
+        tokens
     }
 
     fn markdown_values(source: &str) -> Vec<String> {

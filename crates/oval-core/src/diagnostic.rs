@@ -1,9 +1,11 @@
 use std::fmt;
 
 use oval_syntax::TextRange;
+use serde::{Serialize, Serializer};
 
 /// How serious a diagnostic is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// The document is not valid Oval.
     Error,
@@ -98,14 +100,35 @@ impl fmt::Display for DiagnosticCode {
 }
 
 /// One problem found in a document.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Diagnostic {
     /// What the diagnostic is about.
     pub code: DiagnosticCode,
     /// How serious it is.
     pub severity: Severity,
     /// Where it is.
+    #[serde(serialize_with = "serialize_range")]
     pub range: TextRange,
     /// A one-sentence explanation for the author.
     pub message: String,
+}
+
+impl Serialize for DiagnosticCode {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn serialize_range<S: Serializer>(range: &TextRange, serializer: S) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    struct Range {
+        start: u32,
+        end: u32,
+    }
+    Range {
+        start: range.start().into(),
+        end: range.end().into(),
+    }
+    .serialize(serializer)
 }
