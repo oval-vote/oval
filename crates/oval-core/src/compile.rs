@@ -8,7 +8,7 @@ use serde::{Serialize, Serializer};
 /// A compiled guide. The shape is fixed by the specification's `guide.schema.json`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Compiled {
-    /// The specification version the document was compiled under.
+    /// The specification version the document declares in its `oval` marker.
     pub oval: String,
     /// Guide-level fields.
     pub guide: Guide,
@@ -741,7 +741,7 @@ impl Compiler {
         self.counts.parties = self.parties.len();
         let date = document.date()?.value()?;
         Some(Compiled {
-            oval: oval_syntax::SPEC_VERSION.to_string(),
+            oval: document.version()?.value()?.to_string(),
             guide: Guide {
                 name: document.guide()?.value()?,
                 election: document.election()?.value()?,

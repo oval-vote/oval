@@ -8,6 +8,7 @@ mod measures;
 mod questions;
 mod recommendations;
 mod structure;
+pub(crate) mod version;
 
 use oval_syntax::TextRange;
 use oval_syntax::ast::Document;
