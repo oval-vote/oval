@@ -5,6 +5,7 @@ pub mod lexer;
 pub mod parser;
 mod syntax_kind;
 
+pub use rowan::{TextRange, TextSize};
 pub use syntax_kind::{Keyword, SyntaxKind};
 
 /// The version of the Oval specification this crate implements.
