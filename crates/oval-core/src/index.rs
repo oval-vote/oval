@@ -51,6 +51,7 @@ pub(crate) struct Index {
     pub(crate) measures: Vec<Measure>,
     pub(crate) ballots: Vec<Ballot>,
     pub(crate) sections: Vec<Section>,
+    pub(crate) inline_parties: Vec<PartyReference>,
 }
 
 impl Index {
@@ -155,6 +156,7 @@ impl Index {
 
     fn party_reference(&mut self, party: &PartyReference) {
         if party.is_declaration() {
+            self.inline_parties.push(party.clone());
             self.declare(party.id(), EntityKind::Party);
         } else if let Some(id) = party.id() {
             self.refer(&id, EntityKind::Party);
