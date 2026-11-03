@@ -29,6 +29,12 @@ pub enum LexErrorReason {
 
     /// A character that cannot begin any token.
     UnexpectedCharacter,
+
+    /// A string literal with no closing quote before the end of the line.
+    UnterminatedString,
+
+    /// A backslash in a string followed by something other than `"` or `\\`.
+    InvalidEscape,
 }
 
 /// A lexical error.
@@ -49,7 +55,8 @@ pub struct LexResult {
     pub tokens: Vec<Token>,
 
     /// Errors, in source order.
-    /// Each corresponds to an [`SyntaxKind::Error`] token.
+    /// Every [`SyntaxKind::Error`] token has exactly one error spanning it;
+    /// other tokens may carry errors over part of their text.
     pub errors: Vec<LexError>,
 }
 
@@ -130,9 +137,40 @@ impl Lexer<'_> {
                         None => self.push_error(LexErrorReason::UnknownWord, start),
                     }
                 }
+                '"' => self.string(start),
                 c => {
                     self.pos += c.len_utf8();
                     self.push_error(LexErrorReason::UnexpectedCharacter, start);
+                }
+            }
+        }
+    }
+
+    fn string(&mut self, start: usize) {
+        self.pos += 1;
+        loop {
+            match self.peek() {
+                Some('"') => {
+                    self.pos += 1;
+                    self.push(SyntaxKind::StringLiteral, start);
+                    return;
+                }
+                Some('\\') => {
+                    let escape_start = self.pos;
+                    self.pos += 1;
+                    match self.peek() {
+                        Some('"' | '\\') => self.pos += 1,
+                        Some(c) if !is_line_terminator(c) => {
+                            self.pos += c.len_utf8();
+                            self.report(LexErrorReason::InvalidEscape, escape_start, self.pos);
+                        }
+                        _ => {}
+                    }
+                }
+                Some(c) if !is_line_terminator(c) => self.pos += c.len_utf8(),
+                _ => {
+                    self.push_error(LexErrorReason::UnterminatedString, start);
+                    return;
                 }
             }
         }
@@ -161,9 +199,13 @@ impl Lexer<'_> {
         self.out.tokens.push(Token { kind, len });
     }
 
-    fn push_error(&mut self, reason: LexErrorReason, start: usize) {
-        let range = TextRange::new(text_size(start), text_size(self.pos));
+    fn report(&mut self, reason: LexErrorReason, start: usize, end: usize) {
+        let range = TextRange::new(text_size(start), text_size(end));
         self.out.errors.push(LexError { reason, range });
+    }
+
+    fn push_error(&mut self, reason: LexErrorReason, start: usize) {
+        self.report(reason, start, self.pos);
         self.push(SyntaxKind::Error, start);
     }
 }
@@ -184,9 +226,11 @@ fn is_word_char(c: char) -> bool {
 mod tests {
     use rowan::TextRange;
 
-    use super::{LexError, LexErrorReason, lex};
+    use super::{LexError, LexErrorReason, lex, text_size};
     use crate::Keyword;
-    use crate::SyntaxKind::{self, Colon, Comma, Comment, Error, Identifier, Newline, Whitespace};
+    use crate::SyntaxKind::{
+        self, Colon, Comma, Comment, Error, Identifier, Newline, StringLiteral, Whitespace,
+    };
 
     fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
         let lexed = lex(source);
@@ -203,12 +247,19 @@ mod tests {
             "tokens do not cover the input {source:?}"
         );
         assert_eq!(actual, expected, "token stream for {source:?}");
-        let error_tokens = lexed.tokens.iter().filter(|t| t.kind == Error).count();
-        assert_eq!(
-            lexed.errors.len(),
-            error_tokens,
-            "one error per Error token in {source:?}"
-        );
+        let mut pos = 0;
+        for token in &lexed.tokens {
+            let end = pos + usize::from(token.len);
+            if token.kind == Error {
+                let spanning = lexed
+                    .errors
+                    .iter()
+                    .filter(|e| e.range == TextRange::new(text_size(pos), text_size(end)))
+                    .count();
+                assert_eq!(spanning, 1, "Error token at {pos}..{end} in {source:?}");
+            }
+            pos = end;
+        }
         lexed.errors
     }
 
@@ -395,9 +446,107 @@ mod tests {
 
     #[test]
     fn unexpected_characters_are_one_error_each() {
-        let errors = check("\"", &[(Error, "\"")]);
+        let errors = check("!", &[(Error, "!")]);
         assert_eq!(errors[0].reason, LexErrorReason::UnexpectedCharacter);
         check("!?", &[(Error, "!"), (Error, "?")]);
+    }
+
+    #[test]
+    fn string_literals() {
+        check("\"abc\"", &[(StringLiteral, "\"abc\"")]);
+        check("\"\"", &[(StringLiteral, "\"\"")]);
+        check("\"José Cisneros\"", &[(StringLiteral, "\"José Cisneros\"")]);
+    }
+
+    #[test]
+    fn strings_may_contain_anything_but_quotes_and_terminators() {
+        check(
+            "\"# not a comment\"",
+            &[(StringLiteral, "\"# not a comment\"")],
+        );
+        check(
+            "\"@not-an-id, yes:\"",
+            &[(StringLiteral, "\"@not-an-id, yes:\"")],
+        );
+        check("\"a\tb\"", &[(StringLiteral, "\"a\tb\"")]);
+    }
+
+    #[test]
+    fn string_escapes() {
+        let errors = check("\"a\\\"b\"", &[(StringLiteral, "\"a\\\"b\"")]);
+        assert_eq!(errors.len(), 0, "{errors:?}");
+        check("\"a\\\\b\"", &[(StringLiteral, "\"a\\\\b\"")]);
+        check("\"\\\"\\\\\"", &[(StringLiteral, "\"\\\"\\\\\"")]);
+    }
+
+    #[test]
+    fn invalid_escapes_keep_the_string_and_report_the_escape() {
+        let errors = check("\"a\\nb\"", &[(StringLiteral, "\"a\\nb\"")]);
+        assert_eq!(
+            errors,
+            [LexError {
+                reason: LexErrorReason::InvalidEscape,
+                range: range(2, 4)
+            }]
+        );
+        let errors = check("\"\\x\\y\"", &[(StringLiteral, "\"\\x\\y\"")]);
+        assert_eq!(errors.len(), 2, "{errors:?}");
+        assert_eq!(errors[1].range, range(3, 5));
+    }
+
+    #[test]
+    fn unterminated_strings_stop_at_the_line_end() {
+        let errors = check("\"abc", &[(Error, "\"abc")]);
+        assert_eq!(
+            errors,
+            [LexError {
+                reason: LexErrorReason::UnterminatedString,
+                range: range(0, 4)
+            }]
+        );
+        check(
+            "\"abc\n\"ok\"",
+            &[(Error, "\"abc"), (Newline, "\n"), (StringLiteral, "\"ok\"")],
+        );
+        check("\"abc\r\n", &[(Error, "\"abc"), (Newline, "\r\n")]);
+        check("\"", &[(Error, "\"")]);
+    }
+
+    #[test]
+    fn trailing_backslash_is_only_unterminated() {
+        let errors = check("\"abc\\", &[(Error, "\"abc\\")]);
+        assert_eq!(
+            errors,
+            [LexError {
+                reason: LexErrorReason::UnterminatedString,
+                range: range(0, 5)
+            }]
+        );
+        let errors = check("\"abc\\\n", &[(Error, "\"abc\\"), (Newline, "\n")]);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+    }
+
+    #[test]
+    fn strings_in_context() {
+        check(
+            "supporters \"a\", \"b\"",
+            &[
+                (Keyword::Supporters.into(), "supporters"),
+                (Whitespace, " "),
+                (StringLiteral, "\"a\""),
+                (Comma, ","),
+                (Whitespace, " "),
+                (StringLiteral, "\"b\""),
+            ],
+        );
+        check(
+            "designation\"x\"# c",
+            &[
+                (Keyword::Designation.into(), "designation"),
+                (StringLiteral, "\"x\""),
+                (Comment, "# c"),
+            ],
+        );
     }
 
     #[test]
