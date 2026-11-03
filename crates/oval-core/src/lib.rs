@@ -618,4 +618,153 @@ ballot @b \"B\"
             assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
         }
     }
+
+    fn warnings(source: &str, rule: Rule) -> Vec<String> {
+        check(source)
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code == DiagnosticCode::Rule(rule))
+            .inspect(|d| assert_eq!(d.severity, Severity::Warning, "{}", d.message))
+            .map(|d| d.message.clone())
+            .collect()
+    }
+
+    #[test]
+    fn v14_unused_parties_and_candidates() {
+        let source = "\
+party @dem \"Democratic\"
+party @gop \"Republican\"
+candidate @used \"U\"
+  party @dem
+candidate @idle \"I\"
+ballot @b \"B\"
+  contest @x \"X\" single
+    campaign @used
+    campaign @inline \"In\"
+      party @green \"Green\"
+    recommend
+      support @used
+";
+        assert_eq!(
+            warnings(source, Rule::UnusedDeclarations),
+            [
+                "`@gop` is declared but no candidate belongs to it",
+                "`@idle` is declared but is not in any campaign",
+            ]
+        );
+    }
+
+    #[test]
+    fn v15_duplicate_party_names_across_top_level_and_inline() {
+        let source = "\
+party @dem \"Democratic\"
+party @dems \"Democratic\"
+candidate @a \"A\"
+  party @dem
+candidate @c \"C\"
+  party @d2 \"Democratic\"
+ballot @b \"B\"
+  contest @x \"X\" single
+    campaign @a
+    campaign @c
+    campaign @e \"E\"
+      party @dems
+    recommend
+      support @a
+";
+        assert_eq!(
+            warnings(source, Rule::DuplicatePartyNames),
+            [
+                "`@dems` has the same name as `@dem`, \"Democratic\"",
+                "`@d2` has the same name as `@dem`, \"Democratic\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn v16_sibling_ballots_with_one_title() {
+        let source = "\
+ballot @a \"City\"
+  ballot @a1 \"District 5\"
+    measure @m \"M\"
+      recommend yes
+  ballot @a2 \"District 5\"
+    measure @n \"N\"
+      recommend yes
+ballot @b \"City\"
+  ballot @b1 \"District 5\"
+    measure @o \"O\"
+      recommend yes
+";
+        assert_eq!(
+            warnings(source, Rule::SuspiciousBallots),
+            [
+                "another ballot at this level is also titled \"District 5\"",
+                "another ballot at this level is also titled \"City\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn v17_tickets_are_named_by_their_head() {
+        let source = "\
+ballot @b \"B\"
+  contest @x \"X\" single
+    campaign
+      @p \"P\" as \"President\"
+      @v \"V\" as \"Vice President\"
+    campaign
+      @q \"Q\" as \"President\"
+      @w \"W\" as \"Vice President\"
+    recommend
+      support @v
+      oppose @q
+";
+        assert_eq!(
+            warnings(source, Rule::HeadOfTicketReferences),
+            ["`@v` is not the head of its ticket; name `@p` instead"]
+        );
+    }
+
+    #[test]
+    fn v18_if_yes_and_if_no_come_together() {
+        let source = "\
+ballot @b \"B\"
+  measure @m \"M\"
+    if_yes:
+      Yes.
+    recommend yes
+  measure @n \"N\"
+    if_no:
+      No.
+    recommend no
+  measure @o \"O\"
+    if_yes:
+      Yes.
+    if_no:
+      No.
+    recommend yes
+";
+        assert_eq!(
+            warnings(source, Rule::PairedYesNoStatements),
+            [
+                "`if_yes` is present without `if_no`; the ballot prints both or neither",
+                "`if_no` is present without `if_yes`; the ballot prints both or neither",
+            ]
+        );
+    }
+
+    #[test]
+    fn v14_through_v18_are_silent_on_the_fixture() {
+        for rule in [
+            Rule::UnusedDeclarations,
+            Rule::DuplicatePartyNames,
+            Rule::SuspiciousBallots,
+            Rule::HeadOfTicketReferences,
+            Rule::PairedYesNoStatements,
+        ] {
+            assert_eq!(warnings(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+        }
+        assert_eq!(check(FIXTURE).diagnostics(), []);
+    }
 }

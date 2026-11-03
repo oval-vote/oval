@@ -12,6 +12,7 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
         for recommendation in contest.recommendations() {
             in_contest(index, &recommendation, &campaign_of, out);
             shape(&recommendation, &campaign_of, out);
+            head_of_ticket(contest, &recommendation, out);
             if let Some(kind) = contest.kind() {
                 kind_specific(kind, &recommendation, out);
             }
@@ -91,6 +92,42 @@ fn in_contest(
                 Rule::RecommendationReferencesInContest,
                 id.range(),
                 format!("`@{}` is not in any campaign of this contest", id.name()),
+            ));
+        }
+    }
+}
+
+fn head_of_ticket(contest: &Contest, recommendation: &ContestRecommend, out: &mut Vec<Diagnostic>) {
+    let mut head_of: HashMap<String, String> = HashMap::new();
+    for campaign in contest.campaigns() {
+        let names: Vec<String> = campaign
+            .members()
+            .filter_map(|m| m.id())
+            .map(|id| id.name().to_owned())
+            .collect();
+        if let [head, rest @ ..] = names.as_slice() {
+            for other in rest {
+                head_of.entry(other.clone()).or_insert_with(|| head.clone());
+            }
+        }
+    }
+    let named = recommendation
+        .support()
+        .flat_map(|tier| tier.candidates().collect::<Vec<_>>())
+        .chain(
+            recommendation
+                .oppose()
+                .flat_map(|o| o.candidates().collect::<Vec<_>>()),
+        );
+    for id in named {
+        if let Some(head) = head_of.get(id.name()) {
+            out.push(warning(
+                Rule::HeadOfTicketReferences,
+                id.range(),
+                format!(
+                    "`@{}` is not the head of its ticket; name `@{head}` instead",
+                    id.name()
+                ),
             ));
         }
     }
