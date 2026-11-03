@@ -1,0 +1,16 @@
+[package]
+name = "oval-core"
+version = "0.0.0"
+description = "Resolution and validation for the Oval voting guide format"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+oval-syntax.workspace = true
+
+[lints]
+workspace = true
