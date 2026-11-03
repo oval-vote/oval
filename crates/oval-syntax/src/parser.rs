@@ -3,12 +3,15 @@
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
 use crate::SyntaxKind::{
-    self, AbbreviationKeyword, Ballot, BallotKeyword, Block, Candidate, CandidateKeyword, Colon,
-    ContestKeyword, DateField, DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document,
-    ElectionKeyword, EligibilityKeyword, ErrorNode, GuideKeyword, Identifier, Indent,
-    MarkdownBlock, MarkdownField, MeasureKeyword, Newline, NoteKeyword, Party, PartyKeyword,
-    PartyReference, Section, SectionKeyword, StringField, StringLiteral, UrlField, UrlLiteral,
-    WebsiteKeyword,
+    self, AbbreviationKeyword, AsKeyword, Ballot, BallotKeyword, Block, Campaign, CampaignKeyword,
+    Candidate, CandidateKeyword, Colon, Contest, ContestKeyword, ContestKind, DateField,
+    DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document, ElectionKeyword,
+    EligibilityKeyword, ErrorNode, Flag, GuideKeyword, Identifier, IncumbentKeyword, Indent,
+    IntegerLiteral, MarkdownBlock, MarkdownField, MaxKeyword, MeasureKeyword, Member,
+    MultipleKeyword, Newline, NoteKeyword, Party, PartyKeyword, PartyReference, RankedKeyword,
+    RecommendKeyword, RetentionKeyword, Section, SectionKeyword, SingleKeyword, StringField,
+    StringLiteral, SubtitleKeyword, TabulationKeyword, UrlField, UrlLiteral, WebsiteKeyword,
+    WithdrawnKeyword,
 };
 use crate::SyntaxNode;
 use crate::lexer::{LexError, Token, lex};
@@ -169,6 +172,7 @@ impl Parser<'_> {
         match kind {
             SectionKeyword => self.section(),
             BallotKeyword => self.ballot(),
+            ContestKeyword => self.contest(),
             EligibilityKeyword | NoteKeyword => return self.simple_field(kind),
             _ => return false,
         }
@@ -185,7 +189,124 @@ impl Parser<'_> {
     }
 
     fn section_item(&mut self, kind: SyntaxKind) -> bool {
-        kind == NoteKeyword && self.simple_field(kind)
+        match kind {
+            ContestKeyword => self.contest(),
+            NoteKeyword => return self.simple_field(kind),
+            _ => return false,
+        }
+        true
+    }
+
+    fn contest(&mut self) {
+        self.start_node(Contest);
+        self.bump();
+        self.expect(Identifier);
+        self.expect(StringLiteral);
+        self.contest_kind();
+        self.end_of_line();
+        self.required_block(CONTEST_FIELDS, CONTEST_ITEMS, Self::contest_item);
+        self.finish_node();
+    }
+
+    fn contest_kind(&mut self) {
+        match self.current() {
+            Some(SingleKeyword | RetentionKeyword) => {
+                self.start_node(ContestKind);
+                self.bump();
+                self.finish_node();
+            }
+            Some(MultipleKeyword) => {
+                self.start_node(ContestKind);
+                self.bump();
+                self.expect_value(IntegerLiteral);
+                self.finish_node();
+            }
+            Some(RankedKeyword) => {
+                self.start_node(ContestKind);
+                self.bump();
+                if self.eat(MaxKeyword) {
+                    self.expect_value(IntegerLiteral);
+                }
+                self.finish_node();
+            }
+            _ if self.at_line_end() => self.error(CONTEST_KINDS),
+            _ => self.recover_line(CONTEST_KINDS),
+        }
+    }
+
+    fn contest_item(&mut self, kind: SyntaxKind) -> bool {
+        match kind {
+            CampaignKeyword => self.campaign(),
+            SubtitleKeyword | TabulationKeyword | NoteKeyword => return self.simple_field(kind),
+            _ => return false,
+        }
+        true
+    }
+
+    fn campaign(&mut self) {
+        self.start_node(Campaign);
+        self.bump();
+        self.flags();
+        if self.at(Identifier) {
+            self.member(false);
+            self.end_of_line();
+            self.block(CAMPAIGN_FIELDS, &[Identifier], Self::campaign_block_item);
+        } else if self.at_line_end() {
+            self.end_of_line();
+            self.required_block(CAMPAIGN_FIELDS, &[Identifier], Self::campaign_block_item);
+        } else {
+            self.recover_line(&[IncumbentKeyword, WithdrawnKeyword, Identifier, Newline]);
+            self.end_of_line();
+            self.block(CAMPAIGN_FIELDS, &[Identifier], Self::campaign_block_item);
+        }
+        self.finish_node();
+    }
+
+    fn flags(&mut self) {
+        let mut remaining = vec![IncumbentKeyword, WithdrawnKeyword];
+        while let Some(kind @ (IncumbentKeyword | WithdrawnKeyword)) = self.current() {
+            if remaining.contains(&kind) {
+                remaining.retain(|k| *k != kind);
+                self.flag();
+            } else {
+                let mut expected = remaining.clone();
+                expected.push(Identifier);
+                self.misplaced(kind, &expected, |parser, _| {
+                    parser.flag();
+                    true
+                });
+            }
+        }
+    }
+
+    fn flag(&mut self) {
+        self.start_node(Flag);
+        self.bump();
+        self.finish_node();
+    }
+
+    fn member(&mut self, in_block: bool) {
+        self.start_node(Member);
+        self.bump();
+        self.eat(StringLiteral);
+        if self.eat(AsKeyword) {
+            self.expect_value(StringLiteral);
+        }
+        if in_block {
+            self.end_of_line();
+            self.block(CANDIDATE_FIELDS, &[], Self::candidate_field);
+        }
+        self.finish_node();
+    }
+
+    fn campaign_block_item(&mut self, kind: SyntaxKind) -> bool {
+        match kind {
+            Identifier => self.member(true),
+            PartyKeyword => self.party_reference(),
+            WebsiteKeyword | NoteKeyword | DesignationKeyword => return self.simple_field(kind),
+            _ => return false,
+        }
+        true
     }
 
     fn party_reference(&mut self) {
@@ -491,6 +612,20 @@ const BALLOT_ITEMS: &[SyntaxKind] = &[
 ];
 const SECTION_FIELDS: &[SyntaxKind] = &[NoteKeyword];
 const SECTION_ITEMS: &[SyntaxKind] = &[ContestKeyword, MeasureKeyword];
+const CONTEST_KINDS: &[SyntaxKind] = &[
+    SingleKeyword,
+    MultipleKeyword,
+    RankedKeyword,
+    RetentionKeyword,
+];
+const CONTEST_FIELDS: &[SyntaxKind] = &[SubtitleKeyword, TabulationKeyword, NoteKeyword];
+const CONTEST_ITEMS: &[SyntaxKind] = &[CampaignKeyword, RecommendKeyword];
+const CAMPAIGN_FIELDS: &[SyntaxKind] = &[
+    WebsiteKeyword,
+    NoteKeyword,
+    DesignationKeyword,
+    PartyKeyword,
+];
 
 fn text_size(offset: usize) -> TextSize {
     TextSize::try_from(offset).expect("source longer than 4 GiB")
@@ -500,7 +635,7 @@ fn text_size(offset: usize) -> TextSize {
 mod tests {
     use std::fmt::Write;
 
-    use rowan::{NodeOrToken, TextRange};
+    use rowan::{NodeOrToken, TextRange, TextSize};
 
     use super::{ParseError, SyntaxError, parse};
     use crate::SyntaxKind;
@@ -561,6 +696,51 @@ ballot @franklin \"State of Franklin\"
 
     fn range(start: u32, end: u32) -> TextRange {
         TextRange::new(start.into(), end.into())
+    }
+
+    fn span(source: &str, needle: &str) -> TextRange {
+        let start = source.find(needle).expect("needle in source");
+        let start = u32::try_from(start).unwrap();
+        let len = u32::try_from(needle.len()).unwrap();
+        range(start, start + len)
+    }
+
+    fn in_ballot(body: &str) -> String {
+        let mut out = String::from("ballot @b \"B\"\n");
+        for line in body.lines() {
+            if line.is_empty() {
+                out.push('\n');
+            } else {
+                out.push_str("  ");
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    fn first_contest(parse: &super::ParseResult) -> crate::SyntaxNode {
+        first(parse, SyntaxKind::Contest)
+    }
+
+    fn first(parse: &super::ParseResult, kind: SyntaxKind) -> crate::SyntaxNode {
+        parse
+            .syntax()
+            .descendants()
+            .find(|n| n.kind() == kind)
+            .unwrap_or_else(|| panic!("a {kind:?}"))
+    }
+
+    fn in_contest(body: &str) -> String {
+        let mut inner = String::from("contest @c \"C\" single\n");
+        for line in body.lines() {
+            if !line.is_empty() {
+                inner.push_str("  ");
+                inner.push_str(line);
+            }
+            inner.push('\n');
+        }
+        in_ballot(&inner)
     }
 
     #[test]
@@ -1207,7 +1387,8 @@ Document
 
     #[test]
     fn contests_and_measures_are_named_as_expected_items_until_they_parse() {
-        let parse = parse("ballot @a \"A\"\n  section \"S\"\n    contest @c \"C\" single\n");
+        let source = "ballot @a \"A\"\n  section \"S\"\n    measure @m \"M\"\n";
+        let parse = parse(source);
         assert_eq!(
             parse.errors(),
             [SyntaxError::Parse(ParseError {
@@ -1216,8 +1397,8 @@ Document
                     SyntaxKind::ContestKeyword,
                     SyntaxKind::MeasureKeyword,
                 ],
-                found: Some(SyntaxKind::ContestKeyword),
-                range: range(32, 54),
+                found: Some(SyntaxKind::MeasureKeyword),
+                range: span(source, "measure @m \"M\"\n"),
             })]
         );
     }
@@ -1290,5 +1471,386 @@ Document
                 range: range(28, 41),
             })]
         );
+    }
+
+    #[test]
+    fn contest_header_and_fields_from_the_spec_example() {
+        let source = in_ballot(
+            "contest @mayor \"Mayor\" ranked max 5\n  subtitle \"Rank up to five candidates\"\n  tabulation \"Instant runoff\"\n  note:\n    Open seat.\n",
+        );
+        let parse = parse(&source);
+        assert_eq!(parse.errors(), []);
+        assert_eq!(
+            dump(&first_contest(&parse)),
+            "\
+Contest
+  ContestKeyword \"contest\"
+  Identifier \"@mayor\"
+  StringLiteral \"\\\"Mayor\\\"\"
+  ContestKind
+    RankedKeyword \"ranked\"
+    MaxKeyword \"max\"
+    IntegerLiteral \"5\"
+  Newline \"\\n\"
+  Block
+    Indent \"\"
+    StringField
+      SubtitleKeyword \"subtitle\"
+      StringLiteral \"\\\"Rank up to five candidates\\\"\"
+      Newline \"\\n\"
+    StringField
+      TabulationKeyword \"tabulation\"
+      StringLiteral \"\\\"Instant runoff\\\"\"
+      Newline \"\\n\"
+    MarkdownField
+      NoteKeyword \"note\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"      Open seat.\\n\"
+    Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn every_contest_kind() {
+        for (kind, expected) in [
+            ("single", "    SingleKeyword \"single\"\n"),
+            ("retention", "    RetentionKeyword \"retention\"\n"),
+            (
+                "multiple 3",
+                "    MultipleKeyword \"multiple\"\n    IntegerLiteral \"3\"\n",
+            ),
+            ("ranked", "    RankedKeyword \"ranked\"\n"),
+            (
+                "ranked max 10",
+                "    RankedKeyword \"ranked\"\n    MaxKeyword \"max\"\n    IntegerLiteral \"10\"\n",
+            ),
+        ] {
+            let source = in_ballot(&format!("contest @c \"C\" {kind}\n  note:\n    x\n"));
+            let parse = parse(&source);
+            assert_eq!(parse.errors(), [], "{kind}");
+            let contest = dump(&first_contest(&parse));
+            let kind_node = contest
+                .split("  ContestKind\n")
+                .nth(1)
+                .and_then(|rest| rest.split("  Newline").next())
+                .expect("ContestKind in dump");
+            assert_eq!(kind_node, expected, "{kind}");
+        }
+    }
+
+    #[test]
+    fn a_missing_or_unknown_contest_kind_is_one_error() {
+        let source = in_ballot("contest @c \"C\"\n  note:\n    x\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![
+                    SyntaxKind::SingleKeyword,
+                    SyntaxKind::MultipleKeyword,
+                    SyntaxKind::RankedKeyword,
+                    SyntaxKind::RetentionKeyword,
+                ],
+                found: Some(SyntaxKind::Newline),
+                range: TextRange::empty(span(&source, "\"C\"").end()),
+            })]
+        );
+
+        let source = in_ballot("contest @c \"C\" yes no\n  note:\n    x\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 1);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::YesKeyword)
+                && e.range == span(&source, "yes no")
+        ));
+    }
+
+    #[test]
+    fn multiple_requires_a_seat_count() {
+        let source = in_ballot("contest @c \"C\" multiple\n  note:\n    x\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::IntegerLiteral],
+                found: Some(SyntaxKind::Newline),
+                range: TextRange::empty(span(&source, "multiple").end()),
+            })]
+        );
+
+        let source = in_ballot("contest @c \"C\" multiple \"3\"\n  note:\n    x\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 1);
+        let kind_node = first_contest(&result)
+            .children()
+            .find(|n| n.kind() == SyntaxKind::ContestKind)
+            .unwrap();
+        assert!(
+            kind_node
+                .children()
+                .any(|n| n.kind() == SyntaxKind::ErrorNode)
+        );
+    }
+
+    #[test]
+    fn contest_block_fields_once_and_items_recovered_until_they_parse() {
+        let source = in_ballot(
+            "contest @c \"C\" single\n  subtitle \"a\"\n  campaign @x \"X\"\n  subtitle \"b\"\n  recommend\n    support @x\n",
+        );
+        let result = parse(&source);
+        let block = first_contest(&result).last_child().unwrap();
+        let kinds: Vec<SyntaxKind> = block.children().map(|n| n.kind()).collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::StringField,
+                SyntaxKind::Campaign,
+                SyntaxKind::ErrorNode,
+                SyntaxKind::ErrorNode
+            ]
+        );
+        assert_eq!(result.errors().len(), 2);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::SubtitleKeyword)
+                && e.expected == [SyntaxKind::TabulationKeyword, SyntaxKind::NoteKeyword]
+        ));
+        assert!(matches!(
+            &result.errors()[1],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::RecommendKeyword)
+                && e.range == span(&source, "recommend\n      support @x\n")
+        ));
+    }
+
+    #[test]
+    fn contests_live_in_ballots_and_sections_and_need_a_block() {
+        let source = "ballot @b \"B\"\n  contest @a \"A\" single\n    note:\n      x\n  section \"S\"\n    contest @c \"C\" single\n      note:\n        y\n";
+        let result = parse(source);
+        assert_eq!(result.errors(), []);
+        let contests = result
+            .syntax()
+            .descendants()
+            .filter(|n| n.kind() == SyntaxKind::Contest)
+            .count();
+        assert_eq!(contests, 2);
+
+        let source = in_ballot("contest @c \"C\" single\nnote:\n  x\n");
+        let result = parse(&source);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.expected == [SyntaxKind::Indent]
+        ));
+    }
+
+    #[test]
+    fn one_line_campaign_with_an_inline_candidate_from_the_spec_example() {
+        let source = in_contest(
+            "campaign incumbent @bsantos \"Beatriz Santos\"\n  designation \"Mayor of Ashford\"\n  website https://santosformayor.example\n  note:\n    Two-term incumbent.\n",
+        );
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        assert_eq!(
+            dump(&first(&result, SyntaxKind::Campaign)),
+            "\
+Campaign
+  CampaignKeyword \"campaign\"
+  Flag
+    IncumbentKeyword \"incumbent\"
+  Member
+    Identifier \"@bsantos\"
+    StringLiteral \"\\\"Beatriz Santos\\\"\"
+  Newline \"\\n\"
+  Block
+    Indent \"\"
+    StringField
+      DesignationKeyword \"designation\"
+      StringLiteral \"\\\"Mayor of Ashford\\\"\"
+      Newline \"\\n\"
+    UrlField
+      WebsiteKeyword \"website\"
+      UrlLiteral \"https://santosformayor.example\"
+      Newline \"\\n\"
+    MarkdownField
+      NoteKeyword \"note\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"        Two-term incumbent.\\n\"
+    Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn block_form_campaign_with_a_ticket_from_the_spec_example() {
+        let source = in_contest(
+            "campaign incumbent\n  @jlee \"Jordan Lee\" as \"Governor\"\n    designation \"Governor of Franklin\"\n    party @dem\n  @mpatel \"Maya Patel\" as \"Lieutenant Governor\"\n    designation \"State Senator\"\n  website https://leepatel2026.example\n  note:\n    The ticket's note.\n",
+        );
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        assert_eq!(
+            dump(&first(&result, SyntaxKind::Campaign)),
+            "\
+Campaign
+  CampaignKeyword \"campaign\"
+  Flag
+    IncumbentKeyword \"incumbent\"
+  Newline \"\\n\"
+  Block
+    Indent \"\"
+    Member
+      Identifier \"@jlee\"
+      StringLiteral \"\\\"Jordan Lee\\\"\"
+      AsKeyword \"as\"
+      StringLiteral \"\\\"Governor\\\"\"
+      Newline \"\\n\"
+      Block
+        Indent \"\"
+        StringField
+          DesignationKeyword \"designation\"
+          StringLiteral \"\\\"Governor of Franklin\\\"\"
+          Newline \"\\n\"
+        PartyReference
+          PartyKeyword \"party\"
+          Identifier \"@dem\"
+          Newline \"\\n\"
+        Dedent \"\"
+    Member
+      Identifier \"@mpatel\"
+      StringLiteral \"\\\"Maya Patel\\\"\"
+      AsKeyword \"as\"
+      StringLiteral \"\\\"Lieutenant Governor\\\"\"
+      Newline \"\\n\"
+      Block
+        Indent \"\"
+        StringField
+          DesignationKeyword \"designation\"
+          StringLiteral \"\\\"State Senator\\\"\"
+          Newline \"\\n\"
+        Dedent \"\"
+    UrlField
+      WebsiteKeyword \"website\"
+      UrlLiteral \"https://leepatel2026.example\"
+      Newline \"\\n\"
+    MarkdownField
+      NoteKeyword \"note\"
+      Colon \":\"
+      Newline \"\\n\"
+      MarkdownBlock \"        The ticket's note.\\n\"
+    Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn bare_references_flags_and_inline_parties() {
+        let source = in_contest(
+            "campaign @adam-schiff\ncampaign incumbent withdrawn @x \"X\"\ncampaign @g \"G\"\n  party @green \"Green\"\n    abbreviation \"G\"\n",
+        );
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        let campaigns: Vec<_> = result
+            .syntax()
+            .descendants()
+            .filter(|n| n.kind() == SyntaxKind::Campaign)
+            .collect();
+        assert_eq!(campaigns.len(), 3);
+        let kinds = |n: &crate::SyntaxNode| n.children().map(|c| c.kind()).collect::<Vec<_>>();
+        assert_eq!(kinds(&campaigns[0]), [SyntaxKind::Member]);
+        assert_eq!(
+            kinds(&campaigns[1]),
+            [SyntaxKind::Flag, SyntaxKind::Flag, SyntaxKind::Member]
+        );
+        assert!(
+            campaigns[2]
+                .descendants()
+                .any(|n| n.kind() == SyntaxKind::PartyReference)
+        );
+    }
+
+    #[test]
+    fn a_repeated_flag_is_an_error_node() {
+        let source = in_contest("campaign incumbent incumbent @x \"X\"\n");
+        let result = parse(&source);
+        let second = span(&source, "incumbent incumbent").end() - TextSize::from(9);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::WithdrawnKeyword, SyntaxKind::Identifier],
+                found: Some(SyntaxKind::IncumbentKeyword),
+                range: TextRange::at(second, TextSize::from(9)),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_campaign_needs_a_member_or_a_block() {
+        let source = in_contest("campaign\ncampaign @y \"Y\"\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::Indent],
+                found: Some(SyntaxKind::CampaignKeyword),
+                range: TextRange::empty(span(&source, "campaign @y").start()),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_role_needs_a_string() {
+        let source = in_contest("campaign @x \"X\" as\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::StringLiteral],
+                found: Some(SyntaxKind::Newline),
+                range: TextRange::empty(span(&source, " as").end()),
+            })]
+        );
+    }
+
+    #[test]
+    fn flags_after_the_member_are_extra_tokens() {
+        let source = in_contest("campaign @x \"X\" incumbent\n");
+        let result = parse(&source);
+        assert_eq!(result.errors().len(), 1);
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.expected == [SyntaxKind::Newline]
+                && e.range == span(&source, "incumbent")
+        ));
+    }
+
+    #[test]
+    fn unknown_lines_in_a_campaign_block_name_fields_and_members() {
+        let source = in_contest("campaign @x \"X\"\n  subtitle \"no\"\n  website https://x.y\n");
+        let result = parse(&source);
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![
+                    SyntaxKind::WebsiteKeyword,
+                    SyntaxKind::NoteKeyword,
+                    SyntaxKind::DesignationKeyword,
+                    SyntaxKind::PartyKeyword,
+                    SyntaxKind::Identifier,
+                ],
+                found: Some(SyntaxKind::SubtitleKeyword),
+                range: span(&source, "subtitle \"no\"\n"),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_reference_with_a_member_block_parses_and_is_left_to_validation() {
+        let source = in_contest("campaign\n  @x\n    designation \"d\"\n");
+        let result = parse(&source);
+        assert_eq!(result.errors(), []);
+        let member = first(&result, SyntaxKind::Member);
+        assert!(member.children().any(|n| n.kind() == SyntaxKind::Block));
     }
 }
