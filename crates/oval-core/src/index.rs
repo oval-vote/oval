@@ -47,6 +47,8 @@ pub(crate) struct Index {
     pub(crate) references: Vec<Reference>,
     pub(crate) by_name: HashMap<String, usize>,
     pub(crate) duplicates: Vec<usize>,
+    pub(crate) contests: Vec<Contest>,
+    pub(crate) measures: Vec<Measure>,
 }
 
 impl Index {
@@ -102,6 +104,7 @@ impl Index {
     }
 
     fn contest(&mut self, contest: &Contest) {
+        self.contests.push(contest.clone());
         self.declare(contest.id(), EntityKind::Contest);
         for campaign in contest.campaigns() {
             self.campaign(&campaign);
@@ -142,6 +145,7 @@ impl Index {
     }
 
     fn measure(&mut self, measure: &Measure) {
+        self.measures.push(measure.clone());
         self.declare(measure.id(), EntityKind::Measure);
     }
 
