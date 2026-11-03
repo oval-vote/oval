@@ -51,14 +51,22 @@ pub fn compile(source: &str) -> Result<Compiled, Report> {
 /// Parses and validates `source`.
 pub fn check(source: &str) -> Report {
     let parse = parse(source);
-    let mut diagnostics: Vec<Diagnostic> = parse
-        .errors()
-        .iter()
-        .map(|error| syntax::diagnostic(source, error))
-        .collect();
-    if let Some(document) = Document::cast(parse.syntax()) {
-        let index = index::Index::build(&document);
-        diagnostics.extend(rules::check(&document, &index));
+    let document = Document::cast(parse.syntax());
+    let mut diagnostics = Vec::new();
+    if let Some(document) = &document
+        && !rules::version::check(document, &mut diagnostics)
+    {
+        return Report { parse, diagnostics };
+    }
+    diagnostics.extend(
+        parse
+            .errors()
+            .iter()
+            .map(|error| syntax::diagnostic(source, error)),
+    );
+    if let Some(document) = &document {
+        let index = index::Index::build(document);
+        diagnostics.extend(rules::check(document, &index));
     }
     diagnostics.sort_by_key(|d| d.range.start());
     Report { parse, diagnostics }
@@ -131,6 +139,12 @@ mod tests {
             syntax_message("ballot @b \"B\"").as_deref(),
             Some("expected an indented block, found the end of the file")
         );
+    }
+
+    fn span(source: &str, needle: &str) -> oval_syntax::TextRange {
+        let start = u32::try_from(source.find(needle).expect("needle in source")).unwrap();
+        let len = u32::try_from(needle.len()).unwrap();
+        oval_syntax::TextRange::new(start.into(), (start + len).into())
     }
 
     fn rule_messages(source: &str, rule: Rule) -> Vec<String> {
@@ -809,6 +823,7 @@ ballot @b \"B\"
     #[test]
     fn compiled_tickets_recommendations_and_stances() {
         let source = "\
+oval 0.1
 guide \"G\"
 election \"E\"
 date 2026-11-03
@@ -911,6 +926,7 @@ ballot @state \"State\"
     #[test]
     fn optional_fields_inside_unions_are_omitted() {
         let source = "\
+oval 0.1
 guide \"G\"
 election \"E\"
 date 2026-11-03
@@ -929,6 +945,55 @@ ballot @b \"B\"
     }
 
     #[test]
+    fn v19_a_missing_marker_is_reported_alongside_everything_else() {
+        let report = check("guide \"G\"\n");
+        let codes: Vec<String> = report
+            .diagnostics()
+            .iter()
+            .map(|d| d.code.to_string())
+            .collect();
+        assert_eq!(codes, ["V19", "V2", "V2"]);
+        assert_eq!(
+            rule_messages("guide \"G\"\n", Rule::SupportedVersion),
+            ["the document has no version marker; its first line should be `oval 0.1`"]
+        );
+    }
+
+    #[test]
+    fn v19_an_unsupported_version_is_the_only_diagnostic() {
+        let source = "oval 0.2\nguide yes\n";
+        let report = check(source);
+        assert_eq!(report.diagnostics().len(), 1);
+        let diagnostic = &report.diagnostics()[0];
+        assert_eq!(
+            diagnostic.code,
+            DiagnosticCode::Rule(Rule::SupportedVersion)
+        );
+        assert_eq!(diagnostic.severity, Severity::Error);
+        assert_eq!(diagnostic.range, span(source, "0.2"));
+        assert_eq!(
+            diagnostic.message,
+            "this document is written to Oval 0.2, but this implementation reads Oval 0.1"
+        );
+        assert_eq!(check("oval 1.0\n").diagnostics().len(), 1);
+    }
+
+    #[test]
+    fn v19_leaves_a_malformed_marker_to_the_parser() {
+        let report = check("oval 1\nguide \"G\"\n");
+        assert_eq!(
+            rule_messages("oval 1\nguide \"G\"\n", Rule::SupportedVersion),
+            [] as [String; 0]
+        );
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == DiagnosticCode::Syntax)
+        );
+    }
+
+    #[test]
     fn documents_with_errors_do_not_compile() {
         let report = super::compile("guide \"G\"\n").expect_err("missing fields");
         assert!(report.has_errors());
@@ -937,6 +1002,7 @@ ballot @b \"B\"
     #[test]
     fn compiled_json_matches_the_schema_conventions() {
         let source = "\
+oval 0.1
 guide \"G\"
 election \"E\"
 date 2026-11-03

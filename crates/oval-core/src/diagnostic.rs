@@ -53,6 +53,8 @@ pub enum Rule {
     HeadOfTicketReferences,
     /// V18: `if_yes` and `if_no` appear together.
     PairedYesNoStatements,
+    /// V19: the document declares a specification version this implementation supports.
+    SupportedVersion,
 }
 
 impl Rule {
@@ -77,6 +79,7 @@ impl Rule {
             Self::SuspiciousBallots => "V16",
             Self::HeadOfTicketReferences => "V17",
             Self::PairedYesNoStatements => "V18",
+            Self::SupportedVersion => "V19",
         }
     }
 }

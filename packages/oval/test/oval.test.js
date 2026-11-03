@@ -31,9 +31,9 @@ test("diagnostics carry code, severity, range, and message", () => {
   const diagnostics = oval.check("guide yes\n");
   assert.deepEqual(
     diagnostics.map((d) => d.code),
-    ["V2", "V2", "syntax"],
+    ["V19", "V2", "V2", "syntax"],
   );
-  assert.deepEqual(diagnostics[2], {
+  assert.deepEqual(diagnostics[3], {
     code: "syntax",
     severity: "error",
     range: { start: 6, end: 9 },
@@ -43,12 +43,12 @@ test("diagnostics carry code, severity, range, and message", () => {
 
 test("compile and format throw the diagnostics for a broken document", () => {
   assert.throws(() => oval.compile("guide yes\n"), (thrown) => {
-    assert.equal(thrown.length, 3);
+    assert.equal(thrown.length, 4);
     assert.ok(thrown.some((d) => d.code === "syntax"));
     return true;
   });
   assert.throws(() => oval.format("guide yes\n"), (thrown) => {
-    assert.equal(thrown.length, 3);
+    assert.equal(thrown.length, 4);
     return true;
   });
 });

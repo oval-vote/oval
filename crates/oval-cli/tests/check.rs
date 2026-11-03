@@ -32,7 +32,7 @@ fn a_clean_file_prints_nothing_and_succeeds() {
 fn diagnostics_are_printed_with_positions_and_codes() {
     let path = write_temp(
         "broken.oval",
-        "guide \"G\"\nelection \"E\"\ndate 2026-02-30\nparty @dem \"D\"\ncandidate @c \"C\"\n  party @dem\n",
+        "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-02-30\nparty @dem \"D\"\ncandidate @c \"C\"\n  party @dem\n",
     );
     let output = oval(&["check".as_ref(), path.as_os_str()]);
     assert_eq!(output.status.code(), Some(1));
@@ -41,8 +41,8 @@ fn diagnostics_are_printed_with_positions_and_codes() {
     assert_eq!(
         stdout,
         format!(
-            "{shown}:3:1: error[V13]: 2026-02-30 is not a calendar date\n\
-             {shown}:5:11: warning[V14]: `@c` is declared but is not in any campaign\n"
+            "{shown}:4:1: error[V13]: 2026-02-30 is not a calendar date\n\
+             {shown}:6:11: warning[V14]: `@c` is declared but is not in any campaign\n"
         )
     );
     std::fs::remove_file(path).ok();
@@ -52,7 +52,7 @@ fn diagnostics_are_printed_with_positions_and_codes() {
 fn warnings_alone_do_not_fail() {
     let path = write_temp(
         "warn.oval",
-        "guide \"G\"\nelection \"E\"\ndate 2026-11-03\nparty @dem \"D\"\n",
+        "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nparty @dem \"D\"\n",
     );
     let output = oval(&["check".as_ref(), path.as_os_str()]);
     assert!(output.status.success(), "{output:?}");

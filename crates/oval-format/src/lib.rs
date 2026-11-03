@@ -427,8 +427,8 @@ mod tests {
     #[test]
     fn block_entries_follow_the_grammars_order() {
         check(
-            "guide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  contest @c \"C\" single\n    recommend\n      justification:\n        Why.\n      oppose @y\n      support @x\n    campaign @x \"X\"\n    subtitle \"S\"\n    campaign @y \"Y\"\n    tabulation \"T\"\n  eligibility \"E\"\n",
-            "guide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  eligibility \"E\"\n  contest @c \"C\" single\n    subtitle \"S\"\n    tabulation \"T\"\n    campaign @x \"X\"\n    campaign @y \"Y\"\n    recommend\n      support @x\n      oppose @y\n      justification:\n        Why.\n",
+            "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  contest @c \"C\" single\n    recommend\n      justification:\n        Why.\n      oppose @y\n      support @x\n    campaign @x \"X\"\n    subtitle \"S\"\n    campaign @y \"Y\"\n    tabulation \"T\"\n  eligibility \"E\"\n",
+            "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  eligibility \"E\"\n  contest @c \"C\" single\n    subtitle \"S\"\n    tabulation \"T\"\n    campaign @x \"X\"\n    campaign @y \"Y\"\n    recommend\n      support @x\n      oppose @y\n      justification:\n        Why.\n",
         );
     }
 
