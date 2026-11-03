@@ -425,6 +425,14 @@ mod tests {
     }
 
     #[test]
+    fn the_version_marker_keeps_its_place_and_loses_extra_spacing() {
+        check(
+            "# header\n\n\noval    0.1   # trail\n\n\n\nguide \"G\"\n",
+            "# header\n\noval 0.1 # trail\n\nguide \"G\"\n",
+        );
+    }
+
+    #[test]
     fn block_entries_follow_the_grammars_order() {
         check(
             "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  contest @c \"C\" single\n    recommend\n      justification:\n        Why.\n      oppose @y\n      support @x\n    campaign @x \"X\"\n    subtitle \"S\"\n    campaign @y \"Y\"\n    tabulation \"T\"\n  eligibility \"E\"\n",
