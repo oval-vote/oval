@@ -2,7 +2,7 @@
 
 use rowan::{TextRange, TextSize};
 
-use crate::SyntaxKind;
+use crate::{Keyword, SyntaxKind};
 
 /// An oval syntax token
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -20,6 +20,13 @@ pub struct Token {
 pub enum LexErrorReason {
     /// A horizontal tab outside a string or Markdown body.
     IllegalTab,
+
+    /// An `@` not followed by a letter.
+    MalformedIdentifier,
+
+    /// A word that is not a keyword.
+    UnknownWord,
+
     /// A character that cannot begin any token.
     UnexpectedCharacter,
 }
@@ -98,8 +105,33 @@ impl Lexer<'_> {
                     self.bump_while(|c| c == '\t');
                     self.push_error(LexErrorReason::IllegalTab, start);
                 }
-                _ => {
-                    self.bump_while(|c| !is_token_boundary(c));
+                ':' => {
+                    self.pos += 1;
+                    self.push(SyntaxKind::Colon, start);
+                }
+                ',' => {
+                    self.pos += 1;
+                    self.push(SyntaxKind::Comma, start);
+                }
+                '@' => {
+                    self.pos += 1;
+                    let well_formed = self.peek().is_some_and(|c| c.is_ascii_alphabetic());
+                    self.bump_while(is_word_char);
+                    if well_formed {
+                        self.push(SyntaxKind::Identifier, start);
+                    } else {
+                        self.push_error(LexErrorReason::MalformedIdentifier, start);
+                    }
+                }
+                c if is_word_char(c) => {
+                    self.bump_while(is_word_char);
+                    match Keyword::from_text(&self.source[start..self.pos]) {
+                        Some(keyword) => self.push(keyword.into(), start),
+                        None => self.push_error(LexErrorReason::UnknownWord, start),
+                    }
+                }
+                c => {
+                    self.pos += c.len_utf8();
                     self.push_error(LexErrorReason::UnexpectedCharacter, start);
                 }
             }
@@ -144,8 +176,8 @@ fn is_line_terminator(c: char) -> bool {
     matches!(c, '\n' | '\r')
 }
 
-fn is_token_boundary(c: char) -> bool {
-    matches!(c, ' ' | '\t' | '#') || is_line_terminator(c)
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '-' | '_')
 }
 
 #[cfg(test)]
@@ -153,7 +185,8 @@ mod tests {
     use rowan::TextRange;
 
     use super::{LexError, LexErrorReason, lex};
-    use crate::SyntaxKind::{self, Comment, Error, Newline, Whitespace};
+    use crate::Keyword;
+    use crate::SyntaxKind::{self, Colon, Comma, Comment, Error, Identifier, Newline, Whitespace};
 
     fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
         let lexed = lex(source);
@@ -254,7 +287,21 @@ mod tests {
     }
 
     #[test]
-    fn unexpected_text_is_one_error_per_run() {
+    fn every_keyword_lexes_to_its_kind() {
+        for keyword in Keyword::ALL.iter().copied() {
+            let errors = check(keyword.text(), &[(keyword.into(), keyword.text())]);
+            assert_eq!(errors.len(), 0, "{keyword:?}");
+        }
+    }
+
+    #[test]
+    fn keywords_are_case_sensitive() {
+        let errors = check("Guide", &[(Error, "Guide")]);
+        assert_eq!(errors[0].reason, LexErrorReason::UnknownWord);
+    }
+
+    #[test]
+    fn unknown_words_are_errors() {
         let errors = check(
             "foo bar",
             &[(Error, "foo"), (Whitespace, " "), (Error, "bar")],
@@ -263,19 +310,21 @@ mod tests {
             errors,
             [
                 LexError {
-                    reason: LexErrorReason::UnexpectedCharacter,
+                    reason: LexErrorReason::UnknownWord,
                     range: range(0, 3)
                 },
                 LexError {
-                    reason: LexErrorReason::UnexpectedCharacter,
+                    reason: LexErrorReason::UnknownWord,
                     range: range(4, 7)
                 },
             ]
         );
+        check("no_position", &[(Error, "no_position")]);
+        check("yes2", &[(Error, "yes2")]);
     }
 
     #[test]
-    fn unexpected_runs_stop_at_comments_and_terminators() {
+    fn words_stop_at_comments_and_terminators() {
         check(
             "foo#bar\nbaz",
             &[
@@ -285,6 +334,70 @@ mod tests {
                 (Error, "baz"),
             ],
         );
+    }
+
+    #[test]
+    fn identifiers() {
+        check("@a", &[(Identifier, "@a")]);
+        check("@a-b_c9", &[(Identifier, "@a-b_c9")]);
+        check("@Abc", &[(Identifier, "@Abc")]);
+        check(
+            "@a @b",
+            &[(Identifier, "@a"), (Whitespace, " "), (Identifier, "@b")],
+        );
+    }
+
+    #[test]
+    fn malformed_identifiers_are_one_error_each() {
+        for source in ["@", "@9", "@-x", "@_x", "@9abc"] {
+            let errors = check(source, &[(Error, source)]);
+            assert_eq!(
+                errors[0].reason,
+                LexErrorReason::MalformedIdentifier,
+                "{source:?}"
+            );
+            let end = u32::try_from(source.len()).unwrap();
+            assert_eq!(errors[0].range, range(0, end), "{source:?}");
+        }
+    }
+
+    #[test]
+    fn punctuators() {
+        check("note:", &[(Keyword::Note.into(), "note"), (Colon, ":")]);
+        check(
+            "yes,no",
+            &[
+                (Keyword::Yes.into(), "yes"),
+                (Comma, ","),
+                (Keyword::No.into(), "no"),
+            ],
+        );
+        check(
+            "@a,@b",
+            &[(Identifier, "@a"), (Comma, ","), (Identifier, "@b")],
+        );
+        check("::", &[(Colon, ":"), (Colon, ":")]);
+    }
+
+    #[test]
+    fn a_header_line() {
+        check(
+            "campaign incumbent @bsantos",
+            &[
+                (Keyword::Campaign.into(), "campaign"),
+                (Whitespace, " "),
+                (Keyword::Incumbent.into(), "incumbent"),
+                (Whitespace, " "),
+                (Identifier, "@bsantos"),
+            ],
+        );
+    }
+
+    #[test]
+    fn unexpected_characters_are_one_error_each() {
+        let errors = check("\"", &[(Error, "\"")]);
+        assert_eq!(errors[0].reason, LexErrorReason::UnexpectedCharacter);
+        check("!?", &[(Error, "!"), (Error, "?")]);
     }
 
     #[test]
