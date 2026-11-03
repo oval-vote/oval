@@ -34,6 +34,15 @@ enum Command {
         #[arg(long)]
         pretty: bool,
     },
+    /// Rewrite one or more documents in the canonical style.
+    Fmt {
+        /// Files to format.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        /// Report files that would change instead of rewriting them.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -41,7 +50,40 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Check { files } => check(&files),
         Command::Compile { file, pretty } => compile(&file, pretty),
+        Command::Fmt { files, check } => fmt(&files, check),
     }
+}
+
+fn fmt(files: &[PathBuf], check_only: bool) -> ExitCode {
+    let mut worst = ExitCode::SUCCESS;
+    for path in files {
+        let source = match std::fs::read_to_string(path) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("oval: cannot read {}: {error}", path.display());
+                return ExitCode::from(2);
+            }
+        };
+        match oval_format::format(&source) {
+            Ok(formatted) if formatted == source => {}
+            Ok(_) if check_only => {
+                println!("{} would be reformatted", path.display());
+                worst = ExitCode::FAILURE;
+            }
+            Ok(formatted) => {
+                if let Err(error) = std::fs::write(path, formatted) {
+                    eprintln!("oval: cannot write {}: {error}", path.display());
+                    return ExitCode::from(2);
+                }
+            }
+            Err(_) => {
+                let report = oval_core::check(&source);
+                print_report(&mut std::io::stderr(), path, &source, &report);
+                worst = ExitCode::FAILURE;
+            }
+        }
+    }
+    worst
 }
 
 fn compile(path: &PathBuf, pretty: bool) -> ExitCode {
