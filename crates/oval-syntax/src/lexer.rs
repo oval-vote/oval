@@ -4,7 +4,7 @@ use rowan::{TextRange, TextSize};
 
 use crate::{Keyword, SyntaxKind};
 
-/// An oval syntax token
+/// An oval syntax token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Token {
     /// The kind of token.
@@ -14,7 +14,7 @@ pub struct Token {
     pub len: TextSize,
 }
 
-/// An enumeration of the kinds of lexical errors that can occur.
+/// The reasons a lexical error can occur.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum LexErrorReason {
@@ -35,6 +35,12 @@ pub enum LexErrorReason {
 
     /// A backslash in a string followed by something other than `"` or `\\`.
     InvalidEscape,
+
+    /// A word beginning with a digit that is neither an integer nor a date.
+    MalformedNumber,
+
+    /// A URL scheme and `://` with nothing after them.
+    MalformedUrl,
 }
 
 /// A lexical error.
@@ -130,19 +136,46 @@ impl Lexer<'_> {
                         self.push_error(LexErrorReason::MalformedIdentifier, start);
                     }
                 }
-                c if is_word_char(c) => {
-                    self.bump_while(is_word_char);
-                    match Keyword::from_text(&self.source[start..self.pos]) {
-                        Some(keyword) => self.push(keyword.into(), start),
-                        None => self.push_error(LexErrorReason::UnknownWord, start),
-                    }
-                }
+                c if c.is_ascii_digit() => self.number(start),
+                c if is_word_char(c) => self.word(start),
                 '"' => self.string(start),
                 c => {
                     self.pos += c.len_utf8();
                     self.push_error(LexErrorReason::UnexpectedCharacter, start);
                 }
             }
+        }
+    }
+
+    fn number(&mut self, start: usize) {
+        self.bump_while(is_word_char);
+        let text = &self.source[start..self.pos];
+        if text.bytes().all(|b| b.is_ascii_digit()) {
+            self.push(SyntaxKind::IntegerLiteral, start);
+        } else if is_date_shaped(text) {
+            self.push(SyntaxKind::DateLiteral, start);
+        } else {
+            self.push_error(LexErrorReason::MalformedNumber, start);
+        }
+    }
+
+    fn word(&mut self, start: usize) {
+        self.bump_while(is_word_char);
+        let text = &self.source[start..self.pos];
+        if matches!(text, "http" | "https") && self.rest().starts_with("://") {
+            self.pos += "://".len();
+            let path_start = self.pos;
+            self.bump_while(|c| c != ' ' && c != '\t' && !is_line_terminator(c));
+            if self.pos == path_start {
+                self.push_error(LexErrorReason::MalformedUrl, start);
+            } else {
+                self.push(SyntaxKind::UrlLiteral, start);
+            }
+            return;
+        }
+        match Keyword::from_text(text) {
+            Some(keyword) => self.push(keyword.into(), start),
+            None => self.push_error(LexErrorReason::UnknownWord, start),
         }
     }
 
@@ -222,6 +255,17 @@ fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '-' | '_')
 }
 
+fn is_date_shaped(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(i, b)| matches!(i, 4 | 7) || b.is_ascii_digit())
+}
+
 #[cfg(test)]
 mod tests {
     use rowan::TextRange;
@@ -229,7 +273,8 @@ mod tests {
     use super::{LexError, LexErrorReason, lex, text_size};
     use crate::Keyword;
     use crate::SyntaxKind::{
-        self, Colon, Comma, Comment, Error, Identifier, Newline, StringLiteral, Whitespace,
+        self, Colon, Comma, Comment, DateLiteral, Error, Identifier, IntegerLiteral, Newline,
+        StringLiteral, UrlLiteral, Whitespace,
     };
 
     fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
@@ -553,5 +598,118 @@ mod tests {
     fn multibyte_characters_are_measured_in_bytes() {
         let errors = check("é ", &[(Error, "é"), (Whitespace, " ")]);
         assert_eq!(errors[0].range, range(0, 2));
+    }
+
+    #[test]
+    fn integer_literals() {
+        check("3", &[(IntegerLiteral, "3")]);
+        check("007", &[(IntegerLiteral, "007")]);
+        check(
+            "3,4",
+            &[(IntegerLiteral, "3"), (Comma, ","), (IntegerLiteral, "4")],
+        );
+        check("3#c", &[(IntegerLiteral, "3"), (Comment, "#c")]);
+        check(
+            "ranked max 10",
+            &[
+                (Keyword::Ranked.into(), "ranked"),
+                (Whitespace, " "),
+                (Keyword::Max.into(), "max"),
+                (Whitespace, " "),
+                (IntegerLiteral, "10"),
+            ],
+        );
+    }
+
+    #[test]
+    fn date_literals_match_the_shape_only() {
+        check("2026-11-05", &[(DateLiteral, "2026-11-05")]);
+        check("0000-00-00", &[(DateLiteral, "0000-00-00")]);
+        check("2026-13-45", &[(DateLiteral, "2026-13-45")]);
+        check(
+            "date 2026-11-05\n",
+            &[
+                (Keyword::Date.into(), "date"),
+                (Whitespace, " "),
+                (DateLiteral, "2026-11-05"),
+                (Newline, "\n"),
+            ],
+        );
+    }
+
+    #[test]
+    fn malformed_numbers_are_one_error_each() {
+        for source in [
+            "12abc",
+            "2026-11-5",
+            "2026-11-055",
+            "3_000",
+            "1-2",
+            "2026-11-05x",
+            "20261105-",
+        ] {
+            let errors = check(source, &[(Error, source)]);
+            assert_eq!(
+                errors[0].reason,
+                LexErrorReason::MalformedNumber,
+                "{source:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn url_literals_run_to_whitespace() {
+        check(
+            "https://leepatel2026.example",
+            &[(UrlLiteral, "https://leepatel2026.example")],
+        );
+        check(
+            "http://a.b/c?d=1&e=2#frag",
+            &[(UrlLiteral, "http://a.b/c?d=1&e=2#frag")],
+        );
+        check(
+            "https://x.y/\"quoted\"",
+            &[(UrlLiteral, "https://x.y/\"quoted\"")],
+        );
+        check(
+            "website https://x.y # c\n",
+            &[
+                (Keyword::Website.into(), "website"),
+                (Whitespace, " "),
+                (UrlLiteral, "https://x.y"),
+                (Whitespace, " "),
+                (Comment, "# c"),
+                (Newline, "\n"),
+            ],
+        );
+        check(
+            "https://x.y\r\n",
+            &[(UrlLiteral, "https://x.y"), (Newline, "\r\n")],
+        );
+    }
+
+    #[test]
+    fn url_requires_scheme_separator_and_body() {
+        let errors = check("https://", &[(Error, "https://")]);
+        assert_eq!(errors[0].reason, LexErrorReason::MalformedUrl);
+        let errors = check(
+            "https:// x",
+            &[(Error, "https://"), (Whitespace, " "), (Error, "x")],
+        );
+        assert_eq!(errors[0].reason, LexErrorReason::MalformedUrl);
+        let errors = check("https:", &[(Error, "https"), (Colon, ":")]);
+        assert_eq!(errors[0].reason, LexErrorReason::UnknownWord);
+        let errors = check(
+            "ftp://x",
+            &[
+                (Error, "ftp"),
+                (Colon, ":"),
+                (Error, "/"),
+                (Error, "/"),
+                (Error, "x"),
+            ],
+        );
+        assert_eq!(errors[0].reason, LexErrorReason::UnknownWord);
+        assert_eq!(errors[1].reason, LexErrorReason::UnexpectedCharacter);
     }
 }
