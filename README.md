@@ -62,11 +62,22 @@ npm run build
 npm test
 ```
 
+### Versioning
+
+The specification, this workspace, the npm package, and the editor extension share one version
+number. Its major and minor components are the language version that documents declare with
+`oval MAJOR.MINOR`; the patch component is free for fixes that leave the language alone.
+
+The version lives in two places here: `[workspace.package]` in `Cargo.toml`, which every crate
+inherits and from which `oval_syntax::SPEC_VERSION` is derived, and `packages/oval/package.json`.
+A test in `oval-wasm` fails when they differ.
+
 ### Releasing
 
-A release is a tag. Set `version` in `packages/oval/package.json`, commit, tag the commit
-`v<version>`, and push the tag. The release workflow builds the package, runs its tests, checks
-that the tag matches the version, and publishes to npm with provenance through
+A release is a tag. Set the version in both places (`npm version <version> --no-git-tag-version`
+in `packages/oval` updates the lockfile too), commit, tag the commit `v<version>`, and push the
+tag. The release workflow builds the package, runs its tests, checks that the tag matches both
+versions, and publishes to npm with provenance through
 [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no token is stored anywhere.
 
 npm only lets a package trust a workflow once the package exists, so the first version of

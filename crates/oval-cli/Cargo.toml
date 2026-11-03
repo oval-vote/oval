@@ -1,6 +1,6 @@
 [package]
 name = "oval-cli"
-version = "0.0.0"
+version.workspace = true
 description = "Command line tools for the Oval voting guide format"
 edition.workspace = true
 rust-version.workspace = true

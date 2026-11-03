@@ -25,8 +25,25 @@ impl fmt::Display for SpecVersion {
     }
 }
 
-/// The version of the Oval specification this crate implements.
-pub const SPEC_VERSION: SpecVersion = SpecVersion { major: 0, minor: 1 };
+/// The version of the Oval specification this crate implements: the major and minor components
+/// of the crate's own version.
+pub const SPEC_VERSION: SpecVersion = SpecVersion {
+    major: decimal(env!("CARGO_PKG_VERSION_MAJOR")),
+    minor: decimal(env!("CARGO_PKG_VERSION_MINOR")),
+};
+
+#[allow(clippy::cast_lossless)]
+const fn decimal(digits: &str) -> u32 {
+    let bytes = digits.as_bytes();
+    let mut value = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        assert!(bytes[i].is_ascii_digit(), "a version component is decimal");
+        value = value * 10 + (bytes[i] - b'0') as u32;
+        i += 1;
+    }
+    value
+}
 
 /// The Oval language, for use with [`rowan`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -58,8 +75,14 @@ mod tests {
     use super::{SPEC_VERSION, SpecVersion};
 
     #[test]
-    fn spec_version_displays_as_major_minor() {
+    fn spec_version_is_the_crate_version_without_its_patch() {
+        let crate_version = env!("CARGO_PKG_VERSION");
+        assert!(crate_version.starts_with(&format!("{SPEC_VERSION}.")));
         assert_eq!(SPEC_VERSION.to_string(), "0.1");
+    }
+
+    #[test]
+    fn spec_version_displays_as_major_minor() {
         assert_eq!(
             SpecVersion {
                 major: 12,
