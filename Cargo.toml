@@ -11,6 +11,7 @@ authors = ["Varun Santhanam"]
 publish = false
 
 [workspace.dependencies]
+rowan = "0.17"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
