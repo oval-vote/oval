@@ -2,7 +2,11 @@
 
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
-use crate::SyntaxKind::{self, Dedent, Document, ErrorNode, Indent, Newline};
+use crate::SyntaxKind::{
+    self, BallotKeyword, CandidateKeyword, Colon, DateField, DateKeyword, DateLiteral, Dedent,
+    Document, ElectionKeyword, ErrorNode, GuideKeyword, Indent, MarkdownBlock, MarkdownField,
+    Newline, NoteKeyword, PartyKeyword, StringField, StringLiteral,
+};
 use crate::SyntaxNode;
 use crate::lexer::{LexError, Token, lex};
 
@@ -91,11 +95,145 @@ struct Parser<'a> {
 impl Parser<'_> {
     fn document(&mut self) {
         self.builder.start_node(Document.into());
-        while self.current().is_some() {
-            self.recover_item(&[]);
+        let mut allowed = vec![
+            GuideKeyword,
+            ElectionKeyword,
+            DateKeyword,
+            NoteKeyword,
+            PartyKeyword,
+            CandidateKeyword,
+            BallotKeyword,
+        ];
+        while let Some(kind) = self.current() {
+            let field = match kind {
+                GuideKeyword | ElectionKeyword => Some((StringField, StringLiteral)),
+                DateKeyword => Some((DateField, DateLiteral)),
+                NoteKeyword => Some((MarkdownField, MarkdownBlock)),
+                _ => None,
+            };
+            match field {
+                Some(_) if !allowed.contains(&kind) => self.duplicate_field(kind, &allowed),
+                Some((node, value)) => {
+                    allowed.retain(|k| *k != kind);
+                    self.field(node, value);
+                }
+                None => self.recover_item(&allowed),
+            }
         }
         self.eat_trivia();
         self.finish_node();
+    }
+
+    fn field(&mut self, node: SyntaxKind, value: SyntaxKind) {
+        self.start_node(node);
+        self.bump();
+        if value == MarkdownBlock {
+            self.markdown_value();
+        } else {
+            self.expect_value(value);
+            self.end_of_line();
+        }
+        self.finish_node();
+    }
+
+    fn markdown_value(&mut self) {
+        if !self.expect(Colon) {
+            self.end_of_line();
+            return;
+        }
+        if self.at_line_end() {
+            self.end_of_line();
+            if !self.eat(MarkdownBlock) {
+                self.error(&[MarkdownBlock]);
+            }
+        } else {
+            self.end_of_line();
+        }
+    }
+
+    fn duplicate_field(&mut self, kind: SyntaxKind, allowed: &[SyntaxKind]) {
+        self.start_node(ErrorNode);
+        let start = self.offset;
+        let (node, value) = match kind {
+            DateKeyword => (DateField, DateLiteral),
+            NoteKeyword => (MarkdownField, MarkdownBlock),
+            _ => (StringField, StringLiteral),
+        };
+        self.field(node, value);
+        self.finish_node();
+        self.errors.push(ParseError {
+            expected: allowed.to_vec(),
+            found: Some(kind),
+            range: TextRange::new(text_size(start), text_size(self.offset)),
+        });
+    }
+
+    fn expect_value(&mut self, kind: SyntaxKind) {
+        if self.eat(kind) {
+            return;
+        }
+        if self.at_line_end() {
+            self.error(&[kind]);
+        } else {
+            self.recover_line(&[kind]);
+        }
+    }
+
+    fn end_of_line(&mut self) {
+        if !self.at_line_end() {
+            self.recover_line(&[Newline]);
+        }
+        self.expect(Newline);
+    }
+
+    fn at_line_end(&self) -> bool {
+        matches!(self.current(), None | Some(Newline | Indent | Dedent))
+    }
+
+    fn recover_line(&mut self, expected: &[SyntaxKind]) {
+        self.start_node(ErrorNode);
+        let start = self.offset;
+        let found = self.current();
+        while !self.at_line_end() {
+            self.bump();
+        }
+        self.finish_node();
+        self.errors.push(ParseError {
+            expected: expected.to_vec(),
+            found,
+            range: TextRange::new(text_size(start), text_size(self.offset)),
+        });
+    }
+
+    fn eat(&mut self, kind: SyntaxKind) -> bool {
+        if self.at(kind) {
+            self.bump();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn expect(&mut self, kind: SyntaxKind) -> bool {
+        if self.eat(kind) {
+            return true;
+        }
+        self.error(&[kind]);
+        false
+    }
+
+    fn error(&mut self, expected: &[SyntaxKind]) {
+        let offset = self.tokens[self.pos..]
+            .iter()
+            .take_while(|token| token.kind.is_trivia())
+            .map(|token| usize::from(token.len))
+            .sum::<usize>()
+            + self.offset;
+        self.errors.push(ParseError {
+            expected: expected.to_vec(),
+            found: self.current(),
+            range: TextRange::empty(text_size(offset)),
+        });
     }
 
     fn current(&self) -> Option<SyntaxKind> {
@@ -281,39 +419,228 @@ ballot @franklin \"State of Franklin\"
         }
     }
 
+    const TOP_LEVEL: [SyntaxKind; 7] = [
+        SyntaxKind::GuideKeyword,
+        SyntaxKind::ElectionKeyword,
+        SyntaxKind::DateKeyword,
+        SyntaxKind::NoteKeyword,
+        SyntaxKind::PartyKeyword,
+        SyntaxKind::CandidateKeyword,
+        SyntaxKind::BallotKeyword,
+    ];
+
     #[test]
-    fn every_line_is_an_error_item_until_productions_exist() {
-        let parse = parse("guide \"x\"\nparty @d \"D\"\n");
+    fn guide_fields_from_the_spec_example() {
+        let source = "\
+guide \"Franklin Voter Guide\"
+election \"November 3, 2026 General Election\"
+date 2026-11-03
+
+note:
+  Written by the Franklin Civic Alliance.
+";
+        let parse = parse(source);
+        assert_eq!(parse.errors(), []);
         assert_eq!(
             dump(&parse.syntax()),
             "\
 Document
-  ErrorNode
+  StringField
     GuideKeyword \"guide\"
-    StringLiteral \"\\\"x\\\"\"
+    StringLiteral \"\\\"Franklin Voter Guide\\\"\"
     Newline \"\\n\"
-  ErrorNode
-    PartyKeyword \"party\"
-    Identifier \"@d\"
-    StringLiteral \"\\\"D\\\"\"
+  StringField
+    ElectionKeyword \"election\"
+    StringLiteral \"\\\"November 3, 2026 General Election\\\"\"
+    Newline \"\\n\"
+  DateField
+    DateKeyword \"date\"
+    DateLiteral \"2026-11-03\"
+    Newline \"\\n\"
+  MarkdownField
+    NoteKeyword \"note\"
+    Colon \":\"
+    Newline \"\\n\"
+    MarkdownBlock \"  Written by the Franklin Civic Alliance.\\n\"
+"
+        );
+    }
+
+    #[test]
+    fn guide_fields_may_appear_in_any_order() {
+        let parse = parse("date 2026-11-03\nnote:\n  x\nguide \"g\"\nelection \"e\"");
+        assert_eq!(parse.errors(), []);
+        let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::DateField,
+                SyntaxKind::MarkdownField,
+                SyntaxKind::StringField,
+                SyntaxKind::StringField
+            ]
+        );
+    }
+
+    #[test]
+    fn a_missing_value_is_reported_where_it_should_be() {
+        let parse = parse("guide\n");
+        assert_eq!(
+            dump(&parse.syntax()),
+            "Document\n  StringField\n    GuideKeyword \"guide\"\n    Newline \"\\n\"\n"
+        );
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::StringLiteral],
+                found: Some(SyntaxKind::Newline),
+                range: range(5, 5),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_wrong_value_is_one_error_covering_the_rest_of_the_line() {
+        let parse = parse("guide 2026-11-03 yes\n");
+        assert_eq!(
+            dump(&parse.syntax()),
+            "\
+Document
+  StringField
+    GuideKeyword \"guide\"
+    ErrorNode
+      DateLiteral \"2026-11-03\"
+      YesKeyword \"yes\"
     Newline \"\\n\"
 "
         );
         assert_eq!(
             parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::StringLiteral],
+                found: Some(SyntaxKind::DateLiteral),
+                range: range(6, 20),
+            })]
+        );
+    }
+
+    #[test]
+    fn extra_tokens_after_a_value_are_an_error_node_inside_the_field() {
+        let parse = parse("guide \"x\" \"y\"\n");
+        assert_eq!(
+            dump(&parse.syntax()),
+            "\
+Document
+  StringField
+    GuideKeyword \"guide\"
+    StringLiteral \"\\\"x\\\"\"
+    ErrorNode
+      StringLiteral \"\\\"y\\\"\"
+    Newline \"\\n\"
+"
+        );
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::Newline],
+                found: Some(SyntaxKind::StringLiteral),
+                range: range(10, 13),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_repeated_field_is_an_error_node_and_names_what_was_still_allowed() {
+        let parse = parse("guide \"a\"\ndate 2026-11-03\nguide \"b\"\n");
+        let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(
+            kinds,
             [
-                SyntaxError::Parse(ParseError {
-                    expected: vec![],
-                    found: Some(SyntaxKind::GuideKeyword),
-                    range: range(0, 10),
-                }),
-                SyntaxError::Parse(ParseError {
-                    expected: vec![],
-                    found: Some(SyntaxKind::PartyKeyword),
-                    range: range(10, 23),
-                }),
+                SyntaxKind::StringField,
+                SyntaxKind::DateField,
+                SyntaxKind::ErrorNode
             ]
         );
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![
+                    SyntaxKind::ElectionKeyword,
+                    SyntaxKind::NoteKeyword,
+                    SyntaxKind::PartyKeyword,
+                    SyntaxKind::CandidateKeyword,
+                    SyntaxKind::BallotKeyword,
+                ],
+                found: Some(SyntaxKind::GuideKeyword),
+                range: range(26, 36),
+            })]
+        );
+    }
+
+    #[test]
+    fn a_markdown_field_needs_a_colon_a_newline_and_a_body() {
+        let result = parse("note\n");
+        assert_eq!(result.errors()[0].range(), range(4, 4));
+        assert!(matches!(
+            &result.errors()[0],
+            SyntaxError::Parse(e) if e.expected == [SyntaxKind::Colon] && e.found == Some(SyntaxKind::Newline)
+        ));
+
+        let result = parse("note: yes\n");
+        assert_eq!(
+            dump(&result.syntax()),
+            "\
+Document
+  MarkdownField
+    NoteKeyword \"note\"
+    Colon \":\"
+    ErrorNode
+      YesKeyword \"yes\"
+    Newline \"\\n\"
+"
+        );
+        assert_eq!(result.errors().len(), 1);
+
+        let result = parse("note:\nguide \"g\"\n");
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::MarkdownBlock],
+                found: Some(SyntaxKind::GuideKeyword),
+                range: range(6, 6),
+            })]
+        );
+        let kinds: Vec<SyntaxKind> = result.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(kinds, [SyntaxKind::MarkdownField, SyntaxKind::StringField]);
+    }
+
+    #[test]
+    fn an_unknown_top_level_line_names_everything_that_could_start_one() {
+        let parse = parse("party @d \"D\"\n");
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: TOP_LEVEL.to_vec(),
+                found: Some(SyntaxKind::PartyKeyword),
+                range: range(0, 13),
+            })]
+        );
+    }
+
+    #[test]
+    fn an_unexpected_block_after_a_field_is_one_error() {
+        let parse = parse("guide \"x\"\n  note:\n    body\n");
+        let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(kinds, [SyntaxKind::StringField, SyntaxKind::ErrorNode]);
+        assert_eq!(parse.errors().len(), 1);
+        assert!(
+            matches!(&parse.errors()[0], SyntaxError::Parse(e) if e.found == Some(SyntaxKind::Indent))
+        );
+    }
+
+    #[test]
+    fn impossible_dates_are_left_to_validation() {
+        assert_eq!(parse("date 2026-13-45\n").errors(), []);
     }
 
     #[test]
