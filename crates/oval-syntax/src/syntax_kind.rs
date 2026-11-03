@@ -123,6 +123,7 @@ define_syntax! {
         Comment: "A `#` comment running to the end of the line.",
         Whitespace: "Spaces within a line.",
         Newline: "The end of a non-blank line.",
+        BlankLine: "The end of a line with no tokens.",
         Indent: "An increase in indentation.",
         Dedent: "A decrease in indentation.",
         Error: "Text the lexer could not tokenize.",
@@ -169,7 +170,7 @@ impl SyntaxKind {
 
     /// Whether this kind is a token the parser ignores.
     pub const fn is_trivia(self) -> bool {
-        matches!(self, Self::Comment | Self::Whitespace)
+        matches!(self, Self::Comment | Self::Whitespace | Self::BlankLine)
     }
 }
 
@@ -243,6 +244,7 @@ mod tests {
             assert!(!kind.is_trivia() || kind.is_token(), "{kind:?}");
         }
         assert!(SyntaxKind::Comment.is_trivia());
+        assert!(SyntaxKind::BlankLine.is_trivia());
         assert!(!SyntaxKind::Newline.is_trivia());
     }
 }
