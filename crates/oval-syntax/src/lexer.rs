@@ -36,7 +36,7 @@ pub enum LexErrorReason {
     /// A backslash in a string followed by something other than `"` or `\\`.
     InvalidEscape,
 
-    /// A word beginning with a digit that is neither an integer nor a date.
+    /// A word beginning with a digit that is neither an integer, a date, nor a version.
     MalformedNumber,
 
     /// A URL scheme and `://` with nothing after them.
@@ -289,12 +289,14 @@ impl Lexer<'_> {
     }
 
     fn number(&mut self, start: usize) {
-        self.bump_while(is_word_char);
+        self.bump_while(|c| is_word_char(c) || c == '.');
         let text = &self.source[start..self.pos];
         if text.bytes().all(|b| b.is_ascii_digit()) {
             self.push(SyntaxKind::IntegerLiteral, start);
         } else if is_date_shaped(text) {
             self.push(SyntaxKind::DateLiteral, start);
+        } else if is_version_shaped(text) {
+            self.push(SyntaxKind::VersionLiteral, start);
         } else {
             self.push_error(LexErrorReason::MalformedNumber, start);
         }
@@ -422,6 +424,16 @@ fn is_date_shaped(text: &str) -> bool {
             .all(|(i, b)| matches!(i, 4 | 7) || b.is_ascii_digit())
 }
 
+fn is_version_shaped(text: &str) -> bool {
+    fn is_version_part(part: &str) -> bool {
+        part.bytes().all(|b| b.is_ascii_digit())
+            && !part.is_empty()
+            && (part == "0" || !part.starts_with('0'))
+    }
+    text.split_once('.')
+        .is_some_and(|(major, minor)| is_version_part(major) && is_version_part(minor))
+}
+
 #[cfg(test)]
 mod tests {
     use rowan::TextRange;
@@ -430,7 +442,8 @@ mod tests {
     use crate::Keyword;
     use crate::SyntaxKind::{
         self, BlankLine, Colon, Comma, Comment, DateLiteral, Dedent, Error, Identifier, Indent,
-        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, Whitespace,
+        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, VersionLiteral,
+        Whitespace,
     };
 
     fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
@@ -877,6 +890,22 @@ mod tests {
     }
 
     #[test]
+    fn version_literals_have_one_spelling_each() {
+        check("0.1", &[(VersionLiteral, "0.1"), (Newline, "")]);
+        check("1.0", &[(VersionLiteral, "1.0"), (Newline, "")]);
+        check("12.30", &[(VersionLiteral, "12.30"), (Newline, "")]);
+        check(
+            "oval 0.1\n",
+            &[
+                (Keyword::Oval.into(), "oval"),
+                (Whitespace, " "),
+                (VersionLiteral, "0.1"),
+                (Newline, "\n"),
+            ],
+        );
+    }
+
+    #[test]
     fn malformed_numbers_are_one_error_each() {
         for source in [
             "12abc",
@@ -886,6 +915,12 @@ mod tests {
             "1-2",
             "2026-11-05x",
             "20261105-",
+            "01.1",
+            "1.01",
+            "1.",
+            "1.x",
+            "1.2.3",
+            "0.1-rc",
         ] {
             let errors = check(source, &[(Error, source), (Newline, "")]);
             assert_eq!(

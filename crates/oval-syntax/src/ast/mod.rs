@@ -12,7 +12,7 @@ use rowan::TextRange;
 
 pub use ballot::{Ballot, BallotItem, Section, SectionItem};
 pub use contest::{Campaign, Contest, ContestKind, Member};
-pub use document::{Candidate, Document, Party, PartyReference};
+pub use document::{Candidate, Document, Party, PartyReference, VersionMarker};
 pub use measure::{Measure, MeasureRecommend, Position, StringListField};
 pub use recommend::{ContestRecommend, Oppose, Support};
 

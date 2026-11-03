@@ -1,13 +1,15 @@
 use super::Parser;
 use crate::SyntaxKind::{
     self, AbbreviationKeyword, BallotKeyword, Candidate, CandidateKeyword, DateKeyword,
-    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, Identifier, NoteKeyword, Party,
-    PartyKeyword, PartyReference, StringLiteral, WebsiteKeyword,
+    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, Identifier, NoteKeyword,
+    OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionLiteral, VersionMarker,
+    WebsiteKeyword,
 };
 
 pub(super) const GUIDE_FIELDS: &[SyntaxKind] =
     &[GuideKeyword, ElectionKeyword, DateKeyword, NoteKeyword];
 pub(super) const TOP_LEVEL: &[SyntaxKind] = &[
+    OvalKeyword,
     GuideKeyword,
     ElectionKeyword,
     DateKeyword,
@@ -25,12 +27,16 @@ impl Parser<'_> {
         let mut remaining = TOP_LEVEL.to_vec();
         while let Some(kind) = self.current() {
             match kind {
+                OvalKeyword => {
+                    self.field_once(kind, &mut remaining, Self::version_marker);
+                }
                 GuideKeyword | ElectionKeyword | DateKeyword | NoteKeyword => {
+                    remaining.retain(|k| *k != OvalKeyword);
                     self.field_once(kind, &mut remaining, Self::simple_field);
                 }
                 PartyKeyword | CandidateKeyword => {
                     if remaining.contains(&kind) {
-                        remaining.retain(|k| !GUIDE_FIELDS.contains(k));
+                        remaining.retain(|k| *k != OvalKeyword && !GUIDE_FIELDS.contains(k));
                         self.declaration(kind);
                     } else {
                         self.misplaced(kind, &remaining, Self::declaration);
@@ -45,6 +51,15 @@ impl Parser<'_> {
         }
         self.eat_trivia();
         self.finish_node();
+    }
+
+    pub(super) fn version_marker(&mut self, _kind: SyntaxKind) -> bool {
+        self.start_node(VersionMarker);
+        self.bump();
+        self.expect_value(VersionLiteral);
+        self.end_of_line();
+        self.finish_node();
+        true
     }
 
     pub(super) fn declaration(&mut self, kind: SyntaxKind) -> bool {
