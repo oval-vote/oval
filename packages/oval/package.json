@@ -1,0 +1,27 @@
+{
+  "name": "@oval-vote/oval",
+  "version": "0.0.0",
+  "description": "Parse, validate, compile, and format Oval voting guides",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "./pkg/oval_wasm.js",
+  "types": "./pkg/oval_wasm.d.ts",
+  "files": [
+    "pkg/oval_wasm.js",
+    "pkg/oval_wasm.d.ts",
+    "pkg/oval_wasm_bg.wasm",
+    "pkg/oval_wasm_bg.wasm.d.ts"
+  ],
+  "scripts": {
+    "build": "wasm-pack build ../../crates/oval-wasm --target nodejs --out-dir ../../packages/oval/pkg --out-name oval_wasm",
+    "test": "node --test test/*.test.js"
+  },
+  "repository": "github:oval-vote/oval",
+  "homepage": "https://oval.vote",
+  "devDependencies": {
+    "wasm-pack": "0.15.1"
+  },
+  "allowScripts": {
+    "wasm-pack@0.15.1": true
+  }
+}

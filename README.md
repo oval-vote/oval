@@ -31,10 +31,14 @@ cargo install --path crates/oval-cli
 | `oval-core` | Identifier resolution, the validation rules, and the compiled model |
 | `oval-format` | Formatter |
 | `oval-cli` | The `oval` binary |
+| `oval-wasm` | WebAssembly bindings, published to npm as `@oval-vote/oval` from `packages/oval` |
 
 ## Developing
 
-The toolchain is pinned in `rust-toolchain.toml`; rustup picks it up automatically.
+Versions are pinned in `rust-toolchain.toml` (Rust, with its components and the WebAssembly
+target) and `.node-version` (Node). With [mise](https://mise.jdx.dev) installed, `mise install` sets
+up both; without it, rustup reads the toolchain file on its own and Node must be installed
+separately. JavaScript tooling is a dev dependency of `packages/oval`.
 
 ```sh
 cargo fmt --all --check
@@ -44,3 +48,16 @@ cargo test --workspace
 
 `crates/oval-syntax/tests/fixtures/franklin.oval` is a fictional guide at the scale of a real
 metropolitan ballot and is used as the end-to-end fixture by every crate.
+
+## The npm package
+
+`@oval-vote/oval` exposes `check`, `compile`, and `format` to JavaScript through WebAssembly.
+`wasm-pack` is a dev dependency of the package; the toolchain file adds the
+`wasm32-unknown-unknown` target.
+
+```sh
+cd packages/oval
+npm ci
+npm run build
+npm test
+```

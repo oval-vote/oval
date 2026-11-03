@@ -1,4 +1,6 @@
 /target
+/packages/oval/pkg
+node_modules/
 **/*.rs.bk
 *.pdb
 

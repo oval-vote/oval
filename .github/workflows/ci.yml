@@ -15,22 +15,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: rustup show
+      - uses: jdx/mise-action@v2
       - run: cargo fmt --all --check
 
   clippy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: rustup show
+      - uses: jdx/mise-action@v2
       - run: cargo clippy --workspace --all-targets
 
   doc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - run: rustup show
+      - uses: jdx/mise-action@v2
       - run: cargo doc --workspace --no-deps
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v2
+      - run: npm ci
+        working-directory: packages/oval
+      - run: npm run build
+        working-directory: packages/oval
+      - run: npm test
+        working-directory: packages/oval
 
   test:
     strategy:
@@ -40,5 +52,5 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      - run: rustup show
+      - uses: jdx/mise-action@v2
       - run: cargo test --workspace
