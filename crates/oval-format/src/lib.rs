@@ -1,7 +1,9 @@
 //! Formats Oval documents.
 
 use oval_syntax::parser::{ParseResult, parse};
-use oval_syntax::{SyntaxElement, SyntaxKind};
+use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxToken, WalkEvent};
+
+const INDENT: &str = "  ";
 
 /// Formats `source`, or returns the parse result when the document has syntax errors.
 pub fn format(source: &str) -> Result<String, ParseResult> {
@@ -9,35 +11,129 @@ pub fn format(source: &str) -> Result<String, ParseResult> {
     if !result.errors().is_empty() {
         return Err(result);
     }
-    let mut out = String::with_capacity(source.len());
-    let tokens = result
-        .syntax()
-        .descendants_with_tokens()
-        .filter_map(SyntaxElement::into_token);
-    for token in tokens {
-        match token.kind() {
-            SyntaxKind::Newline | SyntaxKind::BlankLine => {
-                trim_trailing_spaces(&mut out);
-                if !token.text().is_empty() {
-                    out.push('\n');
-                }
+    let mut formatter = Formatter {
+        out: String::with_capacity(source.len()),
+        depth: 0,
+        at_line_start: true,
+        pending: Vec::new(),
+        line_has_comment: false,
+    };
+    for event in result.syntax().preorder_with_tokens() {
+        match event {
+            WalkEvent::Enter(SyntaxElement::Node(node)) if node.kind() == SyntaxKind::Block => {
+                formatter.depth += 1;
             }
-            SyntaxKind::MarkdownBlock => push_block(&mut out, token.text()),
-            _ => out.push_str(token.text()),
+            WalkEvent::Leave(SyntaxElement::Node(node)) if node.kind() == SyntaxKind::Block => {
+                formatter.depth -= 1;
+            }
+            WalkEvent::Enter(SyntaxElement::Token(token)) => formatter.token(&token),
+            _ => {}
         }
     }
-    trim_trailing_spaces(&mut out);
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    Ok(out)
+    Ok(formatter.finish())
 }
 
-fn push_block(out: &mut String, text: &str) {
+enum Pending {
+    Comment(String),
+    Blank,
+}
+
+struct Formatter {
+    out: String,
+    depth: usize,
+    at_line_start: bool,
+    pending: Vec<Pending>,
+    line_has_comment: bool,
+}
+
+impl Formatter {
+    fn token(&mut self, token: &SyntaxToken) {
+        match token.kind() {
+            SyntaxKind::Whitespace | SyntaxKind::Indent | SyntaxKind::Dedent => {}
+            SyntaxKind::Comment if self.at_line_start => {
+                self.pending.push(Pending::Comment(token.text().to_owned()));
+                self.line_has_comment = true;
+            }
+            SyntaxKind::Comment => {
+                self.out.push(' ');
+                self.out.push_str(token.text());
+            }
+            SyntaxKind::BlankLine if self.line_has_comment => self.line_has_comment = false,
+            SyntaxKind::BlankLine if !self.pending.is_empty() => self.pending.push(Pending::Blank),
+            SyntaxKind::Newline | SyntaxKind::BlankLine => {
+                if !token.text().is_empty() {
+                    self.out.push('\n');
+                }
+                self.at_line_start = true;
+            }
+            SyntaxKind::MarkdownBlock => {
+                self.flush(self.depth);
+                self.markdown(token.text());
+            }
+            kind => {
+                if self.at_line_start {
+                    self.flush(self.depth);
+                    self.indent(self.depth);
+                } else if !matches!(kind, SyntaxKind::Colon | SyntaxKind::Comma) {
+                    self.out.push(' ');
+                }
+                self.out.push_str(token.text());
+                self.at_line_start = false;
+            }
+        }
+    }
+
+    fn flush(&mut self, depth: usize) {
+        for pending in std::mem::take(&mut self.pending) {
+            match pending {
+                Pending::Comment(text) => {
+                    self.indent(depth);
+                    self.out.push_str(&text);
+                    self.out.push('\n');
+                }
+                Pending::Blank => self.out.push('\n'),
+            }
+        }
+    }
+
+    fn markdown(&mut self, text: &str) {
+        let lines: Vec<&str> = split_lines(text);
+        let common = lines
+            .iter()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.len() - line.trim_start_matches(' ').len())
+            .min()
+            .unwrap_or(0);
+        for line in lines {
+            if !line.trim().is_empty() {
+                self.indent(self.depth + 1);
+                self.out.push_str(&line[common..]);
+            }
+            self.out.push('\n');
+        }
+        self.at_line_start = true;
+    }
+
+    fn indent(&mut self, depth: usize) {
+        for _ in 0..depth {
+            self.out.push_str(INDENT);
+        }
+    }
+
+    fn finish(mut self) -> String {
+        self.flush(0);
+        if !self.out.is_empty() && !self.out.ends_with('\n') {
+            self.out.push('\n');
+        }
+        self.out
+    }
+}
+
+fn split_lines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
     let mut rest = text;
     while let Some(i) = rest.find(['\n', '\r']) {
-        out.push_str(rest[..i].trim_end_matches(' '));
-        out.push('\n');
+        lines.push(&rest[..i]);
         let after = if rest[i..].starts_with("\r\n") {
             i + 2
         } else {
@@ -45,13 +141,10 @@ fn push_block(out: &mut String, text: &str) {
         };
         rest = &rest[after..];
     }
-    out.push_str(rest.trim_end_matches(' '));
-}
-
-fn trim_trailing_spaces(out: &mut String) {
-    while out.ends_with(' ') {
-        out.pop();
+    if !rest.is_empty() {
+        lines.push(rest);
     }
+    lines
 }
 
 #[cfg(test)]
@@ -60,6 +153,7 @@ mod tests {
 
     use oval_syntax::SyntaxElement;
     use oval_syntax::SyntaxKind::{Dedent, Indent, MarkdownBlock, Newline};
+    use oval_syntax::ast::{AstNode, MarkdownField};
     use oval_syntax::parser::parse;
 
     use super::format;
@@ -85,6 +179,15 @@ mod tests {
         out
     }
 
+    fn markdown_values(source: &str) -> Vec<String> {
+        parse(source)
+            .syntax()
+            .descendants()
+            .filter_map(MarkdownField::cast)
+            .filter_map(|f| f.value())
+            .collect()
+    }
+
     fn check(source: &str, expected: &str) {
         let formatted = format(source).expect("formats");
         assert_eq!(formatted, expected);
@@ -94,6 +197,11 @@ mod tests {
             "idempotent"
         );
         assert_eq!(shape(&formatted), shape(source), "same tree");
+        assert_eq!(
+            markdown_values(&formatted),
+            markdown_values(source),
+            "same markdown"
+        );
     }
 
     #[test]
@@ -110,10 +218,10 @@ mod tests {
     }
 
     #[test]
-    fn trailing_spaces_are_removed_including_inside_markdown() {
+    fn trailing_spaces_are_removed_except_inside_markdown_where_they_may_be_hard_breaks() {
         check(
-            "guide \"G\"   \nnote:  \n  Body.   \n\n   \n  More.\n",
-            "guide \"G\"\nnote:\n  Body.\n\n\n  More.\n",
+            "guide \"G\"   \nnote:  \n  Body.  \n\n   \n  More.\n",
+            "guide \"G\"\nnote:\n  Body.  \n\n\n  More.\n",
         );
     }
 
@@ -133,5 +241,50 @@ mod tests {
     fn comments_and_blank_lines_survive() {
         let source = "# lead\n\nguide \"G\" # trail\n\n\n# tail\n";
         check(source, source);
+    }
+
+    #[test]
+    fn indentation_is_two_spaces_per_block() {
+        check(
+            "ballot @b \"B\"\n    section \"S\"\n            contest @c \"C\" single\n                        campaign @a \"A\"\n                                designation \"d\"\n                        recommend\n                                support @a\n",
+            "ballot @b \"B\"\n  section \"S\"\n    contest @c \"C\" single\n      campaign @a \"A\"\n        designation \"d\"\n      recommend\n        support @a\n",
+        );
+        check(
+            "ballot @b \"B\"\n ballot @c \"C\"\n   measure @m \"M\"\n     recommend yes\n",
+            "ballot @b \"B\"\n  ballot @c \"C\"\n    measure @m \"M\"\n      recommend yes\n",
+        );
+    }
+
+    #[test]
+    fn markdown_bodies_move_with_their_field_and_keep_relative_indentation() {
+        check(
+            "ballot @b \"B\"\n    note:\n            First.\n\n            - item\n              continued\n            - next\n",
+            "ballot @b \"B\"\n  note:\n    First.\n\n    - item\n      continued\n    - next\n",
+        );
+        check("note:\n      deep\n    less\n", "note:\n    deep\n  less\n");
+    }
+
+    #[test]
+    fn tokens_are_separated_by_one_space_with_punctuation_attached() {
+        check(
+            "ballot   @b    \"B\"\n  contest @c  \"C\"   ranked   max   5\n    campaign    incumbent   @a   \"A\"\n    recommend\n      support   @a\n  measure @m \"M\"\n    supporters \"a\" ,\"b\"   ,  \"c\"\n    note :\n      x\n    recommend   yes\n",
+            "ballot @b \"B\"\n  contest @c \"C\" ranked max 5\n    campaign incumbent @a \"A\"\n    recommend\n      support @a\n  measure @m \"M\"\n    supporters \"a\", \"b\", \"c\"\n    note:\n      x\n    recommend yes\n",
+        );
+    }
+
+    #[test]
+    fn comment_lines_take_the_indentation_of_their_block() {
+        check(
+            "ballot @b \"B\"\n# about the measure\n        measure @m \"M\"\n            recommend yes    # trailing\n",
+            "ballot @b \"B\"\n  # about the measure\n  measure @m \"M\"\n    recommend yes # trailing\n",
+        );
+    }
+
+    #[test]
+    fn comments_take_the_indentation_of_the_line_that_follows() {
+        check(
+            "ballot @a \"A\"\n  measure @m \"M\"\n    recommend yes\n        # between roots\n\n        # still between\nballot @b \"B\"\n# first in block\n  measure @n \"N\"\n    recommend no\n    # end of file\n",
+            "ballot @a \"A\"\n  measure @m \"M\"\n    recommend yes\n# between roots\n\n# still between\nballot @b \"B\"\n  # first in block\n  measure @n \"N\"\n    recommend no\n# end of file\n",
+        );
     }
 }
