@@ -1,6 +1,6 @@
 use super::{
-    AstNode, DateField, Identifier, MarkdownField, StringField, UrlField, ast_node, block, child,
-    children, field, identifier, token,
+    AstNode, Ballot, DateField, Identifier, MarkdownField, StringField, UrlField, ast_node, block,
+    child, children, field, identifier, string, token,
 };
 use crate::{Keyword, SyntaxKind, SyntaxNode};
 
@@ -54,6 +54,11 @@ impl Document {
     pub fn candidates(&self) -> impl Iterator<Item = Candidate> + use<> {
         children(&self.0)
     }
+
+    /// Root ballots, in source order.
+    pub fn ballots(&self) -> impl Iterator<Item = Ballot> + use<> {
+        children(&self.0)
+    }
 }
 
 impl Party {
@@ -64,7 +69,7 @@ impl Party {
 
     /// The party's name as printed on the ballot.
     pub fn name(&self) -> Option<String> {
-        token(&self.0, SyntaxKind::StringLiteral).map(|t| super::string_value(t.text()))
+        string(&self.0)
     }
 
     /// The `abbreviation` field.
@@ -91,7 +96,7 @@ impl Candidate {
 
     /// The candidate's name as printed on the ballot.
     pub fn name(&self) -> Option<String> {
-        token(&self.0, SyntaxKind::StringLiteral).map(|t| super::string_value(t.text()))
+        string(&self.0)
     }
 
     /// The `designation` field.
@@ -118,7 +123,7 @@ impl PartyReference {
 
     /// The party's name, present only when this line declares the party.
     pub fn name(&self) -> Option<String> {
-        token(&self.0, SyntaxKind::StringLiteral).map(|t| super::string_value(t.text()))
+        string(&self.0)
     }
 
     /// Whether this line declares the party rather than referring to one declared elsewhere.
