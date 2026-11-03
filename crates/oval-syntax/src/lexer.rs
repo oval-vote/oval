@@ -76,6 +76,9 @@ pub fn lex(source: &str) -> LexResult {
         pos: 0,
         line_start: 0,
         line_has_tokens: false,
+        line_indentation: 0,
+        last_kinds: [None, None],
+        pending_block: None,
         indent_stack: vec![0],
         out: LexResult::default(),
     };
@@ -88,6 +91,9 @@ struct Lexer<'a> {
     pos: usize,
     line_start: usize,
     line_has_tokens: bool,
+    line_indentation: usize,
+    last_kinds: [Option<SyntaxKind>; 2],
+    pending_block: Option<usize>,
     indent_stack: Vec<usize>,
     out: LexResult,
 }
@@ -118,7 +124,11 @@ impl Lexer<'_> {
                 }
                 ' ' => {
                     self.bump_while(|c| c == ' ');
-                    self.push(SyntaxKind::Whitespace, start);
+                    if self.opens_markdown_body() {
+                        self.markdown_body();
+                    } else {
+                        self.push(SyntaxKind::Whitespace, start);
+                    }
                 }
                 '#' => {
                     self.bump_while(|c| !is_line_terminator(c));
@@ -159,9 +169,66 @@ impl Lexer<'_> {
         self.end_input();
     }
 
+    fn opens_markdown_body(&self) -> bool {
+        let Some(reference) = self.pending_block else {
+            return false;
+        };
+        !self.line_has_tokens
+            && self.pos - self.line_start > reference
+            && self.peek().is_some_and(|c| !is_line_terminator(c))
+    }
+
+    fn markdown_body(&mut self) {
+        let reference = self
+            .pending_block
+            .take()
+            .expect("checked by opens_markdown_body");
+        let start = self.line_start;
+        let mut end = self.line_end(self.pos);
+        let mut cursor = end;
+        while cursor < self.source.len() {
+            let content_end = self.line_content_end(cursor);
+            let line = &self.source[cursor..content_end];
+            let indentation = line.bytes().take_while(|b| *b == b' ').count();
+            let next = self.line_end(content_end);
+            if indentation == line.len() {
+                cursor = next;
+            } else if indentation > reference {
+                cursor = next;
+                end = next;
+            } else {
+                break;
+            }
+        }
+        self.pos = end;
+        self.push(SyntaxKind::MarkdownBlock, start);
+        self.line_start = self.pos;
+        self.line_has_tokens = false;
+    }
+
+    fn line_content_end(&self, from: usize) -> usize {
+        self.source[from..]
+            .find(is_line_terminator)
+            .map_or(self.source.len(), |i| from + i)
+    }
+
+    fn line_end(&self, from: usize) -> usize {
+        let content_end = self.line_content_end(from);
+        let rest = &self.source[content_end..];
+        if rest.starts_with("\r\n") {
+            content_end + 2
+        } else if rest.starts_with(['\r', '\n']) {
+            content_end + 1
+        } else {
+            content_end
+        }
+    }
+
     fn begin_line(&mut self) {
+        self.pending_block = None;
         self.line_has_tokens = true;
         let indentation = self.pos - self.line_start;
+        self.line_indentation = indentation;
         let current = *self
             .indent_stack
             .last()
@@ -201,8 +268,14 @@ impl Lexer<'_> {
             SyntaxKind::BlankLine
         };
         self.push(kind, start);
+        if self.line_has_tokens {
+            let opens =
+                matches!(self.last_kinds, [Some(k), Some(SyntaxKind::Colon)] if k.is_keyword());
+            self.pending_block = opens.then_some(self.line_indentation);
+        }
         self.line_start = self.pos;
         self.line_has_tokens = false;
+        self.last_kinds = [None, None];
     }
 
     fn end_input(&mut self) {
@@ -298,6 +371,9 @@ impl Lexer<'_> {
     fn push(&mut self, kind: SyntaxKind, start: usize) {
         let len = TextSize::try_from(self.pos - start).expect("token longer than 4 GiB");
         self.out.tokens.push(Token { kind, len });
+        if is_significant(kind) {
+            self.last_kinds = [self.last_kinds[1], Some(kind)];
+        }
     }
 
     fn report(&mut self, reason: LexErrorReason, start: usize, end: usize) {
@@ -313,6 +389,18 @@ impl Lexer<'_> {
 
 fn text_size(offset: usize) -> TextSize {
     TextSize::try_from(offset).expect("source longer than 4 GiB")
+}
+
+fn is_significant(kind: SyntaxKind) -> bool {
+    !kind.is_trivia()
+        && !matches!(
+            kind,
+            SyntaxKind::Indent
+                | SyntaxKind::Dedent
+                | SyntaxKind::Newline
+                | SyntaxKind::BlankLine
+                | SyntaxKind::MarkdownBlock
+        )
 }
 
 fn is_line_terminator(c: char) -> bool {
@@ -342,7 +430,7 @@ mod tests {
     use crate::Keyword;
     use crate::SyntaxKind::{
         self, BlankLine, Colon, Comma, Comment, DateLiteral, Dedent, Error, Identifier, Indent,
-        IntegerLiteral, Newline, StringLiteral, UrlLiteral, Whitespace,
+        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, Whitespace,
     };
 
     fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
@@ -1052,5 +1140,213 @@ mod tests {
             ],
         );
         assert_eq!(errors[0].reason, LexErrorReason::IllegalTab);
+    }
+
+    fn opener(keyword: Keyword) -> [(SyntaxKind, &'static str); 3] {
+        [
+            (keyword.into(), keyword.text()),
+            (Colon, ":"),
+            (Newline, "\n"),
+        ]
+    }
+
+    #[test]
+    fn markdown_body_is_one_raw_token() {
+        let [k, c, n] = opener(Keyword::Note);
+        check(
+            "note:\n  Hello, world.\n",
+            &[k, c, n, (MarkdownBlock, "  Hello, world.\n")],
+        );
+    }
+
+    #[test]
+    fn markdown_body_keeps_internal_blank_lines_and_indentation() {
+        let [k, c, n] = opener(Keyword::Justification);
+        check(
+            "justification:\n  First.\n\n   \n  Second.\n",
+            &[k, c, n, (MarkdownBlock, "  First.\n\n   \n  Second.\n")],
+        );
+    }
+
+    #[test]
+    fn markdown_body_is_opaque() {
+        let [k, c, n] = opener(Keyword::Note);
+        let body = "  # heading @id \"quote\" yes:\ttab\n";
+        let errors = check(&format!("note:\n{body}"), &[k, c, n, (MarkdownBlock, body)]);
+        assert_eq!(errors.len(), 0, "{errors:?}");
+    }
+
+    #[test]
+    fn markdown_body_ends_at_a_line_not_indented_past_the_keyword() {
+        check(
+            "guide\n  note:\n    body\n  party\n",
+            &[
+                (Keyword::Guide.into(), "guide"),
+                (Newline, "\n"),
+                (Whitespace, "  "),
+                (Indent, ""),
+                (Keyword::Note.into(), "note"),
+                (Colon, ":"),
+                (Newline, "\n"),
+                (MarkdownBlock, "    body\n"),
+                (Whitespace, "  "),
+                (Keyword::Party.into(), "party"),
+                (Newline, "\n"),
+                (Dedent, ""),
+            ],
+        );
+    }
+
+    #[test]
+    fn markdown_body_lines_may_vary_in_depth() {
+        check(
+            "guide\n  note:\n      deep\n    less\n  party",
+            &[
+                (Keyword::Guide.into(), "guide"),
+                (Newline, "\n"),
+                (Whitespace, "  "),
+                (Indent, ""),
+                (Keyword::Note.into(), "note"),
+                (Colon, ":"),
+                (Newline, "\n"),
+                (MarkdownBlock, "      deep\n    less\n"),
+                (Whitespace, "  "),
+                (Keyword::Party.into(), "party"),
+                (Newline, ""),
+                (Dedent, ""),
+            ],
+        );
+    }
+
+    #[test]
+    fn markdown_body_ends_at_end_of_input() {
+        let [k, c, n] = opener(Keyword::Note);
+        check("note:\n  body", &[k, c, n, (MarkdownBlock, "  body")]);
+        check(
+            "note:\n  body\r\n",
+            &[k, c, n, (MarkdownBlock, "  body\r\n")],
+        );
+    }
+
+    #[test]
+    fn blank_lines_around_a_body_are_not_part_of_it() {
+        let [k, c, n] = opener(Keyword::Note);
+        check(
+            "note:\n\n  body\n\n\nparty",
+            &[
+                k,
+                c,
+                n,
+                (BlankLine, "\n"),
+                (MarkdownBlock, "  body\n"),
+                (BlankLine, "\n"),
+                (BlankLine, "\n"),
+                (Keyword::Party.into(), "party"),
+                (Newline, ""),
+            ],
+        );
+    }
+
+    #[test]
+    fn empty_body_produces_no_token() {
+        let [k, c, n] = opener(Keyword::Note);
+        check(
+            "note:\nparty",
+            &[k, c, n, (Keyword::Party.into(), "party"), (Newline, "")],
+        );
+        check(
+            "note:\n\nparty",
+            &[
+                k,
+                c,
+                n,
+                (BlankLine, "\n"),
+                (Keyword::Party.into(), "party"),
+                (Newline, ""),
+            ],
+        );
+        check("note:\n", &[k, c, n]);
+        check(
+            "note:",
+            &[(Keyword::Note.into(), "note"), (Colon, ":"), (Newline, "")],
+        );
+    }
+
+    #[test]
+    fn a_lower_indented_comment_ends_a_body() {
+        let [k, c, n] = opener(Keyword::Note);
+        check(
+            "note:\n  body\n# c\n",
+            &[
+                k,
+                c,
+                n,
+                (MarkdownBlock, "  body\n"),
+                (Comment, "# c"),
+                (BlankLine, "\n"),
+            ],
+        );
+    }
+
+    #[test]
+    fn content_after_the_colon_does_not_open_a_body() {
+        check(
+            "note: yes\n  no",
+            &[
+                (Keyword::Note.into(), "note"),
+                (Colon, ":"),
+                (Whitespace, " "),
+                (Keyword::Yes.into(), "yes"),
+                (Newline, "\n"),
+                (Whitespace, "  "),
+                (Indent, ""),
+                (Keyword::No.into(), "no"),
+                (Newline, ""),
+                (Dedent, ""),
+            ],
+        );
+    }
+
+    #[test]
+    fn only_a_keyword_before_the_colon_opens_a_body() {
+        check(
+            "@a:\n  yes",
+            &[
+                (Identifier, "@a"),
+                (Colon, ":"),
+                (Newline, "\n"),
+                (Whitespace, "  "),
+                (Indent, ""),
+                (Keyword::Yes.into(), "yes"),
+                (Newline, ""),
+                (Dedent, ""),
+            ],
+        );
+        check(
+            "recommend yes:\n  text\n",
+            &[
+                (Keyword::Recommend.into(), "recommend"),
+                (Whitespace, " "),
+                (Keyword::Yes.into(), "yes"),
+                (Colon, ":"),
+                (Newline, "\n"),
+                (MarkdownBlock, "  text\n"),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_trailing_comment_on_the_opener_line_is_allowed() {
+        check(
+            "note: # c\n  body\n",
+            &[
+                (Keyword::Note.into(), "note"),
+                (Colon, ":"),
+                (Whitespace, " "),
+                (Comment, "# c"),
+                (Newline, "\n"),
+                (MarkdownBlock, "  body\n"),
+            ],
+        );
     }
 }
