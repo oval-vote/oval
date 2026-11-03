@@ -60,7 +60,8 @@ impl Formatter {
             }
             SyntaxKind::BlankLine if self.line_has_comment => self.line_has_comment = false,
             SyntaxKind::BlankLine if !self.pending.is_empty() => self.pending.push(Pending::Blank),
-            SyntaxKind::Newline | SyntaxKind::BlankLine => {
+            SyntaxKind::BlankLine => self.blank(),
+            SyntaxKind::Newline => {
                 if !token.text().is_empty() {
                     self.out.push('\n');
                 }
@@ -91,7 +92,7 @@ impl Formatter {
                     self.out.push_str(&text);
                     self.out.push('\n');
                 }
-                Pending::Blank => self.out.push('\n'),
+                Pending::Blank => self.blank(),
             }
         }
     }
@@ -120,8 +121,18 @@ impl Formatter {
         }
     }
 
+    fn blank(&mut self) {
+        if !self.out.is_empty() && !self.out.ends_with("\n\n") {
+            self.out.push('\n');
+        }
+        self.at_line_start = true;
+    }
+
     fn finish(mut self) -> String {
         self.flush(0);
+        while self.out.ends_with("\n\n") {
+            self.out.pop();
+        }
         if !self.out.is_empty() && !self.out.ends_with('\n') {
             self.out.push('\n');
         }
@@ -238,8 +249,35 @@ mod tests {
     }
 
     #[test]
-    fn comments_and_blank_lines_survive() {
-        let source = "# lead\n\nguide \"G\" # trail\n\n\n# tail\n";
+    fn comments_and_single_blank_lines_survive() {
+        let source = "# lead\n\nguide \"G\" # trail\n\n# tail\n";
+        check(source, source);
+    }
+
+    #[test]
+    fn runs_of_blank_lines_collapse_to_one() {
+        check(
+            "guide \"G\"\n\n\n\nelection \"E\"\n\n\n# c\n\n\n\n# d\ndate 2026-11-03\n",
+            "guide \"G\"\n\nelection \"E\"\n\n# c\n\n# d\ndate 2026-11-03\n",
+        );
+    }
+
+    #[test]
+    fn blank_lines_at_the_start_and_end_are_removed() {
+        check("\n\n\nguide \"G\"\n\n\n\n", "guide \"G\"\n");
+        check("\n   \n# only a comment\n\n", "# only a comment\n");
+        check("\n\n", "");
+    }
+
+    #[test]
+    fn blank_lines_inside_markdown_are_content_and_are_kept() {
+        let source = "note:\n  One.\n\n\n\n  Two.\n";
+        check(source, source);
+    }
+
+    #[test]
+    fn blank_lines_around_blocks_are_the_authors_choice() {
+        let source = "ballot @b \"B\"\n\n  section \"S\"\n    measure @m \"M\"\n\n      recommend yes\n\n  measure @n \"N\"\n    recommend no\n";
         check(source, source);
     }
 
