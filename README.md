@@ -61,3 +61,14 @@ npm ci
 npm run build
 npm test
 ```
+
+### Releasing
+
+A release is a tag. Set `version` in `packages/oval/package.json`, commit, tag the commit
+`v<version>`, and push the tag. The release workflow builds the package, runs its tests, checks
+that the tag matches the version, and publishes to npm with provenance through
+[trusted publishing](https://docs.npmjs.com/trusted-publishers), so no token is stored anywhere.
+
+npm only lets a package trust a workflow once the package exists, so the first version of
+`@oval-vote/oval` was published by hand with `npm publish` from `packages/oval`. After that, the
+trusted publisher on npmjs.com is the `oval-vote/oval` repository and the `release.yml` workflow.
