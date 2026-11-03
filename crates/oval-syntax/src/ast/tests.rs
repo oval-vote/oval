@@ -1,4 +1,7 @@
-use super::{AstNode, Date, Document, markdown_value, string_value};
+use super::{
+    AstNode, BallotItem, ContestKind, Date, Document, Position, SectionItem, markdown_value,
+    string_value,
+};
 use crate::Keyword;
 use crate::parser::parse;
 
@@ -175,4 +178,346 @@ fn date_values_are_split_as_written() {
             day: 45
         })
     );
+}
+
+const FIXTURE: &str = include_str!("../../tests/fixtures/franklin.oval");
+
+#[test]
+fn ballots_sections_and_items() {
+    let doc = document(
+        "ballot @franklin \"State of Franklin\"\n  eligibility \"Everyone\"\n  section \"Offices\"\n    note:\n      Top.\n    contest @gov \"Governor\" single\n      campaign @a \"A\"\n      recommend\n        support @a\n    measure @m \"M\"\n      recommend yes\n  ballot @city \"City\"\n    measure @c \"C\"\n      recommend no\n",
+    );
+    let roots: Vec<_> = doc.ballots().collect();
+    assert_eq!(roots.len(), 1);
+    let root = &roots[0];
+    assert_eq!(
+        root.id().map(|i| i.name().to_owned()).as_deref(),
+        Some("franklin")
+    );
+    assert_eq!(root.title().as_deref(), Some("State of Franklin"));
+    assert_eq!(
+        root.eligibility().and_then(|f| f.value()).as_deref(),
+        Some("Everyone")
+    );
+    let items: Vec<_> = root.items().collect();
+    assert_eq!(items.len(), 2);
+    let BallotItem::Section(section) = &items[0] else {
+        panic!("section first")
+    };
+    let BallotItem::Ballot(sub) = &items[1] else {
+        panic!("sub-ballot second")
+    };
+    assert_eq!(section.title().as_deref(), Some("Offices"));
+    assert_eq!(
+        section.note().and_then(|f| f.value()).as_deref(),
+        Some("Top.")
+    );
+    let section_items: Vec<_> = section.items().collect();
+    assert!(
+        matches!(&section_items[0], SectionItem::Contest(c) if c.title().as_deref() == Some("Governor"))
+    );
+    assert!(
+        matches!(&section_items[1], SectionItem::Measure(m) if m.title().as_deref() == Some("M"))
+    );
+    assert_eq!(sub.title().as_deref(), Some("City"));
+    assert!(matches!(sub.items().next(), Some(BallotItem::Measure(_))));
+}
+
+fn indent(source: &str) -> String {
+    let mut out = String::new();
+    for line in source.lines() {
+        out.push_str("  ");
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
+}
+
+fn first_contest(source: &str) -> super::Contest {
+    let doc = document(&format!("ballot @b \"B\"\n{}", indent(source)));
+    let Some(BallotItem::Contest(contest)) = doc.ballots().next().and_then(|b| b.items().next())
+    else {
+        panic!("a contest")
+    };
+    contest
+}
+
+#[test]
+fn contest_kinds() {
+    let cases = [
+        ("single", ContestKind::Single),
+        ("retention", ContestKind::Retention),
+        ("multiple 3", ContestKind::Multiple { seats: Some(3) }),
+        ("multiple", ContestKind::Multiple { seats: None }),
+        ("ranked", ContestKind::Ranked { max: None }),
+        ("ranked max 10", ContestKind::Ranked { max: Some(10) }),
+    ];
+    for (text, expected) in cases {
+        let contest = first_contest(&format!("contest @c \"C\" {text}\n  note:\n    x\n"));
+        assert_eq!(contest.kind(), Some(expected), "{text}");
+    }
+    let contest = first_contest("contest @c \"C\"\n  note:\n    x\n");
+    assert_eq!(contest.kind(), None);
+}
+
+#[test]
+fn contest_fields_campaigns_and_recommendation() {
+    let contest = first_contest(
+        "contest @mayor \"Mayor\" ranked max 5\n  subtitle \"Rank five\"\n  tabulation \"IRV\"\n  campaign incumbent @b \"Bea\"\n    designation \"Mayor\"\n    website https://bea.example\n  campaign withdrawn @c \"Cas\"\n  recommend\n    support @a\n    support @b @d\n    oppose @c\n    justification:\n      Why.\n    note:\n      Also.\n",
+    );
+    assert_eq!(
+        contest.id().map(|i| i.name().to_owned()).as_deref(),
+        Some("mayor")
+    );
+    assert_eq!(
+        contest.subtitle().and_then(|f| f.value()).as_deref(),
+        Some("Rank five")
+    );
+    assert_eq!(
+        contest.tabulation().and_then(|f| f.value()).as_deref(),
+        Some("IRV")
+    );
+    let campaigns: Vec<_> = contest.campaigns().collect();
+    assert_eq!(campaigns.len(), 2);
+    assert!(campaigns[0].is_incumbent() && !campaigns[0].is_withdrawn());
+    assert!(!campaigns[1].is_incumbent() && campaigns[1].is_withdrawn());
+    assert_eq!(
+        campaigns[0]
+            .designation()
+            .and_then(|f| f.value())
+            .as_deref(),
+        Some("Mayor")
+    );
+    assert_eq!(
+        campaigns[0].website().and_then(|f| f.value()).as_deref(),
+        Some("https://bea.example")
+    );
+    let members: Vec<_> = campaigns[0].members().collect();
+    assert_eq!(members.len(), 1);
+    assert_eq!(members[0].name().as_deref(), Some("Bea"));
+    assert!(members[0].is_declaration());
+    assert_eq!(members[0].role(), None);
+
+    let recs: Vec<_> = contest.recommendations().collect();
+    assert_eq!(recs.len(), 1);
+    let rec = &recs[0];
+    assert!(!rec.is_no_position());
+    let tiers: Vec<Vec<String>> = rec
+        .support()
+        .map(|t| t.candidates().map(|c| c.name().to_owned()).collect())
+        .collect();
+    assert_eq!(
+        tiers,
+        [vec!["a".to_owned()], vec!["b".to_owned(), "d".to_owned()]]
+    );
+    let opposed: Vec<String> = rec
+        .oppose()
+        .flat_map(|o| {
+            o.candidates()
+                .map(|c| c.name().to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    assert_eq!(opposed, ["c"]);
+    assert_eq!(
+        rec.justification().and_then(|f| f.value()).as_deref(),
+        Some("Why.")
+    );
+    assert_eq!(rec.note().and_then(|f| f.value()).as_deref(), Some("Also."));
+}
+
+#[test]
+fn ticket_members_in_block_form() {
+    let contest = first_contest(
+        "contest @p \"President\" single\n  campaign incumbent\n    @j \"Jordan Lee\" as \"Governor\"\n      designation \"Governor\"\n      party @dem\n    @m \"Maya Patel\" as \"Lieutenant Governor\"\n    website https://t.example\n  campaign @r\n  recommend no-position\n",
+    );
+    let campaigns: Vec<_> = contest.campaigns().collect();
+    let members: Vec<_> = campaigns[0].members().collect();
+    assert_eq!(members.len(), 2);
+    assert_eq!(members[0].name().as_deref(), Some("Jordan Lee"));
+    assert_eq!(members[0].role().as_deref(), Some("Governor"));
+    assert_eq!(
+        members[0].designation().and_then(|f| f.value()).as_deref(),
+        Some("Governor")
+    );
+    assert_eq!(
+        members[0]
+            .party()
+            .and_then(|p| p.id())
+            .map(|i| i.name().to_owned())
+            .as_deref(),
+        Some("dem")
+    );
+    assert_eq!(members[1].role().as_deref(), Some("Lieutenant Governor"));
+    assert_eq!(
+        campaigns[0].website().and_then(|f| f.value()).as_deref(),
+        Some("https://t.example")
+    );
+    let reference: Vec<_> = campaigns[1].members().collect();
+    assert_eq!(reference.len(), 1);
+    assert!(!reference[0].is_declaration());
+    assert_eq!(
+        reference[0].id().map(|i| i.name().to_owned()).as_deref(),
+        Some("r")
+    );
+    assert!(contest.recommendations().next().unwrap().is_no_position());
+}
+
+fn first_measure(source: &str) -> super::Measure {
+    let doc = document(&format!("ballot @b \"B\"\n{}", indent(source)));
+    let Some(BallotItem::Measure(measure)) = doc.ballots().next().and_then(|b| b.items().next())
+    else {
+        panic!("a measure")
+    };
+    measure
+}
+
+#[test]
+fn measure_fields_and_positions() {
+    let measure = first_measure(
+        "measure @p1 \"Proposition 1\"\n  subtitle \"Bond\"\n  description:\n    Text.\n  if_yes:\n    Yes.\n  if_no:\n    No.\n  placement \"Referral\"\n  tabulation \"Majority\"\n  fiscal_impact \"$1\"\n  supporters \"A\", \"B\"\n  opponents none\n  note:\n    N.\n  recommend yes\n    justification:\n      J.\n",
+    );
+    assert_eq!(
+        measure.id().map(|i| i.name().to_owned()).as_deref(),
+        Some("p1")
+    );
+    assert_eq!(measure.title().as_deref(), Some("Proposition 1"));
+    assert_eq!(
+        measure.subtitle().and_then(|f| f.value()).as_deref(),
+        Some("Bond")
+    );
+    assert_eq!(
+        measure.description().and_then(|f| f.value()).as_deref(),
+        Some("Text.")
+    );
+    assert_eq!(
+        measure.if_yes().and_then(|f| f.value()).as_deref(),
+        Some("Yes.")
+    );
+    assert_eq!(
+        measure.if_no().and_then(|f| f.value()).as_deref(),
+        Some("No.")
+    );
+    assert_eq!(
+        measure.placement().and_then(|f| f.value()).as_deref(),
+        Some("Referral")
+    );
+    assert_eq!(
+        measure.tabulation().and_then(|f| f.value()).as_deref(),
+        Some("Majority")
+    );
+    assert_eq!(
+        measure.fiscal_impact().and_then(|f| f.value()).as_deref(),
+        Some("$1")
+    );
+    assert_eq!(
+        measure.supporters().and_then(|f| f.value()),
+        Some(vec!["A".to_owned(), "B".to_owned()])
+    );
+    assert_eq!(measure.opponents().and_then(|f| f.value()), Some(vec![]));
+    assert_eq!(
+        measure.note().and_then(|f| f.value()).as_deref(),
+        Some("N.")
+    );
+    let rec = measure.recommendations().next().expect("recommendation");
+    assert_eq!(rec.position(), Some(Position::Yes));
+    assert_eq!(
+        rec.justification().and_then(|f| f.value()).as_deref(),
+        Some("J.")
+    );
+
+    for (text, expected) in [("no", Position::No), ("no-position", Position::NoPosition)] {
+        let measure = first_measure(&format!("measure @m \"M\"\n  recommend {text}\n"));
+        assert_eq!(
+            measure.recommendations().next().unwrap().position(),
+            Some(expected)
+        );
+    }
+    let measure = first_measure("measure @m \"M\"\n  recommend\n");
+    assert_eq!(measure.recommendations().next().unwrap().position(), None);
+    assert_eq!(measure.supporters(), None);
+}
+
+#[test]
+fn string_list_three_states() {
+    let measure =
+        first_measure("measure @m \"M\"\n  supporters\n  opponents none\n  recommend yes\n");
+    assert_eq!(measure.supporters().and_then(|f| f.value()), None);
+    assert_eq!(measure.opponents().and_then(|f| f.value()), Some(vec![]));
+    let measure = first_measure("measure @m \"M\"\n  recommend yes\n");
+    assert_eq!(measure.supporters(), None);
+}
+
+fn walk(
+    ballot: &super::Ballot,
+    contests: &mut Vec<super::Contest>,
+    measures: &mut Vec<super::Measure>,
+) {
+    for item in ballot.items() {
+        match item {
+            BallotItem::Contest(c) => contests.push(c),
+            BallotItem::Measure(m) => measures.push(m),
+            BallotItem::Ballot(b) => walk(&b, contests, measures),
+            BallotItem::Section(s) => {
+                for item in s.items() {
+                    match item {
+                        SectionItem::Contest(c) => contests.push(c),
+                        SectionItem::Measure(m) => measures.push(m),
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_fixture_walks_cleanly() {
+    let doc = document(FIXTURE);
+    assert_eq!(doc.parties().count(), 5);
+    assert_eq!(doc.candidates().count(), 2);
+    let roots: Vec<_> = doc.ballots().collect();
+    assert_eq!(roots.len(), 6);
+
+    let mut contests = Vec::new();
+    let mut measures = Vec::new();
+    for root in &roots {
+        assert!(root.id().is_some() && root.title().is_some());
+        walk(root, &mut contests, &mut measures);
+    }
+    assert_eq!(contests.len(), 44);
+    assert_eq!(measures.len(), 28);
+
+    for contest in &contests {
+        assert!(contest.id().is_some() && contest.title().is_some() && contest.kind().is_some());
+        assert!(contest.campaigns().count() >= 1, "{:?}", contest.title());
+        assert_eq!(
+            contest.recommendations().count(),
+            1,
+            "{:?}",
+            contest.title()
+        );
+        for campaign in contest.campaigns() {
+            let members: Vec<_> = campaign.members().collect();
+            assert_ne!(members.len(), 0);
+            assert!(members.iter().all(|m| m.id().is_some()));
+        }
+    }
+    for measure in &measures {
+        assert!(measure.id().is_some() && measure.title().is_some());
+        let recs: Vec<_> = measure.recommendations().collect();
+        assert_eq!(recs.len(), 1);
+        assert!(recs[0].position().is_some());
+    }
+    let tickets = contests
+        .iter()
+        .flat_map(super::Contest::campaigns)
+        .filter(|c| c.members().count() > 1)
+        .count();
+    assert_eq!(tickets, 6);
+    let withdrawn = contests
+        .iter()
+        .flat_map(super::Contest::campaigns)
+        .filter(super::Campaign::is_withdrawn)
+        .count();
+    assert_eq!(withdrawn, 1);
 }

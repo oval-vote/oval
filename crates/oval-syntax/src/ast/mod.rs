@@ -1,12 +1,20 @@
 //! Typed views over the syntax tree.
 
+mod ballot;
+mod contest;
 mod document;
+mod measure;
+mod recommend;
 #[cfg(test)]
 mod tests;
 
 use rowan::TextRange;
 
+pub use ballot::{Ballot, BallotItem, Section, SectionItem};
+pub use contest::{Campaign, Contest, ContestKind, Member};
 pub use document::{Candidate, Document, Party, PartyReference};
+pub use measure::{Measure, MeasureRecommend, Position, StringListField};
+pub use recommend::{ContestRecommend, Oppose, Support};
 
 use crate::{Keyword, SyntaxKind, SyntaxNode, SyntaxToken};
 
@@ -31,18 +39,18 @@ macro_rules! ast_node {
     ($(#[$doc:meta])* $name:ident) => {
         $(#[$doc])*
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name(SyntaxNode);
+        pub struct $name($crate::SyntaxNode);
 
-        impl AstNode for $name {
-            fn can_cast(kind: SyntaxKind) -> bool {
-                kind == SyntaxKind::$name
+        impl $crate::ast::AstNode for $name {
+            fn can_cast(kind: $crate::SyntaxKind) -> bool {
+                kind == $crate::SyntaxKind::$name
             }
 
-            fn cast(node: SyntaxNode) -> Option<Self> {
+            fn cast(node: $crate::SyntaxNode) -> Option<Self> {
                 Self::can_cast(node.kind()).then(|| Self(node))
             }
 
-            fn syntax(&self) -> &SyntaxNode {
+            fn syntax(&self) -> &$crate::SyntaxNode {
                 &self.0
             }
         }
@@ -165,10 +173,31 @@ fn children<N: AstNode>(node: &SyntaxNode) -> impl Iterator<Item = N> + use<N> {
     node.children().filter_map(N::cast)
 }
 
-fn token(node: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
+fn tokens(node: &SyntaxNode) -> impl Iterator<Item = SyntaxToken> + use<> {
     node.children_with_tokens()
         .filter_map(rowan::NodeOrToken::into_token)
-        .find(|token| token.kind() == kind)
+}
+
+fn token(node: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
+    tokens(node).find(|token| token.kind() == kind)
+}
+
+fn has_token(node: &SyntaxNode, kind: SyntaxKind) -> bool {
+    token(node, kind).is_some()
+}
+
+fn string(node: &SyntaxNode) -> Option<String> {
+    token(node, SyntaxKind::StringLiteral).map(|t| string_value(t.text()))
+}
+
+fn integer(node: &SyntaxNode) -> Option<u32> {
+    token(node, SyntaxKind::IntegerLiteral).and_then(|t| t.text().parse().ok())
+}
+
+fn block_children<N: AstNode>(node: &SyntaxNode) -> impl Iterator<Item = N> + use<N> {
+    block(node)
+        .into_iter()
+        .flat_map(|b| b.children().filter_map(N::cast))
 }
 
 fn identifier(node: &SyntaxNode) -> Option<Identifier> {
