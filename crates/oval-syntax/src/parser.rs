@@ -3,10 +3,12 @@
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
 use crate::SyntaxKind::{
-    self, AbbreviationKeyword, BallotKeyword, Block, Candidate, CandidateKeyword, Colon, DateField,
-    DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document, ElectionKeyword, ErrorNode,
-    GuideKeyword, Identifier, Indent, MarkdownBlock, MarkdownField, Newline, NoteKeyword, Party,
-    PartyKeyword, PartyReference, StringField, StringLiteral, UrlField, UrlLiteral, WebsiteKeyword,
+    self, AbbreviationKeyword, Ballot, BallotKeyword, Block, Candidate, CandidateKeyword, Colon,
+    ContestKeyword, DateField, DateKeyword, DateLiteral, Dedent, DesignationKeyword, Document,
+    ElectionKeyword, EligibilityKeyword, ErrorNode, GuideKeyword, Identifier, Indent,
+    MarkdownBlock, MarkdownField, MeasureKeyword, Newline, NoteKeyword, Party, PartyKeyword,
+    PartyReference, Section, SectionKeyword, StringField, StringLiteral, UrlField, UrlLiteral,
+    WebsiteKeyword,
 };
 use crate::SyntaxNode;
 use crate::lexer::{LexError, Token, lex};
@@ -103,12 +105,16 @@ impl Parser<'_> {
                     self.field_once(kind, &mut remaining, Self::simple_field);
                 }
                 PartyKeyword | CandidateKeyword => {
-                    remaining.retain(|k| !GUIDE_FIELDS.contains(k));
-                    if kind == PartyKeyword {
-                        self.party();
+                    if remaining.contains(&kind) {
+                        remaining.retain(|k| !GUIDE_FIELDS.contains(k));
+                        self.declaration(kind);
                     } else {
-                        self.candidate();
+                        self.misplaced(kind, &remaining, Self::declaration);
                     }
+                }
+                BallotKeyword => {
+                    remaining.retain(|k| *k == BallotKeyword);
+                    self.ballot();
                 }
                 _ => self.recover_item(&remaining),
             }
@@ -117,11 +123,20 @@ impl Parser<'_> {
         self.finish_node();
     }
 
+    fn declaration(&mut self, kind: SyntaxKind) -> bool {
+        if kind == PartyKeyword {
+            self.party();
+        } else {
+            self.candidate();
+        }
+        true
+    }
+
     fn party(&mut self) {
         self.start_node(Party);
         self.bump();
         self.declaration_header();
-        self.block(PARTY_FIELDS, Self::simple_field);
+        self.block(PARTY_FIELDS, &[], Self::simple_field);
         self.finish_node();
     }
 
@@ -129,16 +144,48 @@ impl Parser<'_> {
         self.start_node(Candidate);
         self.bump();
         self.declaration_header();
-        self.block(CANDIDATE_FIELDS, Self::candidate_field);
+        self.block(CANDIDATE_FIELDS, &[], Self::candidate_field);
         self.finish_node();
     }
 
-    fn candidate_field(&mut self, kind: SyntaxKind) {
+    fn candidate_field(&mut self, kind: SyntaxKind) -> bool {
         if kind == PartyKeyword {
             self.party_reference();
+            true
         } else {
-            self.simple_field(kind);
+            self.simple_field(kind)
         }
+    }
+
+    fn ballot(&mut self) {
+        self.start_node(Ballot);
+        self.bump();
+        self.declaration_header();
+        self.required_block(BALLOT_FIELDS, BALLOT_ITEMS, Self::ballot_item);
+        self.finish_node();
+    }
+
+    fn ballot_item(&mut self, kind: SyntaxKind) -> bool {
+        match kind {
+            SectionKeyword => self.section(),
+            BallotKeyword => self.ballot(),
+            EligibilityKeyword | NoteKeyword => return self.simple_field(kind),
+            _ => return false,
+        }
+        true
+    }
+
+    fn section(&mut self) {
+        self.start_node(Section);
+        self.bump();
+        self.expect_value(StringLiteral);
+        self.end_of_line();
+        self.required_block(SECTION_FIELDS, SECTION_ITEMS, Self::section_item);
+        self.finish_node();
+    }
+
+    fn section_item(&mut self, kind: SyntaxKind) -> bool {
+        kind == NoteKeyword && self.simple_field(kind)
     }
 
     fn party_reference(&mut self) {
@@ -147,7 +194,7 @@ impl Parser<'_> {
         self.expect(Identifier);
         if self.eat(StringLiteral) {
             self.end_of_line();
-            self.block(PARTY_FIELDS, Self::simple_field);
+            self.block(PARTY_FIELDS, &[], Self::simple_field);
         } else {
             self.end_of_line();
         }
@@ -160,7 +207,25 @@ impl Parser<'_> {
         self.end_of_line();
     }
 
-    fn block(&mut self, fields: &[SyntaxKind], parse: fn(&mut Self, SyntaxKind)) {
+    fn required_block(
+        &mut self,
+        fields: &[SyntaxKind],
+        items: &[SyntaxKind],
+        parse: fn(&mut Self, SyntaxKind) -> bool,
+    ) {
+        if self.at(Indent) {
+            self.block(fields, items, parse);
+        } else {
+            self.error(&[Indent]);
+        }
+    }
+
+    fn block(
+        &mut self,
+        fields: &[SyntaxKind],
+        items: &[SyntaxKind],
+        parse: fn(&mut Self, SyntaxKind) -> bool,
+    ) {
         if !self.at(Indent) {
             return;
         }
@@ -173,8 +238,9 @@ impl Parser<'_> {
             }
             if fields.contains(&kind) {
                 self.field_once(kind, &mut remaining, parse);
-            } else {
-                self.recover_item(&remaining);
+            } else if !(items.contains(&kind) && parse(self, kind)) {
+                let expected: Vec<SyntaxKind> = remaining.iter().chain(items).copied().collect();
+                self.recover_item(&expected);
             }
         }
         self.expect(Dedent);
@@ -185,25 +251,34 @@ impl Parser<'_> {
         &mut self,
         kind: SyntaxKind,
         remaining: &mut Vec<SyntaxKind>,
-        parse: fn(&mut Self, SyntaxKind),
+        parse: fn(&mut Self, SyntaxKind) -> bool,
     ) {
         if remaining.contains(&kind) {
             remaining.retain(|k| *k != kind);
             parse(self, kind);
-            return;
+        } else {
+            self.misplaced(kind, remaining, parse);
         }
+    }
+
+    fn misplaced(
+        &mut self,
+        kind: SyntaxKind,
+        expected: &[SyntaxKind],
+        parse: fn(&mut Self, SyntaxKind) -> bool,
+    ) {
         self.start_node(ErrorNode);
         let start = self.offset;
         parse(self, kind);
         self.finish_node();
         self.errors.push(ParseError {
-            expected: remaining.clone(),
+            expected: expected.to_vec(),
             found: Some(kind),
             range: TextRange::new(text_size(start), text_size(self.offset)),
         });
     }
 
-    fn simple_field(&mut self, kind: SyntaxKind) {
+    fn simple_field(&mut self, kind: SyntaxKind) -> bool {
         let (node, value) = match kind {
             DateKeyword => (DateField, DateLiteral),
             WebsiteKeyword => (UrlField, UrlLiteral),
@@ -219,6 +294,7 @@ impl Parser<'_> {
             self.end_of_line();
         }
         self.finish_node();
+        true
     }
 
     fn markdown_value(&mut self) {
@@ -406,6 +482,15 @@ const TOP_LEVEL: &[SyntaxKind] = &[
 ];
 const PARTY_FIELDS: &[SyntaxKind] = &[AbbreviationKeyword, WebsiteKeyword, NoteKeyword];
 const CANDIDATE_FIELDS: &[SyntaxKind] = &[DesignationKeyword, PartyKeyword, NoteKeyword];
+const BALLOT_FIELDS: &[SyntaxKind] = &[EligibilityKeyword, NoteKeyword];
+const BALLOT_ITEMS: &[SyntaxKind] = &[
+    SectionKeyword,
+    ContestKeyword,
+    MeasureKeyword,
+    BallotKeyword,
+];
+const SECTION_FIELDS: &[SyntaxKind] = &[NoteKeyword];
+const SECTION_ITEMS: &[SyntaxKind] = &[ContestKeyword, MeasureKeyword];
 
 fn text_size(offset: usize) -> TextSize {
     TextSize::try_from(offset).expect("source longer than 4 GiB")
@@ -697,13 +782,13 @@ Document
 
     #[test]
     fn an_unknown_top_level_line_names_everything_that_could_start_one() {
-        let parse = parse("ballot @b \"B\"\n");
+        let parse = parse("contest @c \"C\" single\n");
         assert_eq!(
             parse.errors(),
             [SyntaxError::Parse(ParseError {
                 expected: TOP_LEVEL.to_vec(),
-                found: Some(SyntaxKind::BallotKeyword),
-                range: range(0, 14),
+                found: Some(SyntaxKind::ContestKeyword),
+                range: range(0, 22),
             })]
         );
     }
@@ -1015,5 +1100,195 @@ Document
         let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
         assert_eq!(kinds, [SyntaxKind::Party, SyntaxKind::Candidate]);
         assert_eq!(parse.errors().len(), 2);
+    }
+
+    #[test]
+    fn ballot_with_fields_a_section_and_a_sub_ballot() {
+        let source = "\
+ballot @franklin \"State of Franklin\"
+  eligibility \"Registered voters of Franklin\"
+  section \"Statewide Offices\"
+    note:
+      Top of the ticket.
+  ballot @ashford \"City of Ashford\"
+    note:
+      City races.
+";
+        let parse = parse(source);
+        assert_eq!(parse.errors(), []);
+        assert_eq!(
+            dump(&parse.syntax()),
+            "\
+Document
+  Ballot
+    BallotKeyword \"ballot\"
+    Identifier \"@franklin\"
+    StringLiteral \"\\\"State of Franklin\\\"\"
+    Newline \"\\n\"
+    Block
+      Indent \"\"
+      StringField
+        EligibilityKeyword \"eligibility\"
+        StringLiteral \"\\\"Registered voters of Franklin\\\"\"
+        Newline \"\\n\"
+      Section
+        SectionKeyword \"section\"
+        StringLiteral \"\\\"Statewide Offices\\\"\"
+        Newline \"\\n\"
+        Block
+          Indent \"\"
+          MarkdownField
+            NoteKeyword \"note\"
+            Colon \":\"
+            Newline \"\\n\"
+            MarkdownBlock \"      Top of the ticket.\\n\"
+          Dedent \"\"
+      Ballot
+        BallotKeyword \"ballot\"
+        Identifier \"@ashford\"
+        StringLiteral \"\\\"City of Ashford\\\"\"
+        Newline \"\\n\"
+        Block
+          Indent \"\"
+          MarkdownField
+            NoteKeyword \"note\"
+            Colon \":\"
+            Newline \"\\n\"
+            MarkdownBlock \"      City races.\\n\"
+          Dedent \"\"
+      Dedent \"\"
+"
+        );
+    }
+
+    #[test]
+    fn ballots_nest_without_limit_and_roots_repeat() {
+        let parse = parse(
+            "ballot @a \"A\"\n  ballot @b \"B\"\n    ballot @c \"C\"\n      note:\n        deep\nballot @d \"D\"\n  note:\n    x\n",
+        );
+        assert_eq!(parse.errors(), []);
+        let roots: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(roots, [SyntaxKind::Ballot, SyntaxKind::Ballot]);
+        let mut depth = 0;
+        let mut node = parse.syntax().first_child().unwrap();
+        while let Some(inner) = node
+            .last_child()
+            .and_then(|b| b.children().find(|n| n.kind() == SyntaxKind::Ballot))
+        {
+            depth += 1;
+            node = inner;
+        }
+        assert_eq!(depth, 2);
+    }
+
+    #[test]
+    fn ballot_fields_and_items_interleave_but_fields_appear_once() {
+        let parse = parse(
+            "ballot @a \"A\"\n  section \"S1\"\n    note:\n      x\n  eligibility \"e\"\n  section \"S2\"\n    note:\n      y\n  eligibility \"again\"\n",
+        );
+        let block = parse.syntax().first_child().unwrap().last_child().unwrap();
+        let kinds: Vec<SyntaxKind> = block.children().map(|n| n.kind()).collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::Section,
+                SyntaxKind::StringField,
+                SyntaxKind::Section,
+                SyntaxKind::ErrorNode
+            ]
+        );
+        assert_eq!(parse.errors().len(), 1);
+        assert!(matches!(
+            &parse.errors()[0],
+            SyntaxError::Parse(e) if e.found == Some(SyntaxKind::EligibilityKeyword)
+                && e.expected == [SyntaxKind::NoteKeyword]
+        ));
+    }
+
+    #[test]
+    fn contests_and_measures_are_named_as_expected_items_until_they_parse() {
+        let parse = parse("ballot @a \"A\"\n  section \"S\"\n    contest @c \"C\" single\n");
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![
+                    SyntaxKind::NoteKeyword,
+                    SyntaxKind::ContestKeyword,
+                    SyntaxKind::MeasureKeyword,
+                ],
+                found: Some(SyntaxKind::ContestKeyword),
+                range: range(32, 54),
+            })]
+        );
+    }
+
+    #[test]
+    fn sections_do_not_nest_and_do_not_hold_ballots() {
+        let parse = parse(
+            "ballot @a \"A\"\n  section \"S\"\n    section \"Inner\"\n      note:\n        x\n    ballot @b \"B\"\n      note:\n        y\n    note:\n      ok\n",
+        );
+        let section = parse
+            .syntax()
+            .first_child()
+            .unwrap()
+            .last_child()
+            .unwrap()
+            .first_child()
+            .unwrap();
+        assert_eq!(section.kind(), SyntaxKind::Section);
+        let kinds: Vec<SyntaxKind> = section
+            .last_child()
+            .unwrap()
+            .children()
+            .map(|n| n.kind())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::ErrorNode,
+                SyntaxKind::ErrorNode,
+                SyntaxKind::MarkdownField
+            ]
+        );
+        assert_eq!(parse.errors().len(), 2);
+        assert!(
+            matches!(&parse.errors()[0], SyntaxError::Parse(e) if e.found == Some(SyntaxKind::SectionKeyword))
+        );
+        assert!(
+            matches!(&parse.errors()[1], SyntaxError::Parse(e) if e.found == Some(SyntaxKind::BallotKeyword))
+        );
+    }
+
+    #[test]
+    fn ballots_and_sections_require_a_block() {
+        let result = parse("ballot @a \"A\"\nballot @b \"B\"\n  note:\n    x\n");
+        assert_eq!(
+            result.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::Indent],
+                found: Some(SyntaxKind::BallotKeyword),
+                range: range(14, 14),
+            })]
+        );
+        let result = parse("ballot @a \"A\"\n  section \"S\"\n  note:\n    x\n");
+        assert_eq!(result.errors().len(), 1);
+        assert!(
+            matches!(&result.errors()[0], SyntaxError::Parse(e) if e.expected == [SyntaxKind::Indent])
+        );
+    }
+
+    #[test]
+    fn declarations_must_precede_ballots() {
+        let parse = parse("ballot @a \"A\"\n  note:\n    x\nparty @d \"D\"\n");
+        let kinds: Vec<SyntaxKind> = parse.syntax().children().map(|n| n.kind()).collect();
+        assert_eq!(kinds, [SyntaxKind::Ballot, SyntaxKind::ErrorNode]);
+        assert_eq!(
+            parse.errors(),
+            [SyntaxError::Parse(ParseError {
+                expected: vec![SyntaxKind::BallotKeyword],
+                found: Some(SyntaxKind::PartyKeyword),
+                range: range(28, 41),
+            })]
+        );
     }
 }
