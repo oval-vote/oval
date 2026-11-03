@@ -741,7 +741,7 @@ impl Compiler {
         self.counts.parties = self.parties.len();
         let date = document.date()?.value()?;
         Some(Compiled {
-            oval: oval_syntax::SPEC_VERSION.to_owned(),
+            oval: oval_syntax::SPEC_VERSION.to_string(),
             guide: Guide {
                 name: document.guide()?.value()?,
                 election: document.election()?.value()?,

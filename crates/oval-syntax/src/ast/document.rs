@@ -2,11 +2,16 @@ use super::{
     AstNode, Ballot, DateField, Identifier, MarkdownField, StringField, UrlField, ast_node, block,
     child, children, field, identifier, string, token,
 };
-use crate::{Keyword, SyntaxKind, SyntaxNode};
+use crate::{Keyword, SpecVersion, SyntaxKind, SyntaxNode};
 
 ast_node! {
     /// A whole guide: the root of the tree.
     Document
+}
+
+ast_node! {
+    /// The `oval` version marker that opens a document.
+    VersionMarker
 }
 
 ast_node! {
@@ -25,6 +30,11 @@ ast_node! {
 }
 
 impl Document {
+    /// The `oval` version marker.
+    pub fn version(&self) -> Option<VersionMarker> {
+        child(&self.0)
+    }
+
     /// The `guide` field.
     pub fn guide(&self) -> Option<StringField> {
         top_level_field(&self.0, Keyword::Guide)
@@ -58,6 +68,18 @@ impl Document {
     /// Root ballots, in source order.
     pub fn ballots(&self) -> impl Iterator<Item = Ballot> + use<> {
         children(&self.0)
+    }
+}
+
+impl VersionMarker {
+    /// The declared specification version.
+    pub fn value(&self) -> Option<SpecVersion> {
+        let token = token(&self.0, SyntaxKind::VersionLiteral)?;
+        let (major, minor) = token.text().split_once('.')?;
+        Some(SpecVersion {
+            major: major.parse().ok()?,
+            minor: minor.parse().ok()?,
+        })
     }
 }
 

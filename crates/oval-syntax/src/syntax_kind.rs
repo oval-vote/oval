@@ -70,6 +70,7 @@ macro_rules! define_syntax {
 
 define_syntax! {
     keywords {
+        "oval" => Oval / OvalKeyword,
         "guide" => Guide / GuideKeyword,
         "election" => Election / ElectionKeyword,
         "date" => Date / DateKeyword,
@@ -116,6 +117,7 @@ define_syntax! {
         StringLiteral: "A double-quoted string token.",
         IntegerLiteral: "An unsigned integer token.",
         DateLiteral: "An ISO 8601 calendar date token.",
+        VersionLiteral: "A specification version token, `MAJOR.MINOR`.",
         UrlLiteral: "A bare `http` or `https` URL token.",
         Colon: "The `:` punctuator.",
         Comma: "The `,` punctuator.",
@@ -130,6 +132,7 @@ define_syntax! {
     }
     nodes {
         Document: "The root node: a whole document.",
+        VersionMarker: "The `oval` version marker.",
         Party: "A `party` declaration.",
         Candidate: "A `candidate` declaration.",
         PartyReference: "A `party` field on a candidate or campaign.",
@@ -209,7 +212,7 @@ mod tests {
 
     #[test]
     fn keywords_round_trip_through_text() {
-        assert_eq!(Keyword::ALL.len(), 40, "Appendix B lists 40 keywords");
+        assert_eq!(Keyword::ALL.len(), 41, "Appendix B lists 41 keywords");
         for keyword in Keyword::ALL.iter().copied() {
             assert_eq!(
                 Keyword::from_text(keyword.text()),

@@ -7,6 +7,8 @@ use crate::SyntaxKind;
 use crate::lexer::LexErrorReason;
 
 const SAMPLE: &str = "\
+oval 0.1
+
 guide \"Franklin Voter Guide\"
 election \"November 3, 2026 General Election\"
 date 2026-11-03
@@ -130,7 +132,8 @@ fn the_tree_reproduces_the_source_exactly() {
     }
 }
 
-const TOP_LEVEL: [SyntaxKind; 7] = [
+const TOP_LEVEL: [SyntaxKind; 8] = [
+    SyntaxKind::OvalKeyword,
     SyntaxKind::GuideKeyword,
     SyntaxKind::ElectionKeyword,
     SyntaxKind::DateKeyword,
@@ -139,6 +142,74 @@ const TOP_LEVEL: [SyntaxKind; 7] = [
     SyntaxKind::CandidateKeyword,
     SyntaxKind::BallotKeyword,
 ];
+
+#[test]
+fn the_version_marker_opens_the_document() {
+    let result = parse("oval 0.1\n\nguide \"g\"\n");
+    assert_eq!(result.errors(), []);
+    assert_eq!(
+        dump(&result.syntax()),
+        "\
+Document
+  VersionMarker
+    OvalKeyword \"oval\"
+    VersionLiteral \"0.1\"
+    Newline \"\\n\"
+  StringField
+    GuideKeyword \"guide\"
+    StringLiteral \"\\\"g\\\"\"
+    Newline \"\\n\"
+"
+    );
+}
+
+#[test]
+fn the_version_marker_is_optional_to_the_parser_but_must_come_first() {
+    assert_eq!(parse("guide \"g\"\n").errors(), []);
+    let source = "guide \"g\"\noval 0.1\n";
+    let result = parse(source);
+    assert_eq!(
+        result.errors(),
+        [SyntaxError::Parse(ParseError {
+            expected: TOP_LEVEL[2..].to_vec(),
+            found: Some(SyntaxKind::OvalKeyword),
+            range: span(source, "oval 0.1\n"),
+        })]
+    );
+    let source = "oval 0.1\noval 0.2\n";
+    let result = parse(source);
+    assert_eq!(
+        result.errors(),
+        [SyntaxError::Parse(ParseError {
+            expected: TOP_LEVEL[1..].to_vec(),
+            found: Some(SyntaxKind::OvalKeyword),
+            range: span(source, "oval 0.2\n"),
+        })]
+    );
+}
+
+#[test]
+fn the_version_marker_needs_a_version() {
+    let result = parse("oval\n");
+    assert_eq!(
+        result.errors(),
+        [SyntaxError::Parse(ParseError {
+            expected: vec![SyntaxKind::VersionLiteral],
+            found: Some(SyntaxKind::Newline),
+            range: range(4, 4),
+        })]
+    );
+    let source = "oval 1 \"x\"\n";
+    let result = parse(source);
+    assert_eq!(
+        result.errors(),
+        [SyntaxError::Parse(ParseError {
+            expected: vec![SyntaxKind::VersionLiteral],
+            found: Some(SyntaxKind::IntegerLiteral),
+            range: span(source, "1 \"x\""),
+        })]
+    );
+}
 
 #[test]
 fn guide_fields_from_the_spec_example() {

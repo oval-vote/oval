@@ -28,7 +28,7 @@ fn lex_message(source: &str, error: &LexError) -> String {
         LexErrorReason::InvalidEscape => {
             "only `\\\"` and `\\\\` may follow a backslash in a string"
         }
-        LexErrorReason::MalformedNumber => "this is neither a number nor a date",
+        LexErrorReason::MalformedNumber => "this is neither a number, a date, nor a version",
         LexErrorReason::MalformedUrl => "a URL needs something after `://`",
         LexErrorReason::InconsistentDedent => {
             "this line is indented to a level that no enclosing block uses"
@@ -68,6 +68,7 @@ fn describe(kind: SyntaxKind) -> String {
         SyntaxKind::StringLiteral => "a string",
         SyntaxKind::IntegerLiteral => "a number",
         SyntaxKind::DateLiteral => "a date",
+        SyntaxKind::VersionLiteral => "a version",
         SyntaxKind::UrlLiteral => "a URL",
         SyntaxKind::Colon => "`:`",
         SyntaxKind::Comma => "`,`",
