@@ -1,8 +1,10 @@
 //! Converts source text into a flat sequence of tokens.
 
+use std::fmt;
+
 use rowan::{TextRange, TextSize};
 
-use crate::{Keyword, SyntaxKind};
+use crate::SyntaxKind;
 
 /// An oval syntax token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,18 +16,11 @@ pub struct Token {
     pub len: TextSize,
 }
 
-/// The reasons a lexical error can occur.
+/// The lexical errors of the specification, Section 3.1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum LexErrorReason {
-    /// A horizontal tab outside a string or Markdown body.
+pub enum LexicalErrorKind {
+    /// A horizontal tab outside a string, a comment, or a Markdown body.
     IllegalTab,
-
-    /// An `@` not followed by a letter.
-    MalformedIdentifier,
-
-    /// A word that is not a keyword.
-    UnknownWord,
 
     /// A character that cannot begin any token.
     UnexpectedCharacter,
@@ -36,7 +31,7 @@ pub enum LexErrorReason {
     /// A backslash in a string followed by something other than `"` or `\\`.
     InvalidEscape,
 
-    /// A word beginning with a digit that is neither an integer nor a date.
+    /// A run beginning with a digit that is neither an integer nor a date.
     MalformedNumber,
 
     /// A URL scheme and `://` with nothing after them.
@@ -46,15 +41,73 @@ pub enum LexErrorReason {
     InconsistentDedent,
 }
 
+impl LexicalErrorKind {
+    /// Every kind, in the specification's order.
+    pub const ALL: &'static [Self] = &[
+        Self::IllegalTab,
+        Self::UnexpectedCharacter,
+        Self::UnterminatedString,
+        Self::InvalidEscape,
+        Self::MalformedNumber,
+        Self::MalformedUrl,
+        Self::InconsistentDedent,
+    ];
+
+    /// The identifier the specification gives this error, such as `illegal-tab`.
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::IllegalTab => "illegal-tab",
+            Self::UnexpectedCharacter => "unexpected-character",
+            Self::UnterminatedString => "unterminated-string",
+            Self::InvalidEscape => "invalid-escape",
+            Self::MalformedNumber => "malformed-number",
+            Self::MalformedUrl => "malformed-url",
+            Self::InconsistentDedent => "inconsistent-dedent",
+        }
+    }
+
+    /// The title of this error's entry in the specification.
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::IllegalTab => "Illegal Tab",
+            Self::UnexpectedCharacter => "Unexpected Character",
+            Self::UnterminatedString => "Unterminated String",
+            Self::InvalidEscape => "Invalid Escape",
+            Self::MalformedNumber => "Malformed Number",
+            Self::MalformedUrl => "Malformed URL",
+            Self::InconsistentDedent => "Inconsistent Dedent",
+        }
+    }
+}
+
 /// A lexical error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LexError {
-    /// The kind of error
-    pub reason: LexErrorReason,
+pub struct LexicalError {
+    /// Which error it is.
+    pub kind: LexicalErrorKind,
 
     /// Where it went wrong.
     pub range: TextRange,
 }
+
+/// Input that is rejected as a whole and produces no tokens.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct InputRejection {
+    /// The offset of the first U+0000 in the input.
+    pub offset: TextSize,
+}
+
+impl fmt::Display for InputRejection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the input contains U+0000 at byte {} and is not an Oval document",
+            u32::from(self.offset)
+        )
+    }
+}
+
+impl std::error::Error for InputRejection {}
 
 /// The result of lexing a source string.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -66,24 +119,29 @@ pub struct LexResult {
     /// Errors, in source order.
     /// Every [`SyntaxKind::Error`] token has exactly one error spanning it;
     /// other tokens may carry errors over part of their text.
-    pub errors: Vec<LexError>,
+    pub errors: Vec<LexicalError>,
 }
 
-/// Lexes the given source text into a flat sequence of tokens.
-pub fn lex(source: &str) -> LexResult {
+/// Lexes the given source text into a flat sequence of tokens, or rejects it as a whole.
+pub fn lex(source: &str) -> Result<LexResult, InputRejection> {
+    if let Some(offset) = source.find('\0') {
+        return Err(InputRejection {
+            offset: text_size(offset),
+        });
+    }
     let mut lexer = Lexer {
         source,
         pos: 0,
         line_start: 0,
         line_has_tokens: false,
         line_indentation: 0,
-        last_kinds: [None, None],
+        last_kind: None,
         pending_block: None,
         indent_stack: vec![0],
         out: LexResult::default(),
     };
     lexer.run();
-    lexer.out
+    Ok(lexer.out)
 }
 
 struct Lexer<'a> {
@@ -92,7 +150,7 @@ struct Lexer<'a> {
     line_start: usize,
     line_has_tokens: bool,
     line_indentation: usize,
-    last_kinds: [Option<SyntaxKind>; 2],
+    last_kind: Option<SyntaxKind>,
     pending_block: Option<usize>,
     indent_stack: Vec<usize>,
     out: LexResult,
@@ -137,7 +195,7 @@ impl Lexer<'_> {
                 _ if !self.line_has_tokens => self.begin_line(),
                 '\t' => {
                     self.bump_while(|c| c == '\t');
-                    self.push_error(LexErrorReason::IllegalTab, start);
+                    self.push_error(LexicalErrorKind::IllegalTab, start);
                 }
                 ':' => {
                     self.pos += 1;
@@ -149,20 +207,14 @@ impl Lexer<'_> {
                 }
                 '@' => {
                     self.pos += 1;
-                    let well_formed = self.peek().is_some_and(|c| c.is_ascii_alphabetic());
-                    self.bump_while(is_word_char);
-                    if well_formed {
-                        self.push(SyntaxKind::Identifier, start);
-                    } else {
-                        self.push_error(LexErrorReason::MalformedIdentifier, start);
-                    }
+                    self.push(SyntaxKind::At, start);
                 }
                 c if c.is_ascii_digit() => self.number(start),
-                c if is_word_char(c) => self.word(start),
+                c if c.is_ascii_alphabetic() => self.word(start),
                 '"' => self.string(start),
                 c => {
                     self.pos += c.len_utf8();
-                    self.push_error(LexErrorReason::UnexpectedCharacter, start);
+                    self.push_error(LexicalErrorKind::UnexpectedCharacter, start);
                 }
             }
         }
@@ -254,7 +306,7 @@ impl Lexer<'_> {
             != indentation
         {
             self.report(
-                LexErrorReason::InconsistentDedent,
+                LexicalErrorKind::InconsistentDedent,
                 self.line_start,
                 self.pos,
             );
@@ -269,13 +321,12 @@ impl Lexer<'_> {
         };
         self.push(kind, start);
         if self.line_has_tokens {
-            let opens =
-                matches!(self.last_kinds, [Some(k), Some(SyntaxKind::Colon)] if k.is_keyword());
+            let opens = self.last_kind == Some(SyntaxKind::Colon);
             self.pending_block = opens.then_some(self.line_indentation);
         }
         self.line_start = self.pos;
         self.line_has_tokens = false;
-        self.last_kinds = [None, None];
+        self.last_kind = None;
     }
 
     fn end_input(&mut self) {
@@ -296,7 +347,7 @@ impl Lexer<'_> {
         } else if is_date_shaped(text) {
             self.push(SyntaxKind::DateLiteral, start);
         } else {
-            self.push_error(LexErrorReason::MalformedNumber, start);
+            self.push_error(LexicalErrorKind::MalformedNumber, start);
         }
     }
 
@@ -308,16 +359,13 @@ impl Lexer<'_> {
             let path_start = self.pos;
             self.bump_while(|c| c != ' ' && c != '\t' && !is_line_terminator(c));
             if self.pos == path_start {
-                self.push_error(LexErrorReason::MalformedUrl, start);
+                self.push_error(LexicalErrorKind::MalformedUrl, start);
             } else {
                 self.push(SyntaxKind::UrlLiteral, start);
             }
             return;
         }
-        match Keyword::from_text(text) {
-            Some(keyword) => self.push(keyword.into(), start),
-            None => self.push_error(LexErrorReason::UnknownWord, start),
-        }
+        self.push(SyntaxKind::Word, start);
     }
 
     fn string(&mut self, start: usize) {
@@ -336,14 +384,14 @@ impl Lexer<'_> {
                         Some('"' | '\\') => self.pos += 1,
                         Some(c) if !is_line_terminator(c) => {
                             self.pos += c.len_utf8();
-                            self.report(LexErrorReason::InvalidEscape, escape_start, self.pos);
+                            self.report(LexicalErrorKind::InvalidEscape, escape_start, self.pos);
                         }
                         _ => {}
                     }
                 }
                 Some(c) if !is_line_terminator(c) => self.pos += c.len_utf8(),
                 _ => {
-                    self.push_error(LexErrorReason::UnterminatedString, start);
+                    self.push_error(LexicalErrorKind::UnterminatedString, start);
                     return;
                 }
             }
@@ -372,17 +420,17 @@ impl Lexer<'_> {
         let len = TextSize::try_from(self.pos - start).expect("token longer than 4 GiB");
         self.out.tokens.push(Token { kind, len });
         if is_significant(kind) {
-            self.last_kinds = [self.last_kinds[1], Some(kind)];
+            self.last_kind = Some(kind);
         }
     }
 
-    fn report(&mut self, reason: LexErrorReason, start: usize, end: usize) {
+    fn report(&mut self, kind: LexicalErrorKind, start: usize, end: usize) {
         let range = TextRange::new(text_size(start), text_size(end));
-        self.out.errors.push(LexError { reason, range });
+        self.out.errors.push(LexicalError { kind, range });
     }
 
-    fn push_error(&mut self, reason: LexErrorReason, start: usize) {
-        self.report(reason, start, self.pos);
+    fn push_error(&mut self, kind: LexicalErrorKind, start: usize) {
+        self.report(kind, start, self.pos);
         self.push(SyntaxKind::Error, start);
     }
 }
@@ -426,15 +474,15 @@ fn is_date_shaped(text: &str) -> bool {
 mod tests {
     use rowan::TextRange;
 
-    use super::{LexError, LexErrorReason, lex, text_size};
+    use super::{InputRejection, LexicalError, LexicalErrorKind, lex, text_size};
     use crate::Keyword;
     use crate::SyntaxKind::{
-        self, BlankLine, Colon, Comma, Comment, DateLiteral, Dedent, Error, Identifier, Indent,
-        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, Whitespace,
+        self, At, BlankLine, Colon, Comma, Comment, DateLiteral, Dedent, Error, Indent,
+        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, Whitespace, Word,
     };
 
-    fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
-        let lexed = lex(source);
+    fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexicalError> {
+        let lexed = lex(source).expect("accepted");
         let mut pos = 0;
         let mut actual = Vec::new();
         for token in &lexed.tokens {
@@ -481,12 +529,9 @@ mod tests {
 
     #[test]
     fn every_line_terminator_form_ends_a_line() {
-        check("yes\n", &[(Keyword::Yes.into(), "yes"), (Newline, "\n")]);
-        check(
-            "yes\r\n",
-            &[(Keyword::Yes.into(), "yes"), (Newline, "\r\n")],
-        );
-        check("yes\r", &[(Keyword::Yes.into(), "yes"), (Newline, "\r")]);
+        check("yes\n", &[(Word, "yes"), (Newline, "\n")]);
+        check("yes\r\n", &[(Word, "yes"), (Newline, "\r\n")]);
+        check("yes\r", &[(Word, "yes"), (Newline, "\r")]);
     }
 
     #[test]
@@ -503,11 +548,7 @@ mod tests {
         );
         check(
             "yes\n\n",
-            &[
-                (Keyword::Yes.into(), "yes"),
-                (Newline, "\n"),
-                (BlankLine, "\n"),
-            ],
+            &[(Word, "yes"), (Newline, "\n"), (BlankLine, "\n")],
         );
     }
 
@@ -520,7 +561,7 @@ mod tests {
         check(
             "yes # c\n",
             &[
-                (Keyword::Yes.into(), "yes"),
+                (Word, "yes"),
                 (Whitespace, " "),
                 (Comment, "# c"),
                 (Newline, "\n"),
@@ -559,56 +600,52 @@ mod tests {
         );
         assert_eq!(
             errors,
-            [LexError {
-                reason: LexErrorReason::IllegalTab,
+            [LexicalError {
+                kind: LexicalErrorKind::IllegalTab,
                 range: range(0, 2)
             }]
         );
     }
 
     #[test]
-    fn every_keyword_lexes_to_its_kind() {
+    fn every_keyword_lexes_as_a_word() {
         for keyword in Keyword::ALL.iter().copied() {
-            let errors = check(
-                keyword.text(),
-                &[(keyword.into(), keyword.text()), (Newline, "")],
-            );
+            let errors = check(keyword.text(), &[(Word, keyword.text()), (Newline, "")]);
             assert_eq!(errors.len(), 0, "{keyword:?}");
         }
     }
 
     #[test]
-    fn keywords_are_case_sensitive() {
-        let errors = check("Guide", &[(Error, "Guide"), (Newline, "")]);
-        assert_eq!(errors[0].reason, LexErrorReason::UnknownWord);
-    }
-
-    #[test]
-    fn unknown_words_are_errors() {
-        let errors = check(
+    fn any_word_is_accepted_whatever_its_text() {
+        check("Guide", &[(Word, "Guide"), (Newline, "")]);
+        check(
             "foo bar",
             &[
-                (Error, "foo"),
+                (Word, "foo"),
                 (Whitespace, " "),
-                (Error, "bar"),
+                (Word, "bar"),
                 (Newline, ""),
             ],
         );
-        assert_eq!(
-            errors,
-            [
-                LexError {
-                    reason: LexErrorReason::UnknownWord,
-                    range: range(0, 3)
-                },
-                LexError {
-                    reason: LexErrorReason::UnknownWord,
-                    range: range(4, 7)
-                },
-            ]
-        );
-        check("no_position", &[(Error, "no_position"), (Newline, "")]);
-        check("yes2", &[(Error, "yes2"), (Newline, "")]);
+        check("no_position", &[(Word, "no_position"), (Newline, "")]);
+        check("yes2", &[(Word, "yes2"), (Newline, "")]);
+        check("a-b_c9", &[(Word, "a-b_c9"), (Newline, "")]);
+    }
+
+    #[test]
+    fn a_word_begins_with_a_letter() {
+        for (source, rest) in [("-foo", "foo"), ("_x", "x")] {
+            let errors = check(
+                source,
+                &[(Error, &source[..1]), (Word, rest), (Newline, "")],
+            );
+            assert_eq!(
+                errors[0].kind,
+                LexicalErrorKind::UnexpectedCharacter,
+                "{source:?}"
+            );
+            assert_eq!(errors[0].range, range(0, 1), "{source:?}");
+        }
     }
 
     #[test]
@@ -616,66 +653,72 @@ mod tests {
         check(
             "foo#bar\nbaz",
             &[
-                (Error, "foo"),
+                (Word, "foo"),
                 (Comment, "#bar"),
                 (Newline, "\n"),
-                (Error, "baz"),
+                (Word, "baz"),
                 (Newline, ""),
             ],
         );
     }
 
     #[test]
-    fn identifiers() {
-        check("@a", &[(Identifier, "@a"), (Newline, "")]);
-        check("@a-b_c9", &[(Identifier, "@a-b_c9"), (Newline, "")]);
-        check("@Abc", &[(Identifier, "@Abc"), (Newline, "")]);
+    fn the_at_sign_is_a_punctuator_of_its_own() {
+        check("@a", &[(At, "@"), (Word, "a"), (Newline, "")]);
+        check("@Abc", &[(At, "@"), (Word, "Abc"), (Newline, "")]);
         check(
             "@a @b",
             &[
-                (Identifier, "@a"),
+                (At, "@"),
+                (Word, "a"),
                 (Whitespace, " "),
-                (Identifier, "@b"),
+                (At, "@"),
+                (Word, "b"),
                 (Newline, ""),
             ],
         );
+        check(
+            "@ a",
+            &[(At, "@"), (Whitespace, " "), (Word, "a"), (Newline, "")],
+        );
+        check("@", &[(At, "@"), (Newline, "")]);
+        check("@9", &[(At, "@"), (IntegerLiteral, "9"), (Newline, "")]);
+        let errors = check(
+            "@-x",
+            &[(At, "@"), (Error, "-"), (Word, "x"), (Newline, "")],
+        );
+        assert_eq!(errors[0].kind, LexicalErrorKind::UnexpectedCharacter);
     }
 
     #[test]
-    fn malformed_identifiers_are_one_error_each() {
-        for source in ["@", "@9", "@-x", "@_x", "@9abc"] {
-            let errors = check(source, &[(Error, source), (Newline, "")]);
-            assert_eq!(
-                errors[0].reason,
-                LexErrorReason::MalformedIdentifier,
-                "{source:?}"
-            );
-            let end = u32::try_from(source.len()).unwrap();
-            assert_eq!(errors[0].range, range(0, end), "{source:?}");
-        }
+    fn input_containing_a_null_character_is_rejected_as_a_whole() {
+        assert_eq!(
+            lex("guide \"G\"\n\0"),
+            Err(InputRejection {
+                offset: text_size(10)
+            })
+        );
+        assert_eq!(
+            lex("\0").unwrap_err().to_string(),
+            "the input contains U+0000 at byte 0 and is not an Oval document"
+        );
     }
 
     #[test]
     fn punctuators() {
-        check(
-            "note:",
-            &[(Keyword::Note.into(), "note"), (Colon, ":"), (Newline, "")],
-        );
+        check("note:", &[(Word, "note"), (Colon, ":"), (Newline, "")]);
         check(
             "yes,no",
-            &[
-                (Keyword::Yes.into(), "yes"),
-                (Comma, ","),
-                (Keyword::No.into(), "no"),
-                (Newline, ""),
-            ],
+            &[(Word, "yes"), (Comma, ","), (Word, "no"), (Newline, "")],
         );
         check(
             "@a,@b",
             &[
-                (Identifier, "@a"),
+                (At, "@"),
+                (Word, "a"),
                 (Comma, ","),
-                (Identifier, "@b"),
+                (At, "@"),
+                (Word, "b"),
                 (Newline, ""),
             ],
         );
@@ -687,11 +730,12 @@ mod tests {
         check(
             "campaign incumbent @bsantos",
             &[
-                (Keyword::Campaign.into(), "campaign"),
+                (Word, "campaign"),
                 (Whitespace, " "),
-                (Keyword::Incumbent.into(), "incumbent"),
+                (Word, "incumbent"),
                 (Whitespace, " "),
-                (Identifier, "@bsantos"),
+                (At, "@"),
+                (Word, "bsantos"),
                 (Newline, ""),
             ],
         );
@@ -700,7 +744,7 @@ mod tests {
     #[test]
     fn unexpected_characters_are_one_error_each() {
         let errors = check("!", &[(Error, "!"), (Newline, "")]);
-        assert_eq!(errors[0].reason, LexErrorReason::UnexpectedCharacter);
+        assert_eq!(errors[0].kind, LexicalErrorKind::UnexpectedCharacter);
         check("!?", &[(Error, "!"), (Error, "?"), (Newline, "")]);
     }
 
@@ -749,8 +793,8 @@ mod tests {
         let errors = check("\"a\\nb\"", &[(StringLiteral, "\"a\\nb\""), (Newline, "")]);
         assert_eq!(
             errors,
-            [LexError {
-                reason: LexErrorReason::InvalidEscape,
+            [LexicalError {
+                kind: LexicalErrorKind::InvalidEscape,
                 range: range(2, 4)
             }]
         );
@@ -767,8 +811,8 @@ mod tests {
         let errors = check("\"abc", &[(Error, "\"abc"), (Newline, "")]);
         assert_eq!(
             errors,
-            [LexError {
-                reason: LexErrorReason::UnterminatedString,
+            [LexicalError {
+                kind: LexicalErrorKind::UnterminatedString,
                 range: range(0, 4)
             }]
         );
@@ -790,8 +834,8 @@ mod tests {
         let errors = check("\"abc\\", &[(Error, "\"abc\\"), (Newline, "")]);
         assert_eq!(
             errors,
-            [LexError {
-                reason: LexErrorReason::UnterminatedString,
+            [LexicalError {
+                kind: LexicalErrorKind::UnterminatedString,
                 range: range(0, 5)
             }]
         );
@@ -804,7 +848,7 @@ mod tests {
         check(
             "supporters \"a\", \"b\"",
             &[
-                (Keyword::Supporters.into(), "supporters"),
+                (Word, "supporters"),
                 (Whitespace, " "),
                 (StringLiteral, "\"a\""),
                 (Comma, ","),
@@ -816,7 +860,7 @@ mod tests {
         check(
             "designation\"x\"# c",
             &[
-                (Keyword::Designation.into(), "designation"),
+                (Word, "designation"),
                 (StringLiteral, "\"x\""),
                 (Comment, "# c"),
                 (Newline, ""),
@@ -850,9 +894,9 @@ mod tests {
         check(
             "ranked max 10",
             &[
-                (Keyword::Ranked.into(), "ranked"),
+                (Word, "ranked"),
                 (Whitespace, " "),
-                (Keyword::Max.into(), "max"),
+                (Word, "max"),
                 (Whitespace, " "),
                 (IntegerLiteral, "10"),
                 (Newline, ""),
@@ -868,7 +912,7 @@ mod tests {
         check(
             "date 2026-11-05\n",
             &[
-                (Keyword::Date.into(), "date"),
+                (Word, "date"),
                 (Whitespace, " "),
                 (DateLiteral, "2026-11-05"),
                 (Newline, "\n"),
@@ -881,7 +925,7 @@ mod tests {
         check(
             "oval 1\n",
             &[
-                (Keyword::Oval.into(), "oval"),
+                (Word, "oval"),
                 (Whitespace, " "),
                 (IntegerLiteral, "1"),
                 (Newline, "\n"),
@@ -911,8 +955,8 @@ mod tests {
         ] {
             let errors = check(source, &[(Error, source), (Newline, "")]);
             assert_eq!(
-                errors[0].reason,
-                LexErrorReason::MalformedNumber,
+                errors[0].kind,
+                LexicalErrorKind::MalformedNumber,
                 "{source:?}"
             );
         }
@@ -935,7 +979,7 @@ mod tests {
         check(
             "website https://x.y # c\n",
             &[
-                (Keyword::Website.into(), "website"),
+                (Word, "website"),
                 (Whitespace, " "),
                 (UrlLiteral, "https://x.y"),
                 (Whitespace, " "),
@@ -952,32 +996,31 @@ mod tests {
     #[test]
     fn url_requires_scheme_separator_and_body() {
         let errors = check("https://", &[(Error, "https://"), (Newline, "")]);
-        assert_eq!(errors[0].reason, LexErrorReason::MalformedUrl);
+        assert_eq!(errors[0].kind, LexicalErrorKind::MalformedUrl);
         let errors = check(
             "https:// x",
             &[
                 (Error, "https://"),
                 (Whitespace, " "),
-                (Error, "x"),
+                (Word, "x"),
                 (Newline, ""),
             ],
         );
-        assert_eq!(errors[0].reason, LexErrorReason::MalformedUrl);
-        let errors = check("https:", &[(Error, "https"), (Colon, ":"), (Newline, "")]);
-        assert_eq!(errors[0].reason, LexErrorReason::UnknownWord);
+        assert_eq!(errors[0].kind, LexicalErrorKind::MalformedUrl);
+        check("https:", &[(Word, "https"), (Colon, ":"), (Newline, "")]);
         let errors = check(
             "ftp://x",
             &[
-                (Error, "ftp"),
+                (Word, "ftp"),
                 (Colon, ":"),
                 (Error, "/"),
                 (Error, "/"),
-                (Error, "x"),
+                (Word, "x"),
                 (Newline, ""),
             ],
         );
-        assert_eq!(errors[0].reason, LexErrorReason::UnknownWord);
-        assert_eq!(errors[1].reason, LexErrorReason::UnexpectedCharacter);
+        assert_eq!(errors[0].kind, LexicalErrorKind::UnexpectedCharacter);
+        assert_eq!(errors.len(), 2);
     }
 
     #[test]
@@ -985,14 +1028,14 @@ mod tests {
         check(
             "guide\n  note\nparty",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, "\n"),
                 (Dedent, ""),
-                (Keyword::Party.into(), "party"),
+                (Word, "party"),
                 (Newline, ""),
             ],
         );
@@ -1003,11 +1046,11 @@ mod tests {
         check(
             "guide\n  note",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, ""),
                 (Dedent, ""),
             ],
@@ -1015,15 +1058,15 @@ mod tests {
         check(
             "guide\n  note\n    yes\n",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, "\n"),
                 (Whitespace, "    "),
                 (Indent, ""),
-                (Keyword::Yes.into(), "yes"),
+                (Word, "yes"),
                 (Newline, "\n"),
                 (Dedent, ""),
                 (Dedent, ""),
@@ -1036,19 +1079,19 @@ mod tests {
         check(
             "guide\n  note\n    yes\nparty",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, "\n"),
                 (Whitespace, "    "),
                 (Indent, ""),
-                (Keyword::Yes.into(), "yes"),
+                (Word, "yes"),
                 (Newline, "\n"),
                 (Dedent, ""),
                 (Dedent, ""),
-                (Keyword::Party.into(), "party"),
+                (Word, "party"),
                 (Newline, ""),
             ],
         );
@@ -1059,19 +1102,19 @@ mod tests {
         check(
             "guide\n   note\n          yes\n   no",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "   "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, "\n"),
                 (Whitespace, "          "),
                 (Indent, ""),
-                (Keyword::Yes.into(), "yes"),
+                (Word, "yes"),
                 (Newline, "\n"),
                 (Whitespace, "   "),
                 (Dedent, ""),
-                (Keyword::No.into(), "no"),
+                (Word, "no"),
                 (Newline, ""),
                 (Dedent, ""),
             ],
@@ -1083,7 +1126,7 @@ mod tests {
         check(
             "guide\n\n      # deep comment\n  \n  note\n",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (BlankLine, "\n"),
                 (Whitespace, "      "),
@@ -1093,7 +1136,7 @@ mod tests {
                 (BlankLine, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, "\n"),
                 (Dedent, ""),
             ],
@@ -1105,22 +1148,22 @@ mod tests {
         let errors = check(
             "guide\n    note\n  party",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "    "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Dedent, ""),
-                (Keyword::Party.into(), "party"),
+                (Word, "party"),
                 (Newline, ""),
             ],
         );
         assert_eq!(
             errors,
-            [LexError {
-                reason: LexErrorReason::InconsistentDedent,
+            [LexicalError {
+                kind: LexicalErrorKind::InconsistentDedent,
                 range: range(15, 17)
             }]
         );
@@ -1133,7 +1176,7 @@ mod tests {
             &[
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, ""),
                 (Dedent, ""),
             ],
@@ -1144,7 +1187,7 @@ mod tests {
                 (Whitespace, "\u{FEFF}"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, ""),
                 (Dedent, ""),
             ],
@@ -1155,21 +1198,13 @@ mod tests {
     fn a_leading_tab_is_content_at_indentation_zero() {
         let errors = check(
             "\tguide\n",
-            &[
-                (Error, "\t"),
-                (Keyword::Guide.into(), "guide"),
-                (Newline, "\n"),
-            ],
+            &[(Error, "\t"), (Word, "guide"), (Newline, "\n")],
         );
-        assert_eq!(errors[0].reason, LexErrorReason::IllegalTab);
+        assert_eq!(errors[0].kind, LexicalErrorKind::IllegalTab);
     }
 
     fn opener(keyword: Keyword) -> [(SyntaxKind, &'static str); 3] {
-        [
-            (keyword.into(), keyword.text()),
-            (Colon, ":"),
-            (Newline, "\n"),
-        ]
+        [(Word, keyword.text()), (Colon, ":"), (Newline, "\n")]
     }
 
     #[test]
@@ -1203,16 +1238,16 @@ mod tests {
         check(
             "guide\n  note:\n    body\n  party\n",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Colon, ":"),
                 (Newline, "\n"),
                 (MarkdownBlock, "    body\n"),
                 (Whitespace, "  "),
-                (Keyword::Party.into(), "party"),
+                (Word, "party"),
                 (Newline, "\n"),
                 (Dedent, ""),
             ],
@@ -1224,16 +1259,16 @@ mod tests {
         check(
             "guide\n  note:\n      deep\n    less\n  party",
             &[
-                (Keyword::Guide.into(), "guide"),
+                (Word, "guide"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Colon, ":"),
                 (Newline, "\n"),
                 (MarkdownBlock, "      deep\n    less\n"),
                 (Whitespace, "  "),
-                (Keyword::Party.into(), "party"),
+                (Word, "party"),
                 (Newline, ""),
                 (Dedent, ""),
             ],
@@ -1263,7 +1298,7 @@ mod tests {
                 (MarkdownBlock, "  body\n"),
                 (BlankLine, "\n"),
                 (BlankLine, "\n"),
-                (Keyword::Party.into(), "party"),
+                (Word, "party"),
                 (Newline, ""),
             ],
         );
@@ -1272,26 +1307,13 @@ mod tests {
     #[test]
     fn empty_body_produces_no_token() {
         let [k, c, n] = opener(Keyword::Note);
-        check(
-            "note:\nparty",
-            &[k, c, n, (Keyword::Party.into(), "party"), (Newline, "")],
-        );
+        check("note:\nparty", &[k, c, n, (Word, "party"), (Newline, "")]);
         check(
             "note:\n\nparty",
-            &[
-                k,
-                c,
-                n,
-                (BlankLine, "\n"),
-                (Keyword::Party.into(), "party"),
-                (Newline, ""),
-            ],
+            &[k, c, n, (BlankLine, "\n"), (Word, "party"), (Newline, "")],
         );
         check("note:\n", &[k, c, n]);
-        check(
-            "note:",
-            &[(Keyword::Note.into(), "note"), (Colon, ":"), (Newline, "")],
-        );
+        check("note:", &[(Word, "note"), (Colon, ":"), (Newline, "")]);
     }
 
     #[test]
@@ -1315,14 +1337,14 @@ mod tests {
         check(
             "note: yes\n  no",
             &[
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Colon, ":"),
                 (Whitespace, " "),
-                (Keyword::Yes.into(), "yes"),
+                (Word, "yes"),
                 (Newline, "\n"),
                 (Whitespace, "  "),
                 (Indent, ""),
-                (Keyword::No.into(), "no"),
+                (Word, "no"),
                 (Newline, ""),
                 (Dedent, ""),
             ],
@@ -1330,26 +1352,32 @@ mod tests {
     }
 
     #[test]
-    fn only_a_keyword_before_the_colon_opens_a_body() {
+    fn any_line_ending_in_a_colon_opens_a_body() {
         check(
             "@a:\n  yes",
             &[
-                (Identifier, "@a"),
+                (At, "@"),
+                (Word, "a"),
                 (Colon, ":"),
                 (Newline, "\n"),
-                (Whitespace, "  "),
-                (Indent, ""),
-                (Keyword::Yes.into(), "yes"),
-                (Newline, ""),
-                (Dedent, ""),
+                (MarkdownBlock, "  yes"),
             ],
         );
         check(
             "recommend yes:\n  text\n",
             &[
-                (Keyword::Recommend.into(), "recommend"),
+                (Word, "recommend"),
                 (Whitespace, " "),
-                (Keyword::Yes.into(), "yes"),
+                (Word, "yes"),
+                (Colon, ":"),
+                (Newline, "\n"),
+                (MarkdownBlock, "  text\n"),
+            ],
+        );
+        check(
+            "nte:\n  text\n",
+            &[
+                (Word, "nte"),
                 (Colon, ":"),
                 (Newline, "\n"),
                 (MarkdownBlock, "  text\n"),
@@ -1362,7 +1390,7 @@ mod tests {
         check(
             "note: # c\n  body\n",
             &[
-                (Keyword::Note.into(), "note"),
+                (Word, "note"),
                 (Colon, ":"),
                 (Whitespace, " "),
                 (Comment, "# c"),

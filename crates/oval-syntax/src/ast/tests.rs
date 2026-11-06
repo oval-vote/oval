@@ -6,7 +6,7 @@ use crate::Keyword;
 use crate::parser::parse;
 
 fn document(source: &str) -> Document {
-    let result = parse(source);
+    let result = parse(source).expect("accepted");
     Document::cast(result.syntax()).expect("root is a Document")
 }
 
@@ -87,10 +87,7 @@ fn parties_and_their_fields() {
     let parties: Vec<_> = doc.parties().collect();
     assert_eq!(parties.len(), 2);
     let dem = &parties[0];
-    assert_eq!(
-        dem.id().map(|i| i.name().to_owned()).as_deref(),
-        Some("dem")
-    );
+    assert_eq!(dem.id().map(|i| i.name()).as_deref(), Some("dem"));
     assert_eq!(dem.name().as_deref(), Some("Democratic"));
     assert_eq!(
         dem.abbreviation().and_then(|f| f.value()).as_deref(),
@@ -119,20 +116,14 @@ fn candidates_with_a_reference_and_an_inline_party() {
     assert_eq!(candidates.len(), 2);
 
     let reyes = &candidates[0];
-    assert_eq!(
-        reyes.id().map(|i| i.name().to_owned()).as_deref(),
-        Some("nreyes")
-    );
+    assert_eq!(reyes.id().map(|i| i.name()).as_deref(), Some("nreyes"));
     assert_eq!(reyes.name().as_deref(), Some("Nadia Reyes"));
     assert_eq!(
         reyes.designation().and_then(|f| f.value()).as_deref(),
         Some("United States Senator")
     );
     let party = reyes.party().expect("party line");
-    assert_eq!(
-        party.id().map(|i| i.name().to_owned()).as_deref(),
-        Some("dem")
-    );
+    assert_eq!(party.id().map(|i| i.name()).as_deref(), Some("dem"));
     assert!(!party.is_declaration());
     assert_eq!(party.name(), None);
     assert_eq!(
@@ -212,10 +203,7 @@ fn ballots_sections_and_items() {
     let roots: Vec<_> = doc.ballots().collect();
     assert_eq!(roots.len(), 1);
     let root = &roots[0];
-    assert_eq!(
-        root.id().map(|i| i.name().to_owned()).as_deref(),
-        Some("franklin")
-    );
+    assert_eq!(root.id().map(|i| i.name()).as_deref(), Some("franklin"));
     assert_eq!(root.title().as_deref(), Some("State of Franklin"));
     assert_eq!(
         root.eligibility().and_then(|f| f.value()).as_deref(),
@@ -287,10 +275,7 @@ fn contest_fields_campaigns_and_recommendation() {
     let contest = first_contest(
         "contest @mayor \"Mayor\" ranked max 5\n  subtitle \"Rank five\"\n  tabulation \"IRV\"\n  campaign incumbent @b \"Bea\"\n    designation \"Mayor\"\n    website https://bea.example\n  campaign withdrawn @c \"Cas\"\n  recommend\n    support @a\n    support @b @d\n    oppose @c\n    justification:\n      Why.\n    note:\n      Also.\n",
     );
-    assert_eq!(
-        contest.id().map(|i| i.name().to_owned()).as_deref(),
-        Some("mayor")
-    );
+    assert_eq!(contest.id().map(|i| i.name()).as_deref(), Some("mayor"));
     assert_eq!(
         contest.subtitle().and_then(|f| f.value()).as_deref(),
         Some("Rank five")
@@ -326,7 +311,7 @@ fn contest_fields_campaigns_and_recommendation() {
     assert!(!rec.is_no_position());
     let tiers: Vec<Vec<String>> = rec
         .support()
-        .map(|t| t.candidates().map(|c| c.name().to_owned()).collect())
+        .map(|t| t.candidates().map(|c| c.name()).collect())
         .collect();
     assert_eq!(
         tiers,
@@ -334,11 +319,7 @@ fn contest_fields_campaigns_and_recommendation() {
     );
     let opposed: Vec<String> = rec
         .oppose()
-        .flat_map(|o| {
-            o.candidates()
-                .map(|c| c.name().to_owned())
-                .collect::<Vec<_>>()
-        })
+        .flat_map(|o| o.candidates().map(|c| c.name()).collect::<Vec<_>>())
         .collect();
     assert_eq!(opposed, ["c"]);
     assert_eq!(
@@ -366,7 +347,7 @@ fn ticket_members_in_block_form() {
         members[0]
             .party()
             .and_then(|p| p.id())
-            .map(|i| i.name().to_owned())
+            .map(|i| i.name())
             .as_deref(),
         Some("dem")
     );
@@ -378,10 +359,7 @@ fn ticket_members_in_block_form() {
     let reference: Vec<_> = campaigns[1].members().collect();
     assert_eq!(reference.len(), 1);
     assert!(!reference[0].is_declaration());
-    assert_eq!(
-        reference[0].id().map(|i| i.name().to_owned()).as_deref(),
-        Some("r")
-    );
+    assert_eq!(reference[0].id().map(|i| i.name()).as_deref(), Some("r"));
     assert!(contest.recommendations().next().unwrap().is_no_position());
 }
 
@@ -399,10 +377,7 @@ fn measure_fields_and_positions() {
     let measure = first_measure(
         "measure @p1 \"Proposition 1\"\n  subtitle \"Bond\"\n  description:\n    Text.\n  if_yes:\n    Yes.\n  if_no:\n    No.\n  placement \"Referral\"\n  tabulation \"Majority\"\n  fiscal_impact \"$1\"\n  supporters \"A\", \"B\"\n  opponents none\n  note:\n    N.\n  recommend yes\n    justification:\n      J.\n",
     );
-    assert_eq!(
-        measure.id().map(|i| i.name().to_owned()).as_deref(),
-        Some("p1")
-    );
+    assert_eq!(measure.id().map(|i| i.name()).as_deref(), Some("p1"));
     assert_eq!(measure.title().as_deref(), Some("Proposition 1"));
     assert_eq!(
         measure.subtitle().and_then(|f| f.value()).as_deref(),

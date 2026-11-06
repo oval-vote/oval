@@ -4,7 +4,7 @@ macro_rules! define_syntax {
         tokens { $( $token:ident : $token_doc:literal ),+ $(,)? }
         nodes { $( $node:ident : $node_doc:literal ),+ $(,)? }
     ) => {
-        /// A reserved word of the Oval language.
+        /// A word that a syntactic production of the Oval language names literally.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[repr(u16)]
         pub enum Keyword {
@@ -113,7 +113,8 @@ define_syntax! {
         "none" => NoneValue / NoneValueKeyword,
     }
     tokens {
-        Identifier: "An identifier token: `@` followed by a name.",
+        Word: "A bare word: a letter followed by letters, digits, hyphens, and underscores.",
+        At: "The `@` punctuator.",
         StringLiteral: "A double-quoted string token.",
         IntegerLiteral: "An unsigned integer token.",
         DateLiteral: "An ISO 8601 calendar date token.",
@@ -131,6 +132,7 @@ define_syntax! {
     }
     nodes {
         Document: "The root node: a whole document.",
+        Identifier: "An identifier: `@` followed by a word.",
         VersionMarker: "The `oval` version marker.",
         Party: "A `party` declaration.",
         Candidate: "A `candidate` declaration.",
@@ -235,7 +237,7 @@ mod tests {
         assert_eq!(Keyword::from_text("Guide"), None);
         assert_eq!(Keyword::from_text("no_position"), None);
         assert_eq!(Keyword::from_text(""), None);
-        assert_eq!(SyntaxKind::Identifier.as_keyword(), None);
+        assert_eq!(SyntaxKind::Word.as_keyword(), None);
     }
 
     #[test]

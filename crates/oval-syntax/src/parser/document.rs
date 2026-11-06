@@ -1,9 +1,8 @@
 use super::Parser;
 use crate::SyntaxKind::{
     self, AbbreviationKeyword, BallotKeyword, Candidate, CandidateKeyword, DateKeyword,
-    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, Identifier, IntegerLiteral,
-    NoteKeyword, OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionMarker,
-    WebsiteKeyword,
+    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, IntegerLiteral, NoteKeyword,
+    OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionMarker, WebsiteKeyword,
 };
 
 pub(super) const GUIDE_FIELDS: &[SyntaxKind] =
@@ -99,7 +98,7 @@ impl Parser<'_> {
     pub(super) fn party_reference(&mut self) {
         self.start_node(PartyReference);
         self.bump();
-        self.expect(Identifier);
+        self.identifier();
         if self.eat(StringLiteral) {
             self.end_of_line();
             self.block(PARTY_FIELDS, &[], Self::simple_field);

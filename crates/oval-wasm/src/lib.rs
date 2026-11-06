@@ -1,6 +1,7 @@
 //! WebAssembly bindings for the Oval voting guide format.
 
-use oval_core::Report;
+use oval_core::{CompileError, InputRejection, Report};
+use oval_format::FormatError;
 use wasm_bindgen::prelude::*;
 
 /// The major version of the Oval language this package reads.
@@ -12,7 +13,7 @@ pub fn language_major() -> u32 {
 /// Parses and validates `source`, returning every diagnostic in source order.
 #[wasm_bindgen]
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
-    diagnostics(&oval_core::check(source))
+    diagnostics(&oval_core::check(source).map_err(rejected)?)
 }
 
 /// Compiles `source` to its canonical form, or fails with the diagnostics.
@@ -20,7 +21,8 @@ pub fn check(source: &str) -> Result<JsValue, JsValue> {
 pub fn compile(source: &str) -> Result<JsValue, JsValue> {
     match oval_core::compile(source) {
         Ok(compiled) => serde_wasm_bindgen::to_value(&compiled).map_err(into_js),
-        Err(report) => Err(diagnostics(&report)?),
+        Err(CompileError::Rejected(rejection)) => Err(rejected(rejection)),
+        Err(CompileError::Invalid(report)) => Err(diagnostics(&report)?),
     }
 }
 
@@ -29,7 +31,10 @@ pub fn compile(source: &str) -> Result<JsValue, JsValue> {
 pub fn format(source: &str) -> Result<String, JsValue> {
     match oval_format::format(source) {
         Ok(formatted) => Ok(formatted),
-        Err(_) => Err(diagnostics(&oval_core::check(source))?),
+        Err(FormatError::Rejected(rejection)) => Err(rejected(rejection)),
+        Err(FormatError::SyntaxErrors(_)) => {
+            Err(diagnostics(&oval_core::check(source).map_err(rejected)?)?)
+        }
     }
 }
 
@@ -39,6 +44,10 @@ fn diagnostics(report: &Report) -> Result<JsValue, JsValue> {
 
 fn into_js(error: serde_wasm_bindgen::Error) -> JsValue {
     JsValue::from(error)
+}
+
+fn rejected(rejection: InputRejection) -> JsValue {
+    JsValue::from(rejection.to_string())
 }
 
 #[cfg(test)]

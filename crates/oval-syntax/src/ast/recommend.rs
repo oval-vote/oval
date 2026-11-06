@@ -1,4 +1,4 @@
-use super::{Identifier, MarkdownField, ast_node, block_children, field, has_token, tokens};
+use super::{Identifier, MarkdownField, ast_node, block_children, field, has_token, identifiers};
 use crate::{Keyword, SyntaxKind};
 
 ast_node! {
@@ -55,10 +55,4 @@ impl Oppose {
     pub fn candidates(&self) -> impl Iterator<Item = Identifier> + use<> {
         identifiers(&self.0)
     }
-}
-
-fn identifiers(node: &crate::SyntaxNode) -> impl Iterator<Item = Identifier> + use<> {
-    tokens(node)
-        .filter(|t| t.kind() == SyntaxKind::Identifier)
-        .map(Identifier)
 }

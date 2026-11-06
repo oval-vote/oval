@@ -2,9 +2,9 @@ use std::fmt::Write;
 
 use rowan::{NodeOrToken, TextRange, TextSize};
 
-use super::{ParseError, SyntaxError, parse};
+use super::{ParseError, ParseResult, SyntaxError};
 use crate::SyntaxKind;
-use crate::lexer::LexErrorReason;
+use crate::lexer::LexicalErrorKind;
 
 const SAMPLE: &str = "\
 oval 1
@@ -38,6 +38,10 @@ ballot @franklin \"State of Franklin\"
     opponents none
     recommend yes
 ";
+
+fn parse(source: &str) -> ParseResult {
+    super::parse(source).expect("accepted")
+}
 
 fn dump(node: &crate::SyntaxNode) -> String {
     fn go(element: rowan::SyntaxElement<crate::OvalLanguage>, depth: usize, out: &mut String) {
@@ -86,11 +90,11 @@ fn in_ballot(body: &str) -> String {
     out
 }
 
-fn first_contest(parse: &super::ParseResult) -> crate::SyntaxNode {
+fn first_contest(parse: &ParseResult) -> crate::SyntaxNode {
     first(parse, SyntaxKind::Contest)
 }
 
-fn first(parse: &super::ParseResult, kind: SyntaxKind) -> crate::SyntaxNode {
+fn first(parse: &ParseResult, kind: SyntaxKind) -> crate::SyntaxNode {
     parse
         .syntax()
         .descendants()
@@ -435,23 +439,27 @@ fn an_error_item_swallows_its_own_block_and_nothing_more() {
 Document
   ErrorNode
     ContestKeyword \"contest\"
-    Identifier \"@x\"
+    At \"@\"
+    Word \"x\"
     Newline \"\\n\"
     Indent \"\"
     CampaignKeyword \"campaign\"
-    Identifier \"@a\"
+    At \"@\"
+    Word \"a\"
     Newline \"\\n\"
     RecommendKeyword \"recommend\"
     Newline \"\\n\"
     Indent \"\"
     SupportKeyword \"support\"
-    Identifier \"@a\"
+    At \"@\"
+    Word \"a\"
     Newline \"\\n\"
     Dedent \"\"
     Dedent \"\"
   ErrorNode
     MeasureKeyword \"measure\"
-    Identifier \"@m\"
+    At \"@\"
+    Word \"m\"
     Newline \"\\n\"
 "
     );
@@ -492,18 +500,18 @@ fn trivia_is_attached_to_the_enclosing_node() {
 
 #[test]
 fn lexer_errors_are_forwarded_in_source_order() {
-    let parse = parse("\tyes\n@9\n");
+    let parse = parse("\tyes\n@9\n-x\n");
     let kinds: Vec<&str> = parse
         .errors()
         .iter()
         .map(|error| match error {
-            SyntaxError::Lex(e) if e.reason == LexErrorReason::IllegalTab => "tab",
-            SyntaxError::Lex(e) if e.reason == LexErrorReason::MalformedIdentifier => "ident",
-            SyntaxError::Lex(_) => "other lex",
+            SyntaxError::Lexical(e) if e.kind == LexicalErrorKind::IllegalTab => "tab",
+            SyntaxError::Lexical(e) if e.kind == LexicalErrorKind::UnexpectedCharacter => "char",
+            SyntaxError::Lexical(_) => "other lex",
             SyntaxError::Parse(_) => "parse",
         })
         .collect();
-    assert_eq!(kinds, ["tab", "parse", "ident", "parse"]);
+    assert_eq!(kinds, ["tab", "parse", "parse", "char", "parse"]);
 }
 
 #[test]
@@ -516,7 +524,9 @@ fn party_declaration_from_the_spec_example() {
 Document
   Party
     PartyKeyword \"party\"
-    Identifier \"@dem\"
+    Identifier
+      At \"@\"
+      Word \"dem\"
     StringLiteral \"\\\"Democratic\\\"\"
     Newline \"\\n\"
     Block
@@ -550,7 +560,8 @@ fn party_fields_in_any_order_and_a_party_without_a_block() {
             SyntaxKind::StringField
         ]
     );
-    assert_eq!(parties[1].children().count(), 0);
+    let kinds: Vec<SyntaxKind> = parties[1].children().map(|n| n.kind()).collect();
+    assert_eq!(kinds, [SyntaxKind::Identifier]);
 }
 
 #[test]
@@ -565,7 +576,9 @@ fn candidate_declaration_from_the_spec_example() {
 Document
   Candidate
     CandidateKeyword \"candidate\"
-    Identifier \"@nreyes\"
+    Identifier
+      At \"@\"
+      Word \"nreyes\"
     StringLiteral \"\\\"Nadia Reyes\\\"\"
     Newline \"\\n\"
     Block
@@ -576,7 +589,9 @@ Document
         Newline \"\\n\"
       PartyReference
         PartyKeyword \"party\"
-        Identifier \"@dem\"
+        Identifier
+          At \"@\"
+          Word \"dem\"
         Newline \"\\n\"
       MarkdownField
         NoteKeyword \"note\"
@@ -598,14 +613,18 @@ fn a_party_may_be_declared_inline_on_a_candidate() {
 Document
   Candidate
     CandidateKeyword \"candidate\"
-    Identifier \"@c\"
+    Identifier
+      At \"@\"
+      Word \"c\"
     StringLiteral \"\\\"C\\\"\"
     Newline \"\\n\"
     Block
       Indent \"\"
       PartyReference
         PartyKeyword \"party\"
-        Identifier \"@green\"
+        Identifier
+          At \"@\"
+          Word \"green\"
         StringLiteral \"\\\"Green\\\"\"
         Newline \"\\n\"
         Block
@@ -637,7 +656,7 @@ fn declaration_headers_report_each_missing_part_once() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
-            expected: vec![SyntaxKind::Identifier],
+            expected: vec![SyntaxKind::At],
             found: Some(SyntaxKind::StringLiteral),
             range: range(6, 6),
         })]
@@ -736,7 +755,9 @@ ballot @franklin \"State of Franklin\"
 Document
   Ballot
     BallotKeyword \"ballot\"
-    Identifier \"@franklin\"
+    Identifier
+      At \"@\"
+      Word \"franklin\"
     StringLiteral \"\\\"State of Franklin\\\"\"
     Newline \"\\n\"
     Block
@@ -759,7 +780,9 @@ Document
           Dedent \"\"
       Ballot
         BallotKeyword \"ballot\"
-        Identifier \"@ashford\"
+        Identifier
+          At \"@\"
+          Word \"ashford\"
         StringLiteral \"\\\"City of Ashford\\\"\"
         Newline \"\\n\"
         Block
@@ -919,7 +942,9 @@ fn contest_header_and_fields_from_the_spec_example() {
         "\
 Contest
   ContestKeyword \"contest\"
-  Identifier \"@mayor\"
+  Identifier
+    At \"@\"
+    Word \"mayor\"
   StringLiteral \"\\\"Mayor\\\"\"
   ContestKind
     RankedKeyword \"ranked\"
@@ -1089,7 +1114,9 @@ Campaign
   Flag
     IncumbentKeyword \"incumbent\"
   Member
-    Identifier \"@bsantos\"
+    Identifier
+      At \"@\"
+      Word \"bsantos\"
     StringLiteral \"\\\"Beatriz Santos\\\"\"
   Newline \"\\n\"
   Block
@@ -1130,7 +1157,9 @@ Campaign
   Block
     Indent \"\"
     Member
-      Identifier \"@jlee\"
+      Identifier
+        At \"@\"
+        Word \"jlee\"
       StringLiteral \"\\\"Jordan Lee\\\"\"
       AsKeyword \"as\"
       StringLiteral \"\\\"Governor\\\"\"
@@ -1143,11 +1172,15 @@ Campaign
           Newline \"\\n\"
         PartyReference
           PartyKeyword \"party\"
-          Identifier \"@dem\"
+          Identifier
+            At \"@\"
+            Word \"dem\"
           Newline \"\\n\"
         Dedent \"\"
     Member
-      Identifier \"@mpatel\"
+      Identifier
+        At \"@\"
+        Word \"mpatel\"
       StringLiteral \"\\\"Maya Patel\\\"\"
       AsKeyword \"as\"
       StringLiteral \"\\\"Lieutenant Governor\\\"\"
@@ -1207,7 +1240,7 @@ fn a_repeated_flag_is_an_error_node() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
-            expected: vec![SyntaxKind::WithdrawnKeyword, SyntaxKind::Identifier],
+            expected: vec![SyntaxKind::WithdrawnKeyword, SyntaxKind::At],
             found: Some(SyntaxKind::IncumbentKeyword),
             range: TextRange::at(second, TextSize::from(9)),
         })]
@@ -1266,7 +1299,7 @@ fn unknown_lines_in_a_campaign_block_name_fields_and_members() {
                 SyntaxKind::NoteKeyword,
                 SyntaxKind::DesignationKeyword,
                 SyntaxKind::PartyKeyword,
-                SyntaxKind::Identifier,
+                SyntaxKind::At,
             ],
             found: Some(SyntaxKind::SubtitleKeyword),
             range: span(&source, "subtitle \"no\"\n"),
@@ -1300,16 +1333,24 @@ ContestRecommend
     Indent \"\"
     Support
       SupportKeyword \"support\"
-      Identifier \"@aokafor\"
+      Identifier
+        At \"@\"
+        Word \"aokafor\"
       Newline \"\\n\"
     Support
       SupportKeyword \"support\"
-      Identifier \"@bsantos\"
-      Identifier \"@dwright\"
+      Identifier
+        At \"@\"
+        Word \"bsantos\"
+      Identifier
+        At \"@\"
+        Word \"dwright\"
       Newline \"\\n\"
     Oppose
       OpposeKeyword \"oppose\"
-      Identifier \"@cfox\"
+      Identifier
+        At \"@\"
+        Word \"cfox\"
       Newline \"\\n\"
     MarkdownField
       JustificationKeyword \"justification\"
@@ -1400,12 +1441,12 @@ fn support_and_oppose_need_identifiers_and_nothing_else() {
         result.errors(),
         [
             SyntaxError::Parse(ParseError {
-                expected: vec![SyntaxKind::Identifier],
+                expected: vec![SyntaxKind::At],
                 found: Some(SyntaxKind::Newline),
                 range: TextRange::empty(span(&source, "support").end()),
             }),
             SyntaxError::Parse(ParseError {
-                expected: vec![SyntaxKind::Identifier, SyntaxKind::Newline],
+                expected: vec![SyntaxKind::At, SyntaxKind::Newline],
                 found: Some(SyntaxKind::StringLiteral),
                 range: span(&source, "\"x\""),
             }),
@@ -1476,7 +1517,9 @@ fn measure_from_the_spec_example() {
         "\
 Measure
   MeasureKeyword \"measure\"
-  Identifier \"@prop1\"
+  Identifier
+    At \"@\"
+    Word \"prop1\"
   StringLiteral \"\\\"Proposition 1\\\"\"
   Newline \"\\n\"
   Block
@@ -1599,10 +1642,9 @@ fn measure_positions() {
 
     let source = in_ballot("measure @m \"M\"\n  recommend maybe\n");
     let result = parse(&source);
-    assert_eq!(result.errors().len(), 2);
-    assert!(matches!(&result.errors()[0], SyntaxError::Lex(_)));
+    assert_eq!(result.errors().len(), 1);
     assert!(matches!(
-        &result.errors()[1],
+        &result.errors()[0],
         SyntaxError::Parse(e) if e.expected == MEASURE_POSITIONS_FOR_TEST && e.range == span(&source, "maybe")
     ));
 }

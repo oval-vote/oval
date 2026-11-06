@@ -426,7 +426,7 @@ impl Compiler {
     fn declarations(&mut self, document: &ast::Document) -> Option<()> {
         for party in document.parties() {
             let party = Party {
-                id: party.id()?.name().to_owned(),
+                id: party.id()?.name(),
                 name: party.name()?,
                 abbreviation: party.abbreviation().and_then(|f| f.value()),
                 website: party.website().and_then(|f| f.value()),
@@ -441,7 +441,7 @@ impl Compiler {
                 None => None,
             };
             let candidate = Candidate {
-                id: candidate.id()?.name().to_owned(),
+                id: candidate.id()?.name(),
                 name: candidate.name()?,
                 designation: candidate.designation().and_then(|f| f.value()),
                 party,
@@ -454,7 +454,7 @@ impl Compiler {
     }
 
     fn party_reference(&mut self, reference: &ast::PartyReference) -> Option<String> {
-        let id = reference.id()?.name().to_owned();
+        let id = reference.id()?.name();
         if reference.is_declaration() {
             self.parties.push(Party {
                 id: id.clone(),
@@ -470,7 +470,7 @@ impl Compiler {
 
     fn ballot(&mut self, ballot: &ast::Ballot, path: &[String]) -> Option<Ballot> {
         self.counts.ballots += 1;
-        let id = ballot.id()?.name().to_owned();
+        let id = ballot.id()?.name();
         let mut inner_path = path.to_vec();
         inner_path.push(id.clone());
         let mut items = Vec::new();
@@ -532,7 +532,7 @@ impl Compiler {
 
     fn contest(&mut self, contest: &ast::Contest, location: Location) -> Option<Contest> {
         self.counts.contests += 1;
-        let id = contest.id()?.name().to_owned();
+        let id = contest.id()?.name();
         let title = contest.title()?;
         let method = match contest.kind()? {
             ast::ContestKind::Single => Method::Single,
@@ -577,7 +577,7 @@ impl Compiler {
         let mut names = Vec::new();
         let mut parties: Vec<Option<String>> = Vec::new();
         for member in campaign.members() {
-            let candidate_id = member.id()?.name().to_owned();
+            let candidate_id = member.id()?.name();
             campaign_of.entry(candidate_id.clone()).or_insert(index);
             self.candidate_contests
                 .entry(candidate_id.clone())
@@ -638,15 +638,11 @@ impl Compiler {
         let recommendation = contest.recommendations().next()?;
         let support: Vec<Vec<String>> = recommendation
             .support()
-            .map(|tier| tier.candidates().map(|c| c.name().to_owned()).collect())
+            .map(|tier| tier.candidates().map(|c| c.name()).collect())
             .collect();
         let oppose: Vec<String> = recommendation
             .oppose()
-            .flat_map(|o| {
-                o.candidates()
-                    .map(|c| c.name().to_owned())
-                    .collect::<Vec<_>>()
-            })
+            .flat_map(|o| o.candidates().map(|c| c.name()).collect::<Vec<_>>())
             .collect();
         let resolve = |names: &[String]| -> Option<Vec<usize>> {
             names.iter().map(|n| campaign_of.get(n).copied()).collect()
@@ -684,7 +680,7 @@ impl Compiler {
 
     fn measure(&mut self, measure: &ast::Measure, location: Location) -> Option<Measure> {
         self.counts.measures += 1;
-        let id = measure.id()?.name().to_owned();
+        let id = measure.id()?.name();
         let title = measure.title()?;
         let recommendation = measure.recommendations().next()?;
         let position = match recommendation.position()? {

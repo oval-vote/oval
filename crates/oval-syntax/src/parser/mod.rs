@@ -11,14 +11,14 @@ mod tests;
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
 use crate::SyntaxKind::{
-    self, Block, Colon, DateField, DateKeyword, DateLiteral, Dedent, DescriptionKeyword, ErrorNode,
-    Identifier, IfNoKeyword, IfYesKeyword, Indent, JustificationKeyword, MarkdownBlock,
+    self, At, Block, Colon, DateField, DateKeyword, DateLiteral, Dedent, DescriptionKeyword,
+    ErrorNode, Identifier, IfNoKeyword, IfYesKeyword, Indent, JustificationKeyword, MarkdownBlock,
     MarkdownField, Newline, NoteKeyword, StringField, StringLiteral, UrlField, UrlLiteral,
-    WebsiteKeyword,
+    WebsiteKeyword, Word,
 };
 
-use crate::SyntaxNode;
-use crate::lexer::{LexError, Token, lex};
+use crate::lexer::{InputRejection, LexicalError, Token, lex};
+use crate::{Keyword, SyntaxNode};
 
 /// An error found while parsing tokens into a syntax tree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -37,7 +37,7 @@ pub struct ParseError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SyntaxError {
     /// The lexer could not tokenize some text.
-    Lex(LexError),
+    Lexical(LexicalError),
 
     /// The parser could not fit the tokens to the grammar.
     Parse(ParseError),
@@ -47,7 +47,7 @@ impl SyntaxError {
     /// The range of source text where the error occurred.
     pub fn range(&self) -> TextRange {
         match self {
-            Self::Lex(error) => error.range,
+            Self::Lexical(error) => error.range,
             Self::Parse(error) => error.range,
         }
     }
@@ -72,9 +72,9 @@ impl ParseResult {
     }
 }
 
-/// Parses `source` into a tree.
-pub fn parse(source: &str) -> ParseResult {
-    let lexed = lex(source);
+/// Parses `source` into a tree, or rejects the input as a whole.
+pub fn parse(source: &str) -> Result<ParseResult, InputRejection> {
+    let lexed = lex(source)?;
     let mut parser = Parser {
         source,
         tokens: lexed.tokens,
@@ -85,13 +85,13 @@ pub fn parse(source: &str) -> ParseResult {
         errors: Vec::new(),
     };
     parser.document();
-    let mut errors: Vec<SyntaxError> = lexed.errors.into_iter().map(SyntaxError::Lex).collect();
+    let mut errors: Vec<SyntaxError> = lexed.errors.into_iter().map(SyntaxError::Lexical).collect();
     errors.extend(parser.errors.into_iter().map(SyntaxError::Parse));
     errors.sort_by_key(|error| error.range().start());
-    ParseResult {
+    Ok(ParseResult {
         root: parser.builder.finish(),
         errors,
-    }
+    })
 }
 
 struct Parser<'a> {
@@ -106,9 +106,30 @@ struct Parser<'a> {
 
 impl Parser<'_> {
     fn declaration_header(&mut self) {
-        self.expect(Identifier);
+        self.identifier();
         self.expect_value(StringLiteral);
         self.end_of_line();
+    }
+
+    fn identifier(&mut self) -> bool {
+        if !self.at(At) {
+            self.error(&[At]);
+            return false;
+        }
+        self.start_node(Identifier);
+        self.bump();
+        if self.at_word() {
+            self.bump_as(Word);
+        } else {
+            self.error(&[Word]);
+        }
+        self.finish_node();
+        true
+    }
+
+    fn at_word(&self) -> bool {
+        self.current()
+            .is_some_and(|kind| kind == Word || kind.is_keyword())
     }
 
     fn required_block(
@@ -286,10 +307,22 @@ impl Parser<'_> {
     }
 
     fn current(&self) -> Option<SyntaxKind> {
-        self.tokens[self.pos..]
-            .iter()
-            .map(|token| token.kind)
-            .find(|kind| !kind.is_trivia())
+        let mut offset = self.offset;
+        for token in &self.tokens[self.pos..] {
+            if !token.kind.is_trivia() {
+                return Some(self.classify(*token, offset));
+            }
+            offset += usize::from(token.len);
+        }
+        None
+    }
+
+    fn classify(&self, token: Token, offset: usize) -> SyntaxKind {
+        if token.kind != Word {
+            return token.kind;
+        }
+        let text = &self.source[offset..offset + usize::from(token.len)];
+        Keyword::from_text(text).map_or(Word, SyntaxKind::from)
     }
 
     fn at(&self, kind: SyntaxKind) -> bool {
@@ -303,9 +336,20 @@ impl Parser<'_> {
 
     fn bump_raw(&mut self) {
         let token = self.tokens[self.pos];
+        let kind = self.classify(token, self.offset);
+        self.bump_raw_as(kind);
+    }
+
+    fn bump_as(&mut self, kind: SyntaxKind) {
+        self.eat_trivia();
+        self.bump_raw_as(kind);
+    }
+
+    fn bump_raw_as(&mut self, kind: SyntaxKind) {
+        let token = self.tokens[self.pos];
         let end = self.offset + usize::from(token.len);
         self.builder
-            .token(token.kind.into(), &self.source[self.offset..end]);
+            .token(kind.into(), &self.source[self.offset..end]);
         self.offset = end;
         self.pos += 1;
     }
