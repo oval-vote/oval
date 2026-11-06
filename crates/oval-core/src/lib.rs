@@ -8,6 +8,7 @@ mod syntax;
 
 pub use compile::Compiled;
 pub use diagnostic::{Diagnostic, DiagnosticCode, Rule, Severity};
+pub use oval_syntax::SUPPORTED_LANGUAGE_MAJOR;
 
 use oval_syntax::ast::{AstNode, Document};
 use oval_syntax::parser::{ParseResult, parse};
@@ -87,7 +88,7 @@ mod tests {
 
     #[test]
     fn syntax_errors_become_error_diagnostics_with_messages() {
-        let report = check("guide yes\n\tbad\n");
+        let report = check("oval 1\nguide yes\n\tbad\n");
         assert!(report.has_errors());
         let messages: Vec<(&DiagnosticCode, Severity, &str)> = report
             .diagnostics()
@@ -132,11 +133,11 @@ mod tests {
                 .map(|d| d.message.clone())
         };
         assert_eq!(
-            syntax_message("guide").as_deref(),
+            syntax_message("oval 1\nguide").as_deref(),
             Some("expected a string, found the end of the line")
         );
         assert_eq!(
-            syntax_message("ballot @b \"B\"").as_deref(),
+            syntax_message("oval 1\nballot @b \"B\"").as_deref(),
             Some("expected an indented block, found the end of the file")
         );
     }
@@ -159,6 +160,7 @@ mod tests {
     #[test]
     fn v1_duplicate_declarations_across_every_kind() {
         let source = "\
+oval 1
 party @dem \"Democratic\"
 party @dem \"Democrats\"
 candidate @dem \"Dee Em\"
@@ -193,6 +195,7 @@ ballot @b \"B\"
     #[test]
     fn v1_undeclared_references() {
         let source = "\
+oval 1
 candidate @a \"A\"
   party @nope
 ballot @b \"B\"
@@ -219,6 +222,7 @@ ballot @b \"B\"
     #[test]
     fn v1_references_must_match_the_declared_kind() {
         let source = "\
+oval 1
 party @dem \"Democratic\"
 candidate @c \"C\"
   party @c
@@ -242,6 +246,7 @@ ballot @b \"B\"
     #[test]
     fn v1_inline_declarations_count_and_may_be_referenced_elsewhere() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @x \"X\" single
     campaign @c \"C\"
@@ -265,7 +270,7 @@ ballot @b \"B\"
     #[test]
     fn v2_each_required_guide_field_is_named_when_missing() {
         assert_eq!(
-            rule_messages("note:\n  x\n", Rule::RequiredGuideFields),
+            rule_messages("oval 1\nnote:\n  x\n", Rule::RequiredGuideFields),
             [
                 "the document has no `guide` field",
                 "the document has no `election` field",
@@ -277,13 +282,14 @@ ballot @b \"B\"
             rule_messages(source, Rule::RequiredGuideFields),
             [] as [String; 0]
         );
-        let report = check("election \"E\"\ndate 2026-11-03\n");
+        let report = check("oval 1\nelection \"E\"\ndate 2026-11-03\n");
         assert_eq!(u32::from(report.diagnostics()[0].range.start()), 0);
     }
 
     #[test]
     fn v3_a_reference_member_may_not_have_a_block() {
         let source = "\
+oval 1
 candidate @a \"A\"
 ballot @b \"B\"
   contest @x \"X\" single
@@ -304,6 +310,7 @@ ballot @b \"B\"
     #[test]
     fn v4_candidate_fields_only_beside_an_inline_declaration() {
         let source = "\
+oval 1
 candidate @a \"A\"
 party @dem \"D\"
 ballot @b \"B\"
@@ -333,6 +340,7 @@ ballot @b \"B\"
     #[test]
     fn v5_one_oppose_and_each_campaign_named_once() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @x \"X\" single
     campaign
@@ -371,6 +379,7 @@ ballot @b \"B\"
     #[test]
     fn v6_named_candidates_must_be_in_the_contest() {
         let source = "\
+oval 1
 candidate @elsewhere \"E\"
 party @dem \"D\"
 ballot @b \"B\"
@@ -389,6 +398,7 @@ ballot @b \"B\"
     #[test]
     fn v7_and_v8_membership_duplicates() {
         let source = "\
+oval 1
 candidate @a \"A\"
 ballot @b \"B\"
   contest @x \"X\" single
@@ -418,6 +428,7 @@ ballot @b \"B\"
     #[test]
     fn v9_kind_arguments() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @m \"M\" multiple 1
     campaign @a \"A\"
@@ -473,6 +484,7 @@ ballot @b \"B\"
     #[test]
     fn v10_every_question_has_exactly_one_recommendation() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @none \"None\" single
     campaign @a \"A\"
@@ -501,6 +513,7 @@ ballot @b \"B\"
     #[test]
     fn v11_shapes_allowed_by_each_kind() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @s \"S\" single
     campaign @a \"A\"
@@ -562,6 +575,7 @@ ballot @b \"B\"
     #[test]
     fn v11_accepts_the_legal_shapes() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @s \"S\" single
     campaign @a \"A\"
@@ -589,6 +603,7 @@ ballot @b \"B\"
     #[test]
     fn v12_empty_containers() {
         let source = "\
+oval 1
 ballot @empty \"Empty\"
   note:
     Nothing here.
@@ -624,7 +639,7 @@ ballot @b \"B\"
             ("2026-00-10", false),
             ("2026-06-00", false),
         ] {
-            let messages = rule_messages(&format!("date {date}\n"), Rule::Dates);
+            let messages = rule_messages(&format!("oval 1\ndate {date}\n"), Rule::Dates);
             if valid {
                 assert_eq!(messages, [] as [String; 0], "{date}");
             } else {
@@ -658,6 +673,7 @@ ballot @b \"B\"
     #[test]
     fn v14_unused_parties_and_candidates() {
         let source = "\
+oval 1
 party @dem \"Democratic\"
 party @gop \"Republican\"
 candidate @used \"U\"
@@ -683,6 +699,7 @@ ballot @b \"B\"
     #[test]
     fn v15_duplicate_party_names_across_top_level_and_inline() {
         let source = "\
+oval 1
 party @dem \"Democratic\"
 party @dems \"Democratic\"
 candidate @a \"A\"
@@ -710,6 +727,7 @@ ballot @b \"B\"
     #[test]
     fn v16_sibling_ballots_with_one_title() {
         let source = "\
+oval 1
 ballot @a \"City\"
   ballot @a1 \"District 5\"
     measure @m \"M\"
@@ -734,6 +752,7 @@ ballot @b \"City\"
     #[test]
     fn v17_tickets_are_named_by_their_head() {
         let source = "\
+oval 1
 ballot @b \"B\"
   contest @x \"X\" single
     campaign
@@ -755,6 +774,7 @@ ballot @b \"B\"
     #[test]
     fn v18_if_yes_and_if_no_come_together() {
         let source = "\
+oval 1
 ballot @b \"B\"
   measure @m \"M\"
     if_yes:
@@ -797,7 +817,7 @@ ballot @b \"B\"
     #[test]
     fn the_fixture_compiles() {
         let compiled = super::compile(FIXTURE).expect("fixture compiles");
-        assert_eq!(compiled.oval, "0.1");
+        assert_eq!(compiled.oval, 1);
         assert_eq!(compiled.guide.name, "Franklin Voter Guide");
         assert_eq!(compiled.guide.date, "2026-11-03");
         assert_eq!(compiled.ballots.len(), 6);
@@ -823,7 +843,7 @@ ballot @b \"B\"
     #[test]
     fn compiled_tickets_recommendations_and_stances() {
         let source = "\
-oval 0.1
+oval 1
 guide \"G\"
 election \"E\"
 date 2026-11-03
@@ -926,7 +946,7 @@ ballot @state \"State\"
     #[test]
     fn optional_fields_inside_unions_are_omitted() {
         let source = "\
-oval 0.1
+oval 1
 guide \"G\"
 election \"E\"
 date 2026-11-03
@@ -945,23 +965,29 @@ ballot @b \"B\"
     }
 
     #[test]
-    fn v19_a_missing_marker_is_reported_alongside_everything_else() {
-        let report = check("guide \"G\"\n");
-        let codes: Vec<String> = report
-            .diagnostics()
-            .iter()
-            .map(|d| d.code.to_string())
-            .collect();
-        assert_eq!(codes, ["V19", "V2", "V2"]);
+    fn v19_a_missing_marker_is_the_only_diagnostic() {
+        let source = "# a comment\n\nguide \"G\"\n";
+        let report = check(source);
+        assert_eq!(report.diagnostics().len(), 1);
+        let diagnostic = &report.diagnostics()[0];
         assert_eq!(
-            rule_messages("guide \"G\"\n", Rule::SupportedVersion),
-            ["the document has no version marker; its first line should be `oval 0.1`"]
+            diagnostic.code,
+            DiagnosticCode::Rule(Rule::SupportedVersion)
         );
+        assert_eq!(
+            diagnostic.range,
+            oval_syntax::TextRange::empty(span(source, "guide").start())
+        );
+        assert_eq!(
+            diagnostic.message,
+            "the document has no version marker; its first line should be `oval 1`"
+        );
+        assert_eq!(check("").diagnostics().len(), 1);
     }
 
     #[test]
     fn v19_an_unsupported_version_is_the_only_diagnostic() {
-        let source = "oval 0.2\nguide yes\n";
+        let source = "oval 2\nguide yes\n";
         let report = check(source);
         assert_eq!(report.diagnostics().len(), 1);
         let diagnostic = &report.diagnostics()[0];
@@ -970,19 +996,22 @@ ballot @b \"B\"
             DiagnosticCode::Rule(Rule::SupportedVersion)
         );
         assert_eq!(diagnostic.severity, Severity::Error);
-        assert_eq!(diagnostic.range, span(source, "0.2"));
+        assert_eq!(diagnostic.range, span(source, "oval 2"));
         assert_eq!(
             diagnostic.message,
-            "this document is written to Oval 0.2, but this implementation reads Oval 0.1"
+            "this document is written to Oval 2, but this implementation reads Oval 1"
         );
-        assert_eq!(check("oval 1.0\n").diagnostics().len(), 1);
     }
 
     #[test]
-    fn v19_leaves_a_malformed_marker_to_the_parser() {
-        let report = check("oval 1\nguide \"G\"\n");
+    fn v19_accepts_leading_zeros_and_leaves_a_malformed_marker_to_the_parser() {
         assert_eq!(
-            rule_messages("oval 1\nguide \"G\"\n", Rule::SupportedVersion),
+            rule_messages("oval 01\nguide \"G\"\n", Rule::SupportedVersion),
+            [] as [String; 0]
+        );
+        let report = check("oval 1.0\nguide \"G\"\n");
+        assert_eq!(
+            rule_messages("oval 1.0\nguide \"G\"\n", Rule::SupportedVersion),
             [] as [String; 0]
         );
         assert!(
@@ -995,14 +1024,14 @@ ballot @b \"B\"
 
     #[test]
     fn documents_with_errors_do_not_compile() {
-        let report = super::compile("guide \"G\"\n").expect_err("missing fields");
+        let report = super::compile("oval 1\nguide \"G\"\n").expect_err("missing fields");
         assert!(report.has_errors());
     }
 
     #[test]
     fn compiled_json_matches_the_schema_conventions() {
         let source = "\
-oval 0.1
+oval 1
 guide \"G\"
 election \"E\"
 date 2026-11-03
@@ -1027,7 +1056,7 @@ ballot @state \"State\"
         let compiled = super::compile(source).expect("compiles");
         let json: serde_json::Value = serde_json::from_str(&compiled.to_json().unwrap()).unwrap();
         let expected = serde_json::json!({
-            "oval": "0.1",
+            "oval": 1,
             "guide": { "name": "G", "election": "E", "date": "2026-11-03" },
             "parties": [{ "id": "dem", "name": "Democratic", "candidates": ["j", "m"] }],
             "candidates": [

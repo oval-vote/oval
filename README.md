@@ -64,13 +64,13 @@ npm test
 
 ### Versioning
 
-The specification, this workspace, the npm package, and the editor extension share one version
-number. Its major and minor components are the language version that documents declare with
-`oval MAJOR.MINOR`; the patch component is free for fixes that leave the language alone.
+This workspace and the npm package share one version number, which is ordinary semver for the
+implementation and says nothing about the language. The language has its own major version, which
+documents declare with `oval 1`; the one this implementation reads is
+`oval_syntax::SUPPORTED_LANGUAGE_MAJOR`, which the npm package exposes as `languageMajor()`. The specification is published in dated editions at [spec.oval.vote](https://spec.oval.vote).
 
-The version lives in two places here: `[workspace.package]` in `Cargo.toml`, which every crate
-inherits and from which `oval_syntax::SPEC_VERSION` is derived, and `packages/oval/package.json`.
-A test in `oval-wasm` fails when they differ.
+The implementation version lives in two places: `[workspace.package]` in `Cargo.toml`, which every
+crate inherits, and `packages/oval/package.json`. A test in `oval-wasm` fails when they differ.
 
 ### Releasing
 

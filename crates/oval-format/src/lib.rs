@@ -175,7 +175,7 @@ impl Formatter {
                 } else if !matches!(kind, SyntaxKind::Colon | SyntaxKind::Comma) {
                     self.out.push(' ');
                 }
-                self.out.push_str(token.text());
+                self.out.push_str(canonical_text(token));
                 self.at_line_start = false;
             }
         }
@@ -235,6 +235,17 @@ impl Formatter {
         }
         self.out
     }
+}
+
+fn canonical_text(token: &SyntaxToken) -> &str {
+    let in_version_marker = token
+        .parent()
+        .is_some_and(|parent| parent.kind() == SyntaxKind::VersionMarker);
+    if in_version_marker && token.kind() == SyntaxKind::IntegerLiteral {
+        let trimmed = token.text().trim_start_matches('0');
+        return if trimmed.is_empty() { "0" } else { trimmed };
+    }
+    token.text()
 }
 
 fn split_lines(text: &str) -> Vec<&str> {
@@ -427,16 +438,24 @@ mod tests {
     #[test]
     fn the_version_marker_keeps_its_place_and_loses_extra_spacing() {
         check(
-            "# header\n\n\noval    0.1   # trail\n\n\n\nguide \"G\"\n",
-            "# header\n\noval 0.1 # trail\n\nguide \"G\"\n",
+            "# header\n\n\noval    1   # trail\n\n\n\nguide \"G\"\n",
+            "# header\n\noval 1 # trail\n\nguide \"G\"\n",
         );
+    }
+
+    #[test]
+    fn the_version_marker_loses_leading_zeros() {
+        let formatted = format("oval 007\nguide \"G\"\n").expect("formats");
+        assert_eq!(formatted, "oval 7\nguide \"G\"\n");
+        assert_eq!(format(&formatted).expect("formats again"), formatted);
+        check("oval 0\nguide \"G\"\n", "oval 0\nguide \"G\"\n");
     }
 
     #[test]
     fn block_entries_follow_the_grammars_order() {
         check(
-            "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  contest @c \"C\" single\n    recommend\n      justification:\n        Why.\n      oppose @y\n      support @x\n    campaign @x \"X\"\n    subtitle \"S\"\n    campaign @y \"Y\"\n    tabulation \"T\"\n  eligibility \"E\"\n",
-            "oval 0.1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  eligibility \"E\"\n  contest @c \"C\" single\n    subtitle \"S\"\n    tabulation \"T\"\n    campaign @x \"X\"\n    campaign @y \"Y\"\n    recommend\n      support @x\n      oppose @y\n      justification:\n        Why.\n",
+            "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  contest @c \"C\" single\n    recommend\n      justification:\n        Why.\n      oppose @y\n      support @x\n    campaign @x \"X\"\n    subtitle \"S\"\n    campaign @y \"Y\"\n    tabulation \"T\"\n  eligibility \"E\"\n",
+            "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  eligibility \"E\"\n  contest @c \"C\" single\n    subtitle \"S\"\n    tabulation \"T\"\n    campaign @x \"X\"\n    campaign @y \"Y\"\n    recommend\n      support @x\n      oppose @y\n      justification:\n        Why.\n",
         );
     }
 

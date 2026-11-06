@@ -2,8 +2,8 @@ use super::{
     AstNode, BallotItem, ContestKind, Date, Document, Position, SectionItem, markdown_value,
     string_value,
 };
+use crate::Keyword;
 use crate::parser::parse;
-use crate::{Keyword, SpecVersion};
 
 fn document(source: &str) -> Document {
     let result = parse(source);
@@ -39,18 +39,16 @@ fn guide_fields_from_the_spec_example() {
 }
 
 #[test]
-fn the_version_marker_is_read_as_a_spec_version() {
-    let doc = document("oval 0.1\nguide \"G\"\n");
+fn the_version_marker_is_read_as_a_major_version() {
+    let doc = document("oval 1\nguide \"G\"\n");
+    assert_eq!(doc.version().and_then(|m| m.value()), Some(1));
     assert_eq!(
-        doc.version().and_then(|m| m.value()),
-        Some(SpecVersion { major: 0, minor: 1 })
+        document("oval 12\n").version().and_then(|m| m.value()),
+        Some(12)
     );
     assert_eq!(
-        document("oval 12.30\n").version().and_then(|m| m.value()),
-        Some(SpecVersion {
-            major: 12,
-            minor: 30
-        })
+        document("oval 007\n").version().and_then(|m| m.value()),
+        Some(7)
     );
 }
 

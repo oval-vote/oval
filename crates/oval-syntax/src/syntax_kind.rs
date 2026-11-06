@@ -117,7 +117,6 @@ define_syntax! {
         StringLiteral: "A double-quoted string token.",
         IntegerLiteral: "An unsigned integer token.",
         DateLiteral: "An ISO 8601 calendar date token.",
-        VersionLiteral: "A specification version token, `MAJOR.MINOR`.",
         UrlLiteral: "A bare `http` or `https` URL token.",
         Colon: "The `:` punctuator.",
         Comma: "The `,` punctuator.",

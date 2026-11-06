@@ -57,10 +57,13 @@ fn fmt_rewrites_in_place() {
 
 #[test]
 fn files_with_syntax_errors_are_reported_and_left_alone() {
-    let path = write_temp("broken.oval", "guide yes\n");
+    let path = write_temp("broken.oval", "oval 1\nguide yes\n");
     let output = oval(&["fmt".as_ref(), path.as_os_str()]);
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("error[syntax]"));
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), "guide yes\n");
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "oval 1\nguide yes\n"
+    );
     std::fs::remove_file(path).ok();
 }

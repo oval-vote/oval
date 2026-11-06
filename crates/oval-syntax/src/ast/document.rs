@@ -2,7 +2,7 @@ use super::{
     AstNode, Ballot, DateField, Identifier, MarkdownField, StringField, UrlField, ast_node, block,
     child, children, field, identifier, string, token,
 };
-use crate::{Keyword, SpecVersion, SyntaxKind, SyntaxNode};
+use crate::{Keyword, SyntaxKind, SyntaxNode};
 
 ast_node! {
     /// A whole guide: the root of the tree.
@@ -72,14 +72,12 @@ impl Document {
 }
 
 impl VersionMarker {
-    /// The declared specification version.
-    pub fn value(&self) -> Option<SpecVersion> {
-        let token = token(&self.0, SyntaxKind::VersionLiteral)?;
-        let (major, minor) = token.text().split_once('.')?;
-        Some(SpecVersion {
-            major: major.parse().ok()?,
-            minor: minor.parse().ok()?,
-        })
+    /// The declared major version of the language.
+    pub fn value(&self) -> Option<u32> {
+        token(&self.0, SyntaxKind::IntegerLiteral)?
+            .text()
+            .parse()
+            .ok()
     }
 }
 
