@@ -1,8 +1,8 @@
 use super::Parser;
 use crate::SyntaxKind::{
     self, AbbreviationKeyword, BallotKeyword, Candidate, CandidateKeyword, DateKeyword,
-    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, Identifier, NoteKeyword,
-    OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionLiteral, VersionMarker,
+    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, Identifier, IntegerLiteral,
+    NoteKeyword, OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionMarker,
     WebsiteKeyword,
 };
 
@@ -56,7 +56,7 @@ impl Parser<'_> {
     pub(super) fn version_marker(&mut self, _kind: SyntaxKind) -> bool {
         self.start_node(VersionMarker);
         self.bump();
-        self.expect_value(VersionLiteral);
+        self.expect_value(IntegerLiteral);
         self.end_of_line();
         self.finish_node();
         true

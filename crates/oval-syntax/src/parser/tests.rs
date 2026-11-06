@@ -7,7 +7,7 @@ use crate::SyntaxKind;
 use crate::lexer::LexErrorReason;
 
 const SAMPLE: &str = "\
-oval 0.1
+oval 1
 
 guide \"Franklin Voter Guide\"
 election \"November 3, 2026 General Election\"
@@ -145,7 +145,7 @@ const TOP_LEVEL: [SyntaxKind; 8] = [
 
 #[test]
 fn the_version_marker_opens_the_document() {
-    let result = parse("oval 0.1\n\nguide \"g\"\n");
+    let result = parse("oval 1\n\nguide \"g\"\n");
     assert_eq!(result.errors(), []);
     assert_eq!(
         dump(&result.syntax()),
@@ -153,7 +153,7 @@ fn the_version_marker_opens_the_document() {
 Document
   VersionMarker
     OvalKeyword \"oval\"
-    VersionLiteral \"0.1\"
+    IntegerLiteral \"1\"
     Newline \"\\n\"
   StringField
     GuideKeyword \"guide\"
@@ -166,24 +166,24 @@ Document
 #[test]
 fn the_version_marker_is_optional_to_the_parser_but_must_come_first() {
     assert_eq!(parse("guide \"g\"\n").errors(), []);
-    let source = "guide \"g\"\noval 0.1\n";
+    let source = "guide \"g\"\noval 1\n";
     let result = parse(source);
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
             expected: TOP_LEVEL[2..].to_vec(),
             found: Some(SyntaxKind::OvalKeyword),
-            range: span(source, "oval 0.1\n"),
+            range: span(source, "oval 1\n"),
         })]
     );
-    let source = "oval 0.1\noval 0.2\n";
+    let source = "oval 1\noval 2\n";
     let result = parse(source);
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
             expected: TOP_LEVEL[1..].to_vec(),
             found: Some(SyntaxKind::OvalKeyword),
-            range: span(source, "oval 0.2\n"),
+            range: span(source, "oval 2\n"),
         })]
     );
 }
@@ -194,7 +194,7 @@ fn the_version_marker_needs_a_version() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
-            expected: vec![SyntaxKind::VersionLiteral],
+            expected: vec![SyntaxKind::IntegerLiteral],
             found: Some(SyntaxKind::Newline),
             range: range(4, 4),
         })]
@@ -204,9 +204,9 @@ fn the_version_marker_needs_a_version() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
-            expected: vec![SyntaxKind::VersionLiteral],
-            found: Some(SyntaxKind::IntegerLiteral),
-            range: span(source, "1 \"x\""),
+            expected: vec![SyntaxKind::Newline],
+            found: Some(SyntaxKind::StringLiteral),
+            range: span(source, "\"x\""),
         })]
     );
 }

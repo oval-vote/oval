@@ -36,7 +36,7 @@ pub enum LexErrorReason {
     /// A backslash in a string followed by something other than `"` or `\\`.
     InvalidEscape,
 
-    /// A word beginning with a digit that is neither an integer, a date, nor a version.
+    /// A word beginning with a digit that is neither an integer nor a date.
     MalformedNumber,
 
     /// A URL scheme and `://` with nothing after them.
@@ -295,8 +295,6 @@ impl Lexer<'_> {
             self.push(SyntaxKind::IntegerLiteral, start);
         } else if is_date_shaped(text) {
             self.push(SyntaxKind::DateLiteral, start);
-        } else if is_version_shaped(text) {
-            self.push(SyntaxKind::VersionLiteral, start);
         } else {
             self.push_error(LexErrorReason::MalformedNumber, start);
         }
@@ -424,16 +422,6 @@ fn is_date_shaped(text: &str) -> bool {
             .all(|(i, b)| matches!(i, 4 | 7) || b.is_ascii_digit())
 }
 
-fn is_version_shaped(text: &str) -> bool {
-    fn is_version_part(part: &str) -> bool {
-        part.bytes().all(|b| b.is_ascii_digit())
-            && !part.is_empty()
-            && (part == "0" || !part.starts_with('0'))
-    }
-    text.split_once('.')
-        .is_some_and(|(major, minor)| is_version_part(major) && is_version_part(minor))
-}
-
 #[cfg(test)]
 mod tests {
     use rowan::TextRange;
@@ -442,8 +430,7 @@ mod tests {
     use crate::Keyword;
     use crate::SyntaxKind::{
         self, BlankLine, Colon, Comma, Comment, DateLiteral, Dedent, Error, Identifier, Indent,
-        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, VersionLiteral,
-        Whitespace,
+        IntegerLiteral, MarkdownBlock, Newline, StringLiteral, UrlLiteral, Whitespace,
     };
 
     fn check(source: &str, expected: &[(SyntaxKind, &str)]) -> Vec<LexError> {
@@ -890,16 +877,13 @@ mod tests {
     }
 
     #[test]
-    fn version_literals_have_one_spelling_each() {
-        check("0.1", &[(VersionLiteral, "0.1"), (Newline, "")]);
-        check("1.0", &[(VersionLiteral, "1.0"), (Newline, "")]);
-        check("12.30", &[(VersionLiteral, "12.30"), (Newline, "")]);
+    fn the_version_marker_is_a_keyword_and_an_integer() {
         check(
-            "oval 0.1\n",
+            "oval 1\n",
             &[
                 (Keyword::Oval.into(), "oval"),
                 (Whitespace, " "),
-                (VersionLiteral, "0.1"),
+                (IntegerLiteral, "1"),
                 (Newline, "\n"),
             ],
         );
@@ -915,6 +899,9 @@ mod tests {
             "1-2",
             "2026-11-05x",
             "20261105-",
+            "0.1",
+            "1.0",
+            "12.30",
             "01.1",
             "1.01",
             "1.",

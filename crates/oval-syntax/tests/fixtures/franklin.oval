@@ -2,7 +2,7 @@
 # fictional. It exists to exercise every construct of the Oval format at the scale of a real
 # metropolitan guide: six root ballots, forty-four contests, twenty-eight measures.
 
-oval 0.1
+oval 1
 
 guide "Franklin Voter Guide"
 election "November 3, 2026 General Election"

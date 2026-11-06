@@ -3,6 +3,12 @@
 use oval_core::Report;
 use wasm_bindgen::prelude::*;
 
+/// The major version of the Oval language this package reads.
+#[wasm_bindgen(js_name = languageMajor)]
+pub fn language_major() -> u32 {
+    oval_core::SUPPORTED_LANGUAGE_MAJOR
+}
+
 /// Parses and validates `source`, returning every diagnostic in source order.
 #[wasm_bindgen]
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
