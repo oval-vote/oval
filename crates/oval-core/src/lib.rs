@@ -9,9 +9,19 @@ mod syntax;
 pub use compile::Compiled;
 pub use diagnostic::{Diagnostic, DiagnosticCode, Rule, Severity};
 pub use oval_syntax::SUPPORTED_LANGUAGE_MAJOR;
+pub use oval_syntax::lexer::InputRejection;
 
 use oval_syntax::ast::{AstNode, Document};
 use oval_syntax::parser::{ParseResult, parse};
+
+/// Why a document could not be compiled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompileError {
+    /// The input was rejected as a whole and produced no tokens.
+    Rejected(InputRejection),
+    /// The document has errors, listed in the report.
+    Invalid(Report),
+}
 
 /// Everything a tool needs to report about one document.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,44 +50,43 @@ impl Report {
 }
 
 /// Parses, validates, and compiles `source`. Fails with the report when the document has errors.
-pub fn compile(source: &str) -> Result<Compiled, Report> {
-    let report = check(source);
+pub fn compile(source: &str) -> Result<Compiled, CompileError> {
+    let report = check(source).map_err(CompileError::Rejected)?;
     if report.has_errors() {
-        return Err(report);
+        return Err(CompileError::Invalid(report));
     }
     let compiled = Document::cast(report.parse.syntax()).and_then(|d| compile::compile(&d));
-    compiled.ok_or(report)
+    compiled.ok_or(CompileError::Invalid(report))
 }
 
-/// Parses and validates `source`.
-pub fn check(source: &str) -> Report {
-    let parse = parse(source);
+/// Parses and validates `source`, or rejects the input as a whole.
+pub fn check(source: &str) -> Result<Report, InputRejection> {
+    let parse = parse(source)?;
     let document = Document::cast(parse.syntax());
     let mut diagnostics = Vec::new();
     if let Some(document) = &document
         && !rules::version::check(document, &mut diagnostics)
     {
-        return Report { parse, diagnostics };
+        return Ok(Report { parse, diagnostics });
     }
-    diagnostics.extend(
-        parse
-            .errors()
-            .iter()
-            .map(|error| syntax::diagnostic(source, error)),
-    );
+    diagnostics.extend(parse.errors().iter().map(syntax::diagnostic));
     if let Some(document) = &document {
         let index = index::Index::build(document);
         diagnostics.extend(rules::check(document, &index));
     }
     diagnostics.sort_by_key(|d| d.range.start());
-    Report { parse, diagnostics }
+    Ok(Report { parse, diagnostics })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DiagnosticCode, Rule, Severity, check};
+    use super::{CompileError, DiagnosticCode, Report, Rule, Severity};
 
     const FIXTURE: &str = include_str!("../../oval-syntax/tests/fixtures/franklin.oval");
+
+    fn check(source: &str) -> Report {
+        super::check(source).expect("accepted")
+    }
 
     #[test]
     fn a_clean_document_has_no_diagnostics() {
@@ -107,17 +116,12 @@ mod tests {
                 (
                     &DiagnosticCode::Syntax,
                     Severity::Error,
-                    "tabs are not allowed outside strings and Markdown bodies"
+                    "tabs are not allowed outside strings, comments, and Markdown bodies"
                 ),
                 (
                     &DiagnosticCode::Syntax,
                     Severity::Error,
                     "expected `election`, `date`, `note`, `party`, `candidate`, or `ballot`, found unrecognized text"
-                ),
-                (
-                    &DiagnosticCode::Syntax,
-                    Severity::Error,
-                    "`bad` is not a keyword"
                 ),
             ]
         );
@@ -1024,8 +1028,8 @@ ballot @b \"B\"
 
     #[test]
     fn documents_with_errors_do_not_compile() {
-        let report = super::compile("oval 1\nguide \"G\"\n").expect_err("missing fields");
-        assert!(report.has_errors());
+        let error = super::compile("oval 1\nguide \"G\"\n").expect_err("missing fields");
+        assert!(matches!(error, CompileError::Invalid(report) if report.has_errors()));
     }
 
     #[test]

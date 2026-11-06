@@ -58,24 +58,15 @@ macro_rules! ast_node {
 }
 pub(crate) use ast_node;
 
-/// An `@name` token.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier(SyntaxToken);
+ast_node! {
+    /// An identifier: `@` followed by a word.
+    Identifier
+}
 
 impl Identifier {
-    /// The name without its leading `@`.
-    pub fn name(&self) -> &str {
-        &self.0.text()[1..]
-    }
-
-    /// The underlying token.
-    pub fn syntax(&self) -> &SyntaxToken {
-        &self.0
-    }
-
-    /// The source range of the token.
-    pub fn range(&self) -> TextRange {
-        self.0.text_range()
+    /// The name after the `@`.
+    pub fn name(&self) -> String {
+        token(&self.0, SyntaxKind::Word).map_or_else(String::new, |word| word.text().to_owned())
     }
 }
 
@@ -201,7 +192,12 @@ fn block_children<N: AstNode>(node: &SyntaxNode) -> impl Iterator<Item = N> + us
 }
 
 fn identifier(node: &SyntaxNode) -> Option<Identifier> {
-    token(node, SyntaxKind::Identifier).map(Identifier)
+    identifiers(node).next()
+}
+
+fn identifiers(node: &SyntaxNode) -> impl Iterator<Item = Identifier> + use<> {
+    children::<Identifier>(node)
+        .filter(|identifier| has_token(identifier.syntax(), SyntaxKind::Word))
 }
 
 fn block(node: &SyntaxNode) -> Option<SyntaxNode> {

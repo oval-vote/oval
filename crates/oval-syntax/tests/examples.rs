@@ -12,7 +12,7 @@ fn every_fixture_parses_without_errors_and_round_trips() {
     for entry in fs::read_dir(&dir).expect("fixtures directory") {
         let path = entry.expect("directory entry").path();
         let source = fs::read_to_string(&path).expect("fixture is UTF-8");
-        let result = parse(&source);
+        let result = parse(&source).expect("accepted");
         assert_eq!(
             result.syntax().text().to_string(),
             source,

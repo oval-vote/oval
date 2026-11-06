@@ -1,20 +1,31 @@
 //! Formats Oval documents.
 
+use oval_syntax::lexer::InputRejection;
 use oval_syntax::parser::{ParseResult, parse};
 use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 const INDENT: &str = "  ";
 
-/// Formats `source`, or returns the parse result when the document has syntax errors.
-pub fn format(source: &str) -> Result<String, ParseResult> {
-    let result = parse(source);
+/// Why a document could not be formatted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FormatError {
+    /// The input was rejected as a whole and produced no tokens.
+    Rejected(InputRejection),
+    /// The document has lexical or syntax errors, listed in the parse result.
+    SyntaxErrors(ParseResult),
+}
+
+/// Formats `source`, or returns why it cannot be formatted.
+pub fn format(source: &str) -> Result<String, FormatError> {
+    let result = parse(source).map_err(FormatError::Rejected)?;
     if !result.errors().is_empty() {
-        return Err(result);
+        return Err(FormatError::SyntaxErrors(result));
     }
     let mut formatter = Formatter {
         out: String::with_capacity(source.len()),
         depth: 0,
         at_line_start: true,
+        after_at: false,
         pending: Vec::new(),
         line_has_comment: false,
     };
@@ -78,6 +89,7 @@ struct Formatter {
     out: String,
     depth: usize,
     at_line_start: bool,
+    after_at: bool,
     pending: Vec<Pending>,
     line_has_comment: bool,
 }
@@ -148,12 +160,14 @@ impl Formatter {
         match token.kind() {
             SyntaxKind::Whitespace | SyntaxKind::Indent | SyntaxKind::Dedent => {}
             SyntaxKind::Comment if self.at_line_start => {
-                self.pending.push(Pending::Comment(token.text().to_owned()));
+                self.pending.push(Pending::Comment(
+                    token.text().trim_end_matches(' ').to_owned(),
+                ));
                 self.line_has_comment = true;
             }
             SyntaxKind::Comment => {
                 self.out.push(' ');
-                self.out.push_str(token.text());
+                self.out.push_str(token.text().trim_end_matches(' '));
             }
             SyntaxKind::BlankLine if self.line_has_comment => self.line_has_comment = false,
             SyntaxKind::BlankLine if !self.pending.is_empty() => self.pending.push(Pending::Blank),
@@ -172,11 +186,12 @@ impl Formatter {
                 if self.at_line_start {
                     self.flush(self.depth);
                     self.indent(self.depth);
-                } else if !matches!(kind, SyntaxKind::Colon | SyntaxKind::Comma) {
+                } else if !matches!(kind, SyntaxKind::Colon | SyntaxKind::Comma) && !self.after_at {
                     self.out.push(' ');
                 }
                 self.out.push_str(canonical_text(token));
                 self.at_line_start = false;
+                self.after_at = kind == SyntaxKind::At;
             }
         }
     }
@@ -273,12 +288,13 @@ mod tests {
     use oval_syntax::ast::{AstNode, MarkdownField};
     use oval_syntax::parser::parse;
 
-    use super::format;
+    use super::{FormatError, format};
 
     const FIXTURE: &str = include_str!("../../oval-syntax/tests/fixtures/franklin.oval");
 
     fn tokens(source: &str) -> Vec<(oval_syntax::SyntaxKind, String)> {
         let mut tokens: Vec<_> = parse(source)
+            .expect("accepted")
             .syntax()
             .descendants_with_tokens()
             .filter_map(SyntaxElement::into_token)
@@ -294,6 +310,7 @@ mod tests {
 
     fn markdown_values(source: &str) -> Vec<String> {
         parse(source)
+            .expect("accepted")
             .syntax()
             .descendants()
             .filter_map(MarkdownField::cast)
@@ -353,8 +370,9 @@ mod tests {
 
     #[test]
     fn documents_with_syntax_errors_are_refused() {
-        let result = format("guide yes\n").expect_err("has errors");
-        assert_eq!(result.errors().len(), 1);
+        let error = format("guide yes\n").expect_err("has errors");
+        assert!(matches!(error, FormatError::SyntaxErrors(result) if result.errors().len() == 1));
+        assert!(matches!(format("\0"), Err(FormatError::Rejected(_))));
     }
 
     #[test]
@@ -440,6 +458,22 @@ mod tests {
         check(
             "# header\n\n\noval    1   # trail\n\n\n\nguide \"G\"\n",
             "# header\n\noval 1 # trail\n\nguide \"G\"\n",
+        );
+    }
+
+    #[test]
+    fn identifiers_lose_the_space_after_their_at_sign() {
+        check(
+            "ballot @ b \"B\"\n  contest @c \"C\" single\n    campaign @   a \"A\"\n    recommend\n      support @a @ b\n",
+            "ballot @b \"B\"\n  contest @c \"C\" single\n    campaign @a \"A\"\n    recommend\n      support @a @b\n",
+        );
+    }
+
+    #[test]
+    fn comments_lose_their_trailing_spaces() {
+        check(
+            "# lead   \nguide \"G\"   # trail  \n",
+            "# lead\nguide \"G\" # trail\n",
         );
     }
 

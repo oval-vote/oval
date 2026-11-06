@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use oval_core::{Report, Severity};
+use oval_core::{CompileError, Report, Severity};
+use oval_format::FormatError;
 
 use crate::line_index::LineIndex;
 
@@ -76,9 +77,14 @@ fn fmt(files: &[PathBuf], check_only: bool) -> ExitCode {
                     return ExitCode::from(2);
                 }
             }
-            Err(_) => {
-                let report = oval_core::check(&source);
-                print_report(&mut std::io::stderr(), path, &source, &report);
+            Err(FormatError::Rejected(rejection)) => {
+                eprintln!("oval: {}: {rejection}", path.display());
+                return ExitCode::from(2);
+            }
+            Err(FormatError::SyntaxErrors(_)) => {
+                if let Ok(report) = oval_core::check(&source) {
+                    print_report(&mut std::io::stderr(), path, &source, &report);
+                }
                 worst = ExitCode::FAILURE;
             }
         }
@@ -112,7 +118,11 @@ fn compile(path: &PathBuf, pretty: bool) -> ExitCode {
                 }
             }
         }
-        Err(report) => {
+        Err(CompileError::Rejected(rejection)) => {
+            eprintln!("oval: {}: {rejection}", path.display());
+            ExitCode::from(2)
+        }
+        Err(CompileError::Invalid(report)) => {
             print_report(&mut std::io::stderr(), path, &source, &report);
             ExitCode::FAILURE
         }
@@ -129,7 +139,13 @@ fn check(files: &[PathBuf]) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
-        let report = oval_core::check(&source);
+        let report = match oval_core::check(&source) {
+            Ok(report) => report,
+            Err(rejection) => {
+                eprintln!("oval: {}: {rejection}", path.display());
+                return ExitCode::from(2);
+            }
+        };
         print_report(&mut std::io::stdout(), path, &source, &report);
         if report.has_errors() {
             worst = ExitCode::FAILURE;

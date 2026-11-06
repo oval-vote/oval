@@ -1,10 +1,10 @@
 use super::Parser;
 use super::document::CANDIDATE_FIELDS;
 use crate::SyntaxKind::{
-    self, AsKeyword, Campaign, CampaignKeyword, Contest, ContestKind, DesignationKeyword, Flag,
-    Identifier, IncumbentKeyword, IntegerLiteral, MaxKeyword, Member, MultipleKeyword, Newline,
-    NoteKeyword, PartyKeyword, RankedKeyword, RecommendKeyword, RetentionKeyword, SingleKeyword,
-    StringLiteral, SubtitleKeyword, TabulationKeyword, WebsiteKeyword, WithdrawnKeyword,
+    self, AsKeyword, At, Campaign, CampaignKeyword, Contest, ContestKind, DesignationKeyword, Flag,
+    IncumbentKeyword, IntegerLiteral, MaxKeyword, Member, MultipleKeyword, Newline, NoteKeyword,
+    PartyKeyword, RankedKeyword, RecommendKeyword, RetentionKeyword, SingleKeyword, StringLiteral,
+    SubtitleKeyword, TabulationKeyword, WebsiteKeyword, WithdrawnKeyword,
 };
 
 pub(super) const CONTEST_KINDS: &[SyntaxKind] = &[
@@ -26,7 +26,7 @@ impl Parser<'_> {
     pub(super) fn contest(&mut self) {
         self.start_node(Contest);
         self.bump();
-        self.expect(Identifier);
+        self.identifier();
         self.expect(StringLiteral);
         self.contest_kind();
         self.end_of_line();
@@ -74,17 +74,17 @@ impl Parser<'_> {
         self.start_node(Campaign);
         self.bump();
         self.flags();
-        if self.at(Identifier) {
+        if self.at(At) {
             self.member(false);
             self.end_of_line();
-            self.block(CAMPAIGN_FIELDS, &[Identifier], Self::campaign_block_item);
+            self.block(CAMPAIGN_FIELDS, &[At], Self::campaign_block_item);
         } else if self.at_line_end() {
             self.end_of_line();
-            self.required_block(CAMPAIGN_FIELDS, &[Identifier], Self::campaign_block_item);
+            self.required_block(CAMPAIGN_FIELDS, &[At], Self::campaign_block_item);
         } else {
-            self.recover_line(&[IncumbentKeyword, WithdrawnKeyword, Identifier, Newline]);
+            self.recover_line(&[IncumbentKeyword, WithdrawnKeyword, At, Newline]);
             self.end_of_line();
-            self.block(CAMPAIGN_FIELDS, &[Identifier], Self::campaign_block_item);
+            self.block(CAMPAIGN_FIELDS, &[At], Self::campaign_block_item);
         }
         self.finish_node();
     }
@@ -97,7 +97,7 @@ impl Parser<'_> {
                 self.flag();
             } else {
                 let mut expected = remaining.clone();
-                expected.push(Identifier);
+                expected.push(At);
                 self.misplaced(kind, &expected, |parser, _| {
                     parser.flag();
                     true
@@ -114,7 +114,7 @@ impl Parser<'_> {
 
     pub(super) fn member(&mut self, in_block: bool) {
         self.start_node(Member);
-        self.bump();
+        self.identifier();
         self.eat(StringLiteral);
         if self.eat(AsKeyword) {
             self.expect_value(StringLiteral);
@@ -128,7 +128,7 @@ impl Parser<'_> {
 
     pub(super) fn campaign_block_item(&mut self, kind: SyntaxKind) -> bool {
         match kind {
-            Identifier => self.member(true),
+            At => self.member(true),
             PartyKeyword => self.party_reference(),
             WebsiteKeyword | NoteKeyword | DesignationKeyword => return self.simple_field(kind),
             _ => return false,

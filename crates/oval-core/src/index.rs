@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use oval_syntax::TextRange;
 use oval_syntax::ast::{
-    Ballot, BallotItem, Campaign, Contest, Document, Identifier, Measure, Member, PartyReference,
-    Section, SectionItem,
+    AstNode, Ballot, BallotItem, Campaign, Contest, Document, Identifier, Measure, Member,
+    PartyReference, Section, SectionItem,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -166,7 +166,7 @@ impl Index {
     fn declare(&mut self, id: Option<Identifier>, kind: EntityKind) {
         if let Some(id) = id {
             self.declarations.push(Declaration {
-                name: id.name().to_owned(),
+                name: id.name(),
                 kind,
                 range: id.range(),
             });
@@ -175,7 +175,7 @@ impl Index {
 
     fn refer(&mut self, id: &Identifier, expected: EntityKind) {
         self.references.push(Reference {
-            name: id.name().to_owned(),
+            name: id.name(),
             expected,
             range: id.range(),
         });

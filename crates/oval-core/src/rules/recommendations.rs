@@ -85,9 +85,9 @@ fn in_contest(
         );
     for id in named {
         let declared_candidate = index
-            .resolve(id.name())
+            .resolve(&id.name())
             .is_some_and(|d| d.kind == EntityKind::Candidate);
-        if declared_candidate && !campaign_of.contains_key(id.name()) {
+        if declared_candidate && !campaign_of.contains_key(&id.name()) {
             out.push(error(
                 Rule::RecommendationReferencesInContest,
                 id.range(),
@@ -103,7 +103,7 @@ fn head_of_ticket(contest: &Contest, recommendation: &ContestRecommend, out: &mu
         let names: Vec<String> = campaign
             .members()
             .filter_map(|m| m.id())
-            .map(|id| id.name().to_owned())
+            .map(|id| id.name())
             .collect();
         if let [head, rest @ ..] = names.as_slice() {
             for other in rest {
@@ -120,7 +120,7 @@ fn head_of_ticket(contest: &Contest, recommendation: &ContestRecommend, out: &mu
                 .flat_map(|o| o.candidates().collect::<Vec<_>>()),
         );
     for id in named {
-        if let Some(head) = head_of.get(id.name()) {
+        if let Some(head) = head_of.get(&id.name()) {
             out.push(warning(
                 Rule::HeadOfTicketReferences,
                 id.range(),
@@ -138,7 +138,7 @@ fn campaign_memberships(contest: &Contest) -> HashMap<String, usize> {
     for (i, campaign) in contest.campaigns().enumerate() {
         for member in campaign.members() {
             if let Some(id) = member.id() {
-                map.entry(id.name().to_owned()).or_insert(i);
+                map.entry(id.name()).or_insert(i);
             }
         }
     }
@@ -167,14 +167,14 @@ fn shape(
         );
     let mut seen: HashMap<usize, String> = HashMap::new();
     for id in named {
-        let Some(campaign) = campaign_of.get(id.name()) else {
+        let Some(campaign) = campaign_of.get(&id.name()) else {
             continue;
         };
         match seen.get(campaign) {
             None => {
-                seen.insert(*campaign, id.name().to_owned());
+                seen.insert(*campaign, id.name());
             }
-            Some(first) if first == id.name() => out.push(error(
+            Some(first) if *first == id.name() => out.push(error(
                 Rule::RecommendationShape,
                 id.range(),
                 format!("`@{}` is named more than once", id.name()),

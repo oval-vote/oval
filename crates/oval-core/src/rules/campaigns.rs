@@ -15,13 +15,13 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
             for member in campaign.members() {
                 member_block(&member, out);
                 if let Some(id) = member.id() {
-                    if !in_campaign.insert(id.name().to_owned()) {
+                    if !in_campaign.insert(id.name()) {
                         out.push(error(
                             Rule::NoDuplicateMembers,
                             id.range(),
                             format!("`@{}` is already a member of this campaign", id.name()),
                         ));
-                    } else if !in_contest.insert(id.name().to_owned()) {
+                    } else if !in_contest.insert(id.name()) {
                         out.push(error(
                             Rule::OneCampaignPerCandidate,
                             id.range(),
@@ -49,10 +49,7 @@ fn member_block(member: &Member, out: &mut Vec<Diagnostic>) {
     else {
         return;
     };
-    let name = member
-        .id()
-        .map(|id| id.name().to_owned())
-        .unwrap_or_default();
+    let name = member.id().map(|id| id.name()).unwrap_or_default();
     out.push(error(
         Rule::MemberBlocksOnlyOnDeclarations,
         block.text_range(),

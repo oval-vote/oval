@@ -2,7 +2,7 @@ use rowan::TextRange;
 
 use super::{ParseError, Parser, text_size};
 use crate::SyntaxKind::{
-    self, ContestRecommend, Identifier, Indent, JustificationKeyword, Newline, NoPositionKeyword,
+    self, At, ContestRecommend, Indent, JustificationKeyword, Newline, NoPositionKeyword,
     NoteKeyword, Oppose, OpposeKeyword, RecommendKeyword, Support, SupportKeyword,
 };
 
@@ -65,16 +65,18 @@ impl Parser<'_> {
         self.start_node(node);
         self.bump();
         self.stances += 1;
-        if !self.at(Identifier) {
+        if !self.at(At) {
             if self.at_line_end() {
-                self.error(&[Identifier]);
+                self.error(&[At]);
             } else {
-                self.recover_line(&[Identifier]);
+                self.recover_line(&[At]);
             }
         }
-        while self.eat(Identifier) {}
+        while self.at(At) {
+            self.identifier();
+        }
         if !self.at_line_end() {
-            self.recover_line(&[Identifier, Newline]);
+            self.recover_line(&[At, Newline]);
         }
         self.expect(Newline);
         self.finish_node();

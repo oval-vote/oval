@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use oval_syntax::TextRange;
-use oval_syntax::ast::Document;
+use oval_syntax::ast::{AstNode, Document};
 
 use super::warning;
 use crate::index::{EntityKind, Index};
@@ -20,7 +20,7 @@ fn unused(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
         .collect();
     for party in document.parties() {
         let Some(id) = party.id() else { continue };
-        if !referenced.contains(&(id.name(), EntityKind::Party)) {
+        if !referenced.contains(&(id.name().as_str(), EntityKind::Party)) {
             out.push(warning(
                 Rule::UnusedDeclarations,
                 id.range(),
@@ -33,7 +33,7 @@ fn unused(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
     }
     for candidate in document.candidates() {
         let Some(id) = candidate.id() else { continue };
-        if !referenced.contains(&(id.name(), EntityKind::Candidate)) {
+        if !referenced.contains(&(id.name().as_str(), EntityKind::Candidate)) {
             out.push(warning(
                 Rule::UnusedDeclarations,
                 id.range(),
@@ -66,7 +66,7 @@ fn duplicate_party_names(document: &Document, index: &Index, out: &mut Vec<Diagn
             )),
             Some(_) => {}
             None => {
-                by_name.insert(name, (id.name().to_owned(), id.range()));
+                by_name.insert(name, (id.name(), id.range()));
             }
         }
     }

@@ -1,12 +1,12 @@
 use oval_syntax::SyntaxKind;
-use oval_syntax::lexer::{LexError, LexErrorReason};
+use oval_syntax::lexer::{LexicalError, LexicalErrorKind};
 use oval_syntax::parser::{ParseError, SyntaxError};
 
 use crate::{Diagnostic, DiagnosticCode, Severity};
 
-pub(crate) fn diagnostic(source: &str, error: &SyntaxError) -> Diagnostic {
+pub(crate) fn diagnostic(error: &SyntaxError) -> Diagnostic {
     let message = match error {
-        SyntaxError::Lex(error) => lex_message(source, error),
+        SyntaxError::Lexical(error) => lexical_message(error),
         SyntaxError::Parse(error) => parse_message(error),
     };
     Diagnostic {
@@ -17,23 +17,21 @@ pub(crate) fn diagnostic(source: &str, error: &SyntaxError) -> Diagnostic {
     }
 }
 
-fn lex_message(source: &str, error: &LexError) -> String {
-    let text = &source[error.range];
-    match error.reason {
-        LexErrorReason::IllegalTab => "tabs are not allowed outside strings and Markdown bodies",
-        LexErrorReason::MalformedIdentifier => "an identifier is `@` followed by a letter",
-        LexErrorReason::UnknownWord => return format!("`{text}` is not a keyword"),
-        LexErrorReason::UnexpectedCharacter => "unexpected character",
-        LexErrorReason::UnterminatedString => "this string has no closing quote",
-        LexErrorReason::InvalidEscape => {
+fn lexical_message(error: &LexicalError) -> String {
+    match error.kind {
+        LexicalErrorKind::IllegalTab => {
+            "tabs are not allowed outside strings, comments, and Markdown bodies"
+        }
+        LexicalErrorKind::UnexpectedCharacter => "unexpected character",
+        LexicalErrorKind::UnterminatedString => "this string has no closing quote",
+        LexicalErrorKind::InvalidEscape => {
             "only `\\\"` and `\\\\` may follow a backslash in a string"
         }
-        LexErrorReason::MalformedNumber => "this is neither a number nor a date",
-        LexErrorReason::MalformedUrl => "a URL needs something after `://`",
-        LexErrorReason::InconsistentDedent => {
+        LexicalErrorKind::MalformedNumber => "this is neither a number nor a date",
+        LexicalErrorKind::MalformedUrl => "a URL needs something after `://`",
+        LexicalErrorKind::InconsistentDedent => {
             "this line is indented to a level that no enclosing block uses"
         }
-        _ => "unrecognized text",
     }
     .to_owned()
 }
@@ -64,7 +62,8 @@ fn describe(kind: SyntaxKind) -> String {
         return format!("`{}`", keyword.text());
     }
     match kind {
-        SyntaxKind::Identifier => "an identifier",
+        SyntaxKind::At => "an identifier",
+        SyntaxKind::Word => "a word",
         SyntaxKind::StringLiteral => "a string",
         SyntaxKind::IntegerLiteral => "a number",
         SyntaxKind::DateLiteral => "a date",
