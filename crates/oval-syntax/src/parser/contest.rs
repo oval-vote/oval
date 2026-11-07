@@ -1,5 +1,5 @@
-use super::Parser;
 use super::document::CANDIDATE_FIELDS;
+use super::{ParseErrorKind, Parser};
 use crate::SyntaxKind::{
     self, AsKeyword, At, Campaign, CampaignKeyword, Contest, ContestKind, DesignationKeyword, Flag,
     IncumbentKeyword, IntegerLiteral, MaxKeyword, Member, MultipleKeyword, Newline, NoteKeyword,
@@ -27,7 +27,7 @@ impl Parser<'_> {
         self.start_node(Contest);
         self.bump();
         self.identifier();
-        self.expect(StringLiteral);
+        self.expect_value_or(StringLiteral, ParseErrorKind::MissingName);
         self.contest_kind();
         self.end_of_line();
         self.required_block(CONTEST_FIELDS, CONTEST_ITEMS, Self::contest_item);
@@ -55,7 +55,9 @@ impl Parser<'_> {
                 }
                 self.finish_node();
             }
-            _ if self.at_line_end() => self.error(CONTEST_KINDS),
+            _ if self.at_line_end() => {
+                self.missing(ParseErrorKind::MissingContestKind, CONTEST_KINDS);
+            }
             _ => self.recover_line(CONTEST_KINDS),
         }
     }
@@ -84,7 +86,7 @@ impl Parser<'_> {
         } else {
             self.recover_line(&[IncumbentKeyword, WithdrawnKeyword, At, Newline]);
             self.end_of_line();
-            self.block(CAMPAIGN_FIELDS, &[At], Self::campaign_block_item);
+            self.required_block(CAMPAIGN_FIELDS, &[At], Self::campaign_block_item);
         }
         self.finish_node();
     }
@@ -98,10 +100,15 @@ impl Parser<'_> {
             } else {
                 let mut expected = remaining.clone();
                 expected.push(At);
-                self.misplaced(kind, &expected, |parser, _| {
-                    parser.flag();
-                    true
-                });
+                self.set_aside(
+                    ParseErrorKind::RepeatedFlag,
+                    kind,
+                    &expected,
+                    |parser, _| {
+                        parser.flag();
+                        true
+                    },
+                );
             }
         }
     }

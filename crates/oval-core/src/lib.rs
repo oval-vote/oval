@@ -69,7 +69,12 @@ pub fn check(source: &str) -> Result<Report, InputRejection> {
     {
         return Ok(Report { parse, diagnostics });
     }
-    diagnostics.extend(parse.errors().iter().map(syntax::diagnostic));
+    diagnostics.extend(
+        parse
+            .errors()
+            .iter()
+            .map(|error| syntax::diagnostic(source, error)),
+    );
     if let Some(document) = &document {
         let index = index::Index::build(document);
         diagnostics.extend(rules::check(document, &index));
@@ -121,7 +126,7 @@ mod tests {
                 (
                     &DiagnosticCode::Syntax,
                     Severity::Error,
-                    "expected `election`, `date`, `note`, `party`, `candidate`, or `ballot`, found unrecognized text"
+                    "expected `election`, `date`, `note`, `party`, `candidate`, or `ballot`, found `bad`"
                 ),
             ]
         );
@@ -142,7 +147,7 @@ mod tests {
         );
         assert_eq!(
             syntax_message("oval 1\nballot @b \"B\"").as_deref(),
-            Some("expected an indented block, found the end of the file")
+            Some("expected an indented block after this line")
         );
     }
 
