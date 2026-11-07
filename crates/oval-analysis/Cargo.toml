@@ -1,0 +1,18 @@
+[package]
+name = "oval-analysis"
+version.workspace = true
+description = "Symbols, outlines, and other editor queries over Oval voting guides"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+oval-core.workspace = true
+oval-syntax.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

@@ -13,6 +13,7 @@ publish = false
 
 [workspace.dependencies]
 clap = { version = "4.6", features = ["derive"] }
+oval-analysis = { path = "crates/oval-analysis" }
 oval-core = { path = "crates/oval-core" }
 oval-format = { path = "crates/oval-format" }
 oval-syntax = { path = "crates/oval-syntax" }
