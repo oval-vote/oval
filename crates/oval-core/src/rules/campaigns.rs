@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use oval_syntax::SyntaxKind;
 use oval_syntax::ast::{AstNode, Campaign, Member};
+use oval_syntax::{SyntaxKind, TextRange};
 
 use super::report;
 use crate::index::Index;
@@ -18,13 +18,13 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
                     if !in_campaign.insert(id.name()) {
                         out.push(report(
                             ValidationRule::DuplicateMember,
-                            id.range(),
+                            member.range(),
                             format!("`@{}` is already a member of this campaign", id.name()),
                         ));
                     } else if !in_contest.insert(id.name()) {
                         out.push(report(
                             ValidationRule::CandidateInTwoCampaigns,
-                            id.range(),
+                            member.range(),
                             format!(
                                 "`@{}` is already in another campaign of this contest",
                                 id.name()
@@ -50,9 +50,18 @@ fn member_block(member: &Member, out: &mut Vec<Diagnostic>) {
         return;
     };
     let name = member.id().map(|id| id.name()).unwrap_or_default();
+    let end = block
+        .descendants_with_tokens()
+        .filter_map(oval_syntax::SyntaxElement::into_token)
+        .filter(|token| !token.kind().is_trivia() && !token.text_range().is_empty())
+        .last()
+        .map_or_else(
+            || block.text_range().end(),
+            |token| token.text_range().end(),
+        );
     out.push(report(
         ValidationRule::BlockOnReference,
-        block.text_range(),
+        TextRange::new(block.text_range().start(), end),
         format!("`@{name}` refers to a candidate declared elsewhere, so it cannot have a block"),
     ));
 }

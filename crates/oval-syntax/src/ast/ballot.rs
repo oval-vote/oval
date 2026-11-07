@@ -1,7 +1,8 @@
 use super::{
     AstNode, Contest, Identifier, MarkdownField, Measure, StringField, ast_node, block, field,
-    identifier, string,
+    identifier, string, string_range,
 };
+use crate::TextRange;
 use crate::{Keyword, SyntaxNode};
 
 ast_node! {
@@ -45,6 +46,11 @@ impl Ballot {
     /// The jurisdiction or grouping this ballot covers.
     pub fn title(&self) -> Option<String> {
         string(&self.0)
+    }
+
+    /// The range of the ballot's title.
+    pub fn title_range(&self) -> Option<TextRange> {
+        string_range(&self.0)
     }
 
     /// The `eligibility` field.

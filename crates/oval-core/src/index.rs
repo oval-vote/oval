@@ -34,10 +34,18 @@ pub(crate) struct Declaration {
     pub(crate) range: TextRange,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum ReferenceSite {
+    PartyLine,
+    Member,
+    Stance,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Reference {
     pub(crate) name: String,
     pub(crate) expected: EntityKind,
+    pub(crate) site: ReferenceSite,
     pub(crate) range: TextRange,
 }
 
@@ -124,7 +132,7 @@ impl Index {
                         .flat_map(|o| o.candidates().collect::<Vec<_>>()),
                 );
             for identifier in named {
-                self.refer(&identifier, EntityKind::Candidate);
+                self.refer(&identifier, EntityKind::Candidate, ReferenceSite::Stance);
             }
         }
     }
@@ -142,7 +150,7 @@ impl Index {
         if member.is_declaration() {
             self.declare(member.id(), EntityKind::Candidate);
         } else if let Some(id) = member.id() {
-            self.refer(&id, EntityKind::Candidate);
+            self.refer(&id, EntityKind::Candidate, ReferenceSite::Member);
         }
         if let Some(party) = member.party() {
             self.party_reference(&party);
@@ -159,7 +167,7 @@ impl Index {
             self.inline_parties.push(party.clone());
             self.declare(party.id(), EntityKind::Party);
         } else if let Some(id) = party.id() {
-            self.refer(&id, EntityKind::Party);
+            self.refer(&id, EntityKind::Party, ReferenceSite::PartyLine);
         }
     }
 
@@ -173,10 +181,11 @@ impl Index {
         }
     }
 
-    fn refer(&mut self, id: &Identifier, expected: EntityKind) {
+    fn refer(&mut self, id: &Identifier, expected: EntityKind, site: ReferenceSite) {
         self.references.push(Reference {
             name: id.name(),
             expected,
+            site,
             range: id.range(),
         });
     }

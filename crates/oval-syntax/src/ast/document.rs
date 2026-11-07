@@ -1,7 +1,8 @@
 use super::{
     AstNode, Ballot, DateField, Identifier, MarkdownField, StringField, UrlField, ast_node, block,
-    child, children, field, identifier, string, token,
+    child, children, field, identifier, string, string_range, token,
 };
+use crate::TextRange;
 use crate::{Keyword, SyntaxKind, SyntaxNode};
 
 ast_node! {
@@ -92,6 +93,11 @@ impl Party {
         string(&self.0)
     }
 
+    /// The range of the party's name.
+    pub fn name_range(&self) -> Option<TextRange> {
+        string_range(&self.0)
+    }
+
     /// The `abbreviation` field.
     pub fn abbreviation(&self) -> Option<StringField> {
         field(&self.0, Keyword::Abbreviation)
@@ -144,6 +150,11 @@ impl PartyReference {
     /// The party's name, present only when this line declares the party.
     pub fn name(&self) -> Option<String> {
         string(&self.0)
+    }
+
+    /// The range of the party's name, when this line declares the party.
+    pub fn name_range(&self) -> Option<TextRange> {
+        string_range(&self.0)
     }
 
     /// Whether this line declares the party rather than referring to one declared elsewhere.

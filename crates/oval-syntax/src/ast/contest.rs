@@ -1,7 +1,9 @@
 use super::{
     ContestRecommend, Identifier, MarkdownField, PartyReference, StringField, UrlField, ast_node,
-    block, block_children, child, field, has_token, identifier, integer, string, tokens,
+    block, block_children, child, field, has_token, identifier, integer, string, token_range,
+    tokens,
 };
+use crate::TextRange;
 use crate::{Keyword, SyntaxKind};
 
 ast_node! {
@@ -69,6 +71,15 @@ impl Contest {
             Keyword::Retention => ContestKind::Retention,
             _ => return None,
         })
+    }
+
+    /// The range of the integer after `multiple` or `max`, when there is one.
+    pub fn kind_argument_range(&self) -> Option<TextRange> {
+        let node = self
+            .0
+            .children()
+            .find(|n| n.kind() == SyntaxKind::ContestKind)?;
+        token_range(&node, SyntaxKind::IntegerLiteral)
     }
 
     /// The `subtitle` field.

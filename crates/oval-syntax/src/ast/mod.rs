@@ -33,6 +33,23 @@ pub trait AstNode: Sized {
     fn range(&self) -> TextRange {
         self.syntax().text_range()
     }
+
+    /// The range of the node's first line, up to its line terminator.
+    fn header_line_range(&self) -> TextRange {
+        let node = self.syntax();
+        let end = tokens(node)
+            .find(|token| token.kind() == SyntaxKind::Newline)
+            .map_or_else(
+                || node.text_range().end(),
+                |token| token.text_range().start(),
+            );
+        TextRange::new(node.text_range().start(), end)
+    }
+
+    /// Whether an indented block follows the node's first line.
+    fn has_block(&self) -> bool {
+        block(self.syntax()).is_some()
+    }
 }
 
 macro_rules! ast_node {
@@ -123,6 +140,11 @@ impl DateField {
     pub fn value(&self) -> Option<Date> {
         token(&self.0, SyntaxKind::DateLiteral).map(|t| date_value(t.text()))
     }
+
+    /// The range of the date itself.
+    pub fn value_range(&self) -> Option<TextRange> {
+        token_range(&self.0, SyntaxKind::DateLiteral)
+    }
 }
 
 impl UrlField {
@@ -175,6 +197,14 @@ fn token(node: &SyntaxNode, kind: SyntaxKind) -> Option<SyntaxToken> {
 
 fn has_token(node: &SyntaxNode, kind: SyntaxKind) -> bool {
     token(node, kind).is_some()
+}
+
+fn token_range(node: &SyntaxNode, kind: SyntaxKind) -> Option<TextRange> {
+    token(node, kind).map(|token| token.text_range())
+}
+
+fn string_range(node: &SyntaxNode) -> Option<TextRange> {
+    token_range(node, SyntaxKind::StringLiteral)
 }
 
 fn string(node: &SyntaxNode) -> Option<String> {

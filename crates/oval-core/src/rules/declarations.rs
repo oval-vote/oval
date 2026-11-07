@@ -4,7 +4,7 @@ use oval_syntax::TextRange;
 use oval_syntax::ast::{AstNode, Document};
 
 use super::report;
-use crate::index::{EntityKind, Index};
+use crate::index::{EntityKind, Index, ReferenceSite};
 use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
@@ -16,6 +16,7 @@ fn unused(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
     let referenced: HashSet<(&str, EntityKind)> = index
         .references
         .iter()
+        .filter(|r| r.site != ReferenceSite::Stance)
         .map(|r| (r.name.as_str(), r.expected))
         .collect();
     for party in document.parties() {
@@ -23,7 +24,7 @@ fn unused(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
         if !referenced.contains(&(id.name().as_str(), EntityKind::Party)) {
             out.push(report(
                 ValidationRule::UnusedDeclaration,
-                id.range(),
+                party.header_line_range(),
                 format!(
                     "`@{}` is declared but no candidate belongs to it",
                     id.name()
@@ -36,7 +37,7 @@ fn unused(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
         if !referenced.contains(&(id.name().as_str(), EntityKind::Candidate)) {
             out.push(report(
                 ValidationRule::UnusedDeclaration,
-                id.range(),
+                candidate.header_line_range(),
                 format!("`@{}` is declared but is not in any campaign", id.name()),
             ));
         }
@@ -46,19 +47,19 @@ fn unused(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
 fn duplicate_party_names(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
     let declared = document
         .parties()
-        .filter_map(|p| Some((p.name()?, p.id()?)))
+        .filter_map(|p| Some((p.name()?, p.name_range()?, p.id()?)))
         .chain(
             index
                 .inline_parties
                 .iter()
-                .filter_map(|p| Some((p.name()?, p.id()?))),
+                .filter_map(|p| Some((p.name()?, p.name_range()?, p.id()?))),
         );
-    let mut by_name: HashMap<String, (String, TextRange)> = HashMap::new();
+    let mut by_name: HashMap<String, String> = HashMap::new();
     let mut found: Vec<(TextRange, String)> = Vec::new();
-    for (name, id) in declared {
+    for (name, range, id) in declared {
         match by_name.get(&name) {
-            Some((first, _)) if *first != id.name() => found.push((
-                id.range(),
+            Some(first) if *first != id.name() => found.push((
+                range,
                 format!(
                     "`@{}` has the same name as `@{first}`, \"{name}\"",
                     id.name()
@@ -66,7 +67,7 @@ fn duplicate_party_names(document: &Document, index: &Index, out: &mut Vec<Diagn
             )),
             Some(_) => {}
             None => {
-                by_name.insert(name, (id.name(), id.range()));
+                by_name.insert(name, id.name());
             }
         }
     }
