@@ -35,6 +35,8 @@ jobs:
           token: ${{ steps.app.outputs.token }}
           fetch-depth: 0
       - uses: jdx/mise-action@v5
+      - run: npm ci
+        working-directory: packages/oval
       - name: Validate the request
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
