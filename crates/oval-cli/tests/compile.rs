@@ -53,3 +53,29 @@ fn a_document_with_errors_prints_diagnostics_on_stderr_and_no_json() {
     );
     std::fs::remove_file(path).ok();
 }
+
+#[test]
+fn json_diagnostics_go_to_stderr_when_compiling_fails() {
+    let path = std::env::temp_dir().join(format!("oval-compile-json-{}.oval", std::process::id()));
+    std::fs::write(&path, "oval 1\nguide \"G\"\n").expect("temp file");
+    let output = oval(&["compile".as_ref(), "--json".as_ref(), path.as_os_str()]);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "");
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stderr).expect("stderr is a JSON array");
+    let codes: Vec<&str> = json
+        .as_array()
+        .expect("array")
+        .iter()
+        .map(|entry| entry["code"].as_str().expect("code"))
+        .collect();
+    assert_eq!(
+        codes,
+        [
+            "missing-guide-field",
+            "missing-guide-field",
+            "empty-document"
+        ]
+    );
+    std::fs::remove_file(path).ok();
+}

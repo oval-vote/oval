@@ -216,6 +216,7 @@ dependencies = [
  "oval-core",
  "oval-format",
  "oval-syntax",
+ "serde",
  "serde_json",
 ]
 
@@ -250,6 +251,7 @@ version = "0.1.1"
 dependencies = [
  "oval-core",
  "oval-format",
+ "serde",
  "serde-wasm-bindgen",
  "serde_json",
  "wasm-bindgen",

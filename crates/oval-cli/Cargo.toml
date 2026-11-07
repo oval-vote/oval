@@ -18,6 +18,7 @@ clap.workspace = true
 oval-core.workspace = true
 oval-format.workspace = true
 oval-syntax.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

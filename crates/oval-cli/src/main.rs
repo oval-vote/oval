@@ -9,6 +9,7 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use oval_core::{CompileError, Report, Severity};
 use oval_format::FormatError;
+use serde::Serialize;
 
 use crate::line_index::LineIndex;
 
@@ -26,6 +27,9 @@ enum Command {
         /// Files to check.
         #[arg(required = true)]
         files: Vec<PathBuf>,
+        /// Print diagnostics as a JSON array instead of text lines.
+        #[arg(long)]
+        json: bool,
     },
     /// Compile a document to its canonical JSON form.
     Compile {
@@ -34,6 +38,9 @@ enum Command {
         /// Indent the output for reading.
         #[arg(long)]
         pretty: bool,
+        /// Print diagnostics as a JSON array instead of text lines.
+        #[arg(long)]
+        json: bool,
     },
     /// Rewrite one or more documents in the canonical style.
     Fmt {
@@ -43,20 +50,111 @@ enum Command {
         /// Report files that would change instead of rewriting them.
         #[arg(long)]
         check: bool,
+        /// Print diagnostics as a JSON array instead of text lines.
+        #[arg(long)]
+        json: bool,
     },
+}
+
+#[derive(Serialize)]
+struct Position {
+    line: usize,
+    column: usize,
+}
+
+#[derive(Serialize)]
+struct ByteRange {
+    start: u32,
+    end: u32,
+}
+
+#[derive(Serialize)]
+struct Entry {
+    path: String,
+    code: &'static str,
+    severity: Severity,
+    message: String,
+    start: Position,
+    end: Position,
+    range: ByteRange,
+}
+
+struct Printer {
+    json: bool,
+    entries: Vec<Entry>,
+}
+
+impl Printer {
+    fn new(json: bool) -> Self {
+        Self {
+            json,
+            entries: Vec::new(),
+        }
+    }
+
+    fn report(
+        &mut self,
+        out: &mut impl Write,
+        path: &std::path::Path,
+        source: &str,
+        report: &Report,
+    ) {
+        let index = LineIndex::new(source);
+        for diagnostic in report.diagnostics() {
+            let (line, column) = index.line_column(diagnostic.range.start());
+            if self.json {
+                let (end_line, end_column) = index.line_column(diagnostic.range.end());
+                self.entries.push(Entry {
+                    path: path.display().to_string(),
+                    code: diagnostic.code.identifier(),
+                    severity: diagnostic.severity,
+                    message: diagnostic.message.clone(),
+                    start: Position { line, column },
+                    end: Position {
+                        line: end_line,
+                        column: end_column,
+                    },
+                    range: ByteRange {
+                        start: diagnostic.range.start().into(),
+                        end: diagnostic.range.end().into(),
+                    },
+                });
+            } else {
+                let severity = match diagnostic.severity {
+                    Severity::Error => "error",
+                    Severity::Warning => "warning",
+                };
+                let _ = writeln!(
+                    out,
+                    "{}:{line}:{column}: {severity}[{}]: {}",
+                    path.display(),
+                    diagnostic.code,
+                    diagnostic.message
+                );
+            }
+        }
+    }
+
+    fn finish(self, out: &mut impl Write, even_when_empty: bool) {
+        if self.json && (even_when_empty || !self.entries.is_empty()) {
+            let json = serde_json::to_string(&self.entries).unwrap_or_else(|_| "[]".to_owned());
+            let _ = writeln!(out, "{json}");
+        }
+    }
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
-        Command::Check { files } => check(&files),
-        Command::Compile { file, pretty } => compile(&file, pretty),
-        Command::Fmt { files, check } => fmt(&files, check),
+        Command::Check { files, json } => check(&files, json),
+        Command::Compile { file, pretty, json } => compile(&file, pretty, json),
+        Command::Fmt { files, check, json } => fmt(&files, check, json),
     }
 }
 
-fn fmt(files: &[PathBuf], check_only: bool) -> ExitCode {
+fn fmt(files: &[PathBuf], check_only: bool, json: bool) -> ExitCode {
     let mut worst = ExitCode::SUCCESS;
+    let mut printer = Printer::new(json);
     for path in files {
         let source = match std::fs::read_to_string(path) {
             Ok(source) => source,
@@ -83,16 +181,17 @@ fn fmt(files: &[PathBuf], check_only: bool) -> ExitCode {
             }
             Err(FormatError::SyntaxErrors(_)) => {
                 if let Ok(report) = oval_core::check(&source) {
-                    print_report(&mut std::io::stderr(), path, &source, &report);
+                    printer.report(&mut std::io::stderr(), path, &source, &report);
                 }
                 worst = ExitCode::FAILURE;
             }
         }
     }
+    printer.finish(&mut std::io::stderr(), false);
     worst
 }
 
-fn compile(path: &PathBuf, pretty: bool) -> ExitCode {
+fn compile(path: &PathBuf, pretty: bool, json: bool) -> ExitCode {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(error) => {
@@ -123,14 +222,17 @@ fn compile(path: &PathBuf, pretty: bool) -> ExitCode {
             ExitCode::from(2)
         }
         Err(CompileError::Invalid(report)) => {
-            print_report(&mut std::io::stderr(), path, &source, &report);
+            let mut printer = Printer::new(json);
+            printer.report(&mut std::io::stderr(), path, &source, &report);
+            printer.finish(&mut std::io::stderr(), true);
             ExitCode::FAILURE
         }
     }
 }
 
-fn check(files: &[PathBuf]) -> ExitCode {
+fn check(files: &[PathBuf], json: bool) -> ExitCode {
     let mut worst = ExitCode::SUCCESS;
+    let mut printer = Printer::new(json);
     for path in files {
         let source = match std::fs::read_to_string(path) {
             Ok(source) => source,
@@ -146,28 +248,11 @@ fn check(files: &[PathBuf]) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
-        print_report(&mut std::io::stdout(), path, &source, &report);
+        printer.report(&mut std::io::stdout(), path, &source, &report);
         if report.has_errors() {
             worst = ExitCode::FAILURE;
         }
     }
+    printer.finish(&mut std::io::stdout(), true);
     worst
-}
-
-fn print_report(out: &mut impl Write, path: &std::path::Path, source: &str, report: &Report) {
-    let index = LineIndex::new(source);
-    for diagnostic in report.diagnostics() {
-        let (line, column) = index.line_column(diagnostic.range.start());
-        let severity = match diagnostic.severity {
-            Severity::Error => "error",
-            Severity::Warning => "warning",
-        };
-        let _ = writeln!(
-            out,
-            "{}:{line}:{column}: {severity}[{}]: {}",
-            path.display(),
-            diagnostic.code,
-            diagnostic.message
-        );
-    }
 }

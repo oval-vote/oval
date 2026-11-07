@@ -27,8 +27,31 @@ test("format leaves a formatted document unchanged", () => {
   assert.equal(oval.format(fixture), fixture);
 });
 
-test("the package names the language major it reads", () => {
+test("the package names the language major it reads and its own version", () => {
   assert.equal(oval.languageMajor(), 1);
+  assert.equal(oval.version(), require("../package.json").version);
+});
+
+test("the catalog lists every diagnostic with its entry on the specification site", () => {
+  const catalog = oval.catalog();
+  assert.equal(catalog.length, 54);
+  assert.deepEqual(catalog[0], {
+    identifier: "illegal-tab",
+    severity: "error",
+    title: "Illegal Tab",
+    url: "https://spec.oval.vote/draft/#sec-Illegal-Tab",
+  });
+  assert.ok(catalog.every((entry) => entry.url.startsWith("https://spec.oval.vote/")));
+  assert.equal(new Set(catalog.map((entry) => entry.identifier)).size, catalog.length);
+  const warnings = catalog.filter((entry) => entry.severity === "warning").map((e) => e.identifier);
+  assert.ok(warnings.includes("unused-declaration") && warnings.includes("insecure-url"));
+});
+
+test("the typings name the diagnostic identifiers", () => {
+  const typings = fs.readFileSync(path.join(__dirname, "../pkg/oval_wasm.d.ts"), "utf8");
+  assert.ok(typings.includes("export type DiagnosticIdentifier ="));
+  assert.ok(typings.includes("export function check(source: string): Diagnostic[];"));
+  assert.ok(typings.includes("export function catalog(): CatalogEntry[];"));
 });
 
 test("diagnostics carry code, severity, range, and message", () => {
