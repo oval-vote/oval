@@ -25,6 +25,9 @@ oval.symbols(source);
 oval.outline(source);
 // The ballot tree: [{ kind: "ballot", title, name, range, selection, children: [...] }, ...]
 
+oval.completions(source, byteOffset);
+// What the grammar accepts there: [{ label: "@delgado", kind: "candidate", detail: "Rosa Delgado", replace }, ...]
+
 oval.catalog();
 // Every diagnostic the package can report, in the specification's order:
 // [{ identifier: "illegal-tab", severity: "error", title: "Illegal Tab",
