@@ -72,3 +72,32 @@ fn check_requires_at_least_one_file() {
     let output = oval(&["check".as_ref()]);
     assert_eq!(output.status.code(), Some(2));
 }
+
+#[test]
+fn json_output_carries_positions_ranges_and_identifiers() {
+    let path = write_temp(
+        "json.oval",
+        "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-02-30\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n",
+    );
+    let output = oval(&["check".as_ref(), "--json".as_ref(), path.as_os_str()]);
+    assert_eq!(output.status.code(), Some(1));
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is a JSON array");
+    assert_eq!(
+        json,
+        serde_json::json!([{
+            "path": path.display().to_string(),
+            "code": "invalid-date",
+            "severity": "error",
+            "message": "2026-02-30 is not a calendar date",
+            "start": { "line": 4, "column": 6 },
+            "end": { "line": 4, "column": 16 },
+            "range": { "start": 35, "end": 45 }
+        }])
+    );
+    std::fs::remove_file(path).ok();
+
+    let output = oval(&["check".as_ref(), "--json".as_ref(), fixture().as_os_str()]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "[]\n");
+}

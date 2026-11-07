@@ -17,9 +17,19 @@ oval.compile(source);
 
 oval.format(source);
 // The formatted source. Throws the diagnostics when the document has syntax errors.
+
+oval.catalog();
+// Every diagnostic the package can report, in the specification's order:
+// [{ identifier: "illegal-tab", severity: "error", title: "Illegal Tab",
+//    url: "https://spec.oval.vote/draft/#sec-Illegal-Tab" }, ...]
+
+oval.languageMajor(); // 1, the major version of the language this package reads
+oval.version(); // the package's own version
 ```
 
-Ranges are byte offsets into the UTF-8 source.
+Ranges are byte offsets into the UTF-8 source. Diagnostic codes are the identifiers of the
+specification's entries, and the typings declare them as a string union, so a `switch` over a
+code is checked by TypeScript.
 
 The language is specified in [oval-vote/oval-spec](https://github.com/oval-vote/oval-spec) and
 implemented in [oval-vote/oval](https://github.com/oval-vote/oval), which also provides the `oval`
