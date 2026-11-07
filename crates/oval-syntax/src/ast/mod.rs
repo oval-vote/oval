@@ -16,7 +16,7 @@ pub use document::{Candidate, Document, Party, PartyReference, VersionMarker};
 pub use measure::{Measure, MeasureRecommend, Position, StringListField};
 pub use recommend::{ContestRecommend, Oppose, Support};
 
-use crate::{Keyword, SyntaxKind, SyntaxNode, SyntaxToken};
+use crate::{Keyword, SyntaxKind, SyntaxNode, SyntaxToken, TextSize};
 
 /// A typed wrapper around a [`SyntaxNode`] of one particular kind.
 pub trait AstNode: Sized {
@@ -157,6 +157,11 @@ impl UrlField {
     pub fn value(&self) -> Option<String> {
         token(&self.0, SyntaxKind::UrlLiteral).map(|t| t.text().to_owned())
     }
+
+    /// The range of the URL itself.
+    pub fn value_range(&self) -> Option<TextRange> {
+        token_range(&self.0, SyntaxKind::UrlLiteral)
+    }
 }
 
 impl MarkdownField {
@@ -168,7 +173,83 @@ impl MarkdownField {
     /// The body with its common indentation removed, line terminators normalized to `\n`,
     /// and no trailing terminator.
     pub fn value(&self) -> Option<String> {
-        token(&self.0, SyntaxKind::MarkdownBlock).map(|t| markdown_value(t.text()))
+        self.body().map(|body| body.value)
+    }
+
+    /// The body's value together with the mapping back to its source positions.
+    pub fn body(&self) -> Option<MarkdownBody> {
+        token(&self.0, SyntaxKind::MarkdownBlock)
+            .map(|t| MarkdownBody::new(t.text(), t.text_range().start()))
+    }
+}
+
+/// The value of a Markdown body and where each of its lines sits in the source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkdownBody {
+    value: String,
+    start: TextSize,
+    lines: Vec<(usize, TextSize)>,
+}
+
+impl MarkdownBody {
+    fn new(text: &str, start: TextSize) -> Self {
+        let lines = crate::text::lines_with_offsets(text);
+        let indentation = lines
+            .iter()
+            .filter(|(_, line)| !line.trim().is_empty())
+            .map(|(_, line)| line.len() - line.trim_start_matches(' ').len())
+            .min()
+            .unwrap_or(0);
+        let mut value = String::with_capacity(text.len());
+        let mut mapping = Vec::with_capacity(lines.len());
+        for (i, (offset, line)) in lines.iter().enumerate() {
+            if i > 0 {
+                value.push('\n');
+            }
+            let content = if line.trim().is_empty() {
+                ""
+            } else {
+                &line[indentation..]
+            };
+            let source = start
+                + u32::try_from(offset + line.len() - content.len())
+                    .map_or(TextSize::from(u32::MAX), TextSize::from);
+            mapping.push((value.len(), source));
+            value.push_str(content);
+        }
+        Self {
+            value,
+            start,
+            lines: mapping,
+        }
+    }
+
+    /// The body with its common indentation removed, line terminators normalized to `\n`,
+    /// and no trailing terminator.
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    /// The source offset of a byte offset within the value.
+    pub fn source_offset(&self, value_offset: usize) -> TextSize {
+        let (line_start, source) = self
+            .lines
+            .iter()
+            .rev()
+            .find(|(line_start, _)| *line_start <= value_offset)
+            .copied()
+            .unwrap_or((0, self.start));
+        source
+            + u32::try_from(value_offset - line_start)
+                .map_or(TextSize::from(u32::MAX), TextSize::from)
+    }
+
+    /// The source range of a byte range within the value.
+    pub fn source_range(&self, range: std::ops::Range<usize>) -> TextRange {
+        TextRange::new(
+            self.source_offset(range.start),
+            self.source_offset(range.end),
+        )
     }
 }
 
@@ -277,22 +358,7 @@ fn date_value(text: &str) -> Date {
     }
 }
 
+#[cfg(test)]
 fn markdown_value(text: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let indentation = lines
-        .iter()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| line.len() - line.trim_start_matches(' ').len())
-        .min()
-        .unwrap_or(0);
-    let mut out = String::with_capacity(text.len());
-    for (i, line) in lines.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
-        if !line.trim().is_empty() {
-            out.push_str(&line[indentation..]);
-        }
-    }
-    out
+    MarkdownBody::new(text, 0.into()).value
 }

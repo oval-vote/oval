@@ -118,11 +118,13 @@ fn cases() -> Vec<Case> {
         case("tiers-in-single", contest("    campaign @bsantos \"Beatriz Santos\"\n    campaign @cfox \"Carl Fox\"\n    recommend\n      support @bsantos\n      support @cfox\n"), |s| span(s, "support @cfox\n")),
         case("support-over-max", ballot("  contest @board \"School Board\" ranked max 2\n    campaign @aokafor \"Ada Okafor\"\n    campaign @bsantos \"Beatriz Santos\"\n    campaign @cfox \"Carl Fox\"\n    recommend\n      support @aokafor\n      support @bsantos\n      support @cfox\n"), |s| span_within(s, "support @cfox", "@cfox")),
         case("retention-stance", ballot("  contest @judge \"Retain Judge Ueda?\" retention\n    campaign incumbent @ueda \"Mika Ueda\"\n    recommend\n      support @ueda\n      oppose @ueda\n"), |s| span(s, "oppose @ueda\n")),
+        case("markdown-profile", ballot("  measure @prop-a \"Proposition A\"\n    note:\n      Run `oval check` first.\n    recommend yes\n"), |s| span(s, "`oval check`")),
         case("unused-declaration", document("party @dem \"Democratic\"\nparty @gop \"Republican\"\ncandidate @dana \"Dana\"\n  party @dem\nballot @city \"City\"\n  contest @m \"M\" single\n    campaign @dana\n    recommend no-position\n"), |s| span(s, "party @gop \"Republican\"")),
         case("duplicate-party-name", document("party @dem \"Democratic\"\nparty @dems \"Democratic\"\ncandidate @a \"A\"\n  party @dem\ncandidate @b \"B\"\n  party @dems\nballot @city \"City\"\n  contest @m \"M\" single\n    campaign @a\n    campaign @b\n    recommend no-position\n"), |s| span_within(s, "party @dems \"Democratic\"", "\"Democratic\"")),
         case("duplicate-ballot-title", document("ballot @city \"City of Ashford\"\n  measure @p \"P\"\n    recommend yes\nballot @city-2 \"City of Ashford\"\n  measure @q \"Q\"\n    recommend no\n"), |s| span_within(s, "ballot @city-2 \"City of Ashford\"", "\"City of Ashford\"")),
         case("support-over-count", ballot("  contest @council \"City Council\" multiple 2\n    campaign @aokafor \"Ada Okafor\"\n    campaign @bsantos \"Beatriz Santos\"\n    campaign @cfox \"Carl Fox\"\n    recommend\n      support @aokafor @bsantos\n      support @cfox\n"), |s| span_within(s, "support @cfox", "@cfox")),
         case("non-head-reference", contest("    campaign\n      @hana \"Hana\" as \"President\"\n      @hiro \"Hiro\" as \"Vice President\"\n    recommend\n      support @hiro\n"), |s| span_within(s, "support @hiro", "@hiro")),
+        case("insecure-url", document("party @dem \"Democratic\"\n  website http://democrats.example\ncandidate @c \"C\"\n  party @dem\nballot @city \"City\"\n  contest @m \"M\" single\n    campaign @c\n    recommend no-position\n"), |s| span(s, "http://democrats.example")),
         case("unpaired-outcome", ballot("  measure @prop-a \"Proposition A\"\n    if_yes:\n      The tax continues.\n    recommend yes\n"), |s| span(s, "if_yes:\n      The tax continues.\n")),
     ]
 }
@@ -157,4 +159,87 @@ fn every_identifier_has_a_case_and_every_case_reports_its_identifier_once() {
             case.source
         );
     }
+}
+
+#[test]
+fn body_positions_map_back_to_the_source_whatever_the_terminator() {
+    for terminator in ["\n", "\r\n", "\r"] {
+        let source = ballot(&format!(
+            "  measure @p \"P\"\n    note:{terminator}      First.{terminator}{terminator}      Then `code`.{terminator}    recommend yes\n"
+        ));
+        let report = check(&source).expect("accepted");
+        let found: Vec<TextRange> = report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code.identifier() == "markdown-profile")
+            .map(|d| d.range)
+            .collect();
+        assert_eq!(found, [span(&source, "`code`")], "{terminator:?}");
+    }
+}
+
+#[test]
+fn the_markdown_profile_names_each_construct_it_rejects() {
+    let body = "    See <https://a.example> and [the text](https://b.example/t).\n\n    # A heading\n\n    | a | b |\n    |---|---|\n    | 1 | 2 |\n\n    > quoted\n\n    1. one\n    2. two\n";
+    let clean = ballot(&format!(
+        "  measure @p \"P\"\n    note:\n{body}    recommend yes\n"
+    ));
+    let report = check(&clean).expect("accepted");
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .all(|d| d.code.identifier() != "markdown-profile"),
+        "{:?}",
+        report.diagnostics()
+    );
+
+    let rejected = [
+        (
+            "```\n      x\n      ```",
+            "code is not part of the Markdown profile",
+        ),
+        ("a<br>b", "raw HTML is not part of the Markdown profile"),
+        (
+            "![alt](https://a.example/i.png)",
+            "images are not part of the Markdown profile",
+        ),
+        (
+            "---",
+            "thematic breaks are not part of the Markdown profile",
+        ),
+        (
+            "[rel](/relative)",
+            "a link destination must be an absolute `http` or `https` URL",
+        ),
+        (
+            "[ref][r]\n\n      [r]: ftp://a.example",
+            "a link destination must be an absolute `http` or `https` URL",
+        ),
+    ];
+    for (construct, message) in rejected {
+        let source = ballot(&format!(
+            "  measure @p \"P\"\n    note:\n      {construct}\n    recommend yes\n"
+        ));
+        let report = check(&source).expect("accepted");
+        let messages: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code.identifier() == "markdown-profile")
+            .map(|d| d.message.as_str())
+            .collect();
+        assert_eq!(messages, [message], "{construct}");
+    }
+
+    let source = ballot(
+        "  measure @p \"P\"\n    note:\n      [site](http://a.example)\n    recommend yes\n",
+    );
+    let report = check(&source).expect("accepted");
+    let insecure: Vec<TextRange> = report
+        .diagnostics()
+        .iter()
+        .filter(|d| d.code.identifier() == "insecure-url")
+        .map(|d| d.range)
+        .collect();
+    assert_eq!(insecure, [span(&source, "http://a.example")]);
 }

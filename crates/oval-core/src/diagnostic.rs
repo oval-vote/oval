@@ -73,6 +73,8 @@ pub enum ValidationRule {
     SupportOverMax,
     /// A `retention` contest's recommendation is not one `support` or one `oppose` reference.
     RetentionStance,
+    /// A Markdown body uses a construct outside the profile.
+    UnsupportedMarkdown,
     /// A top-level party or candidate declaration is never used.
     UnusedDeclaration,
     /// Two parties have the same name and different identifiers.
@@ -85,6 +87,8 @@ pub enum ValidationRule {
     NonHeadReference,
     /// A measure has exactly one of `if_yes` and `if_no`.
     UnpairedOutcome,
+    /// A URL or link destination uses `http` rather than `https`.
+    InsecureUrl,
 }
 
 impl ValidationRule {
@@ -116,12 +120,14 @@ impl ValidationRule {
         Self::TiersInSingle,
         Self::SupportOverMax,
         Self::RetentionStance,
+        Self::UnsupportedMarkdown,
         Self::UnusedDeclaration,
         Self::DuplicatePartyName,
         Self::DuplicateBallotTitle,
         Self::SupportOverCount,
         Self::NonHeadReference,
         Self::UnpairedOutcome,
+        Self::InsecureUrl,
     ];
 
     /// The identifier the specification gives this rule, such as `invalid-date`.
@@ -153,12 +159,14 @@ impl ValidationRule {
             Self::TiersInSingle => "tiers-in-single",
             Self::SupportOverMax => "support-over-max",
             Self::RetentionStance => "retention-stance",
+            Self::UnsupportedMarkdown => "markdown-profile",
             Self::UnusedDeclaration => "unused-declaration",
             Self::DuplicatePartyName => "duplicate-party-name",
             Self::DuplicateBallotTitle => "duplicate-ballot-title",
             Self::SupportOverCount => "support-over-count",
             Self::NonHeadReference => "non-head-reference",
             Self::UnpairedOutcome => "unpaired-outcome",
+            Self::InsecureUrl => "insecure-url",
         }
     }
 
@@ -191,12 +199,14 @@ impl ValidationRule {
             Self::TiersInSingle => "Tiers in a Single Contest",
             Self::SupportOverMax => "Support Beyond Ranked Max",
             Self::RetentionStance => "Retention Stance",
+            Self::UnsupportedMarkdown => "Unsupported Markdown",
             Self::UnusedDeclaration => "Unused Declaration",
             Self::DuplicatePartyName => "Duplicate Party Name",
             Self::DuplicateBallotTitle => "Duplicate Ballot Title",
             Self::SupportOverCount => "Support Beyond Multiple Count",
             Self::NonHeadReference => "Non-Head Reference",
             Self::UnpairedOutcome => "Unpaired Outcome",
+            Self::InsecureUrl => "Insecure URL",
         }
     }
 
@@ -228,13 +238,15 @@ impl ValidationRule {
             | Self::RepeatedStance
             | Self::TiersInSingle
             | Self::SupportOverMax
-            | Self::RetentionStance => Severity::Error,
+            | Self::RetentionStance
+            | Self::UnsupportedMarkdown => Severity::Error,
             Self::UnusedDeclaration
             | Self::DuplicatePartyName
             | Self::DuplicateBallotTitle
             | Self::SupportOverCount
             | Self::NonHeadReference
-            | Self::UnpairedOutcome => Severity::Warning,
+            | Self::UnpairedOutcome
+            | Self::InsecureUrl => Severity::Warning,
         }
     }
 }
@@ -363,7 +375,7 @@ mod tests {
     #[test]
     fn every_code_has_a_unique_kebab_case_identifier() {
         let all = DiagnosticCode::all();
-        assert_eq!(all.len(), 7 + 13 + 32);
+        assert_eq!(all.len(), 7 + 13 + 34);
         let identifiers: HashSet<&str> = all.iter().map(|code| code.identifier()).collect();
         assert_eq!(identifiers.len(), all.len());
         for code in &all {
@@ -406,6 +418,7 @@ mod tests {
                 "support-over-count",
                 "non-head-reference",
                 "unpaired-outcome",
+                "insecure-url",
             ]
         );
     }

@@ -2,6 +2,7 @@
 
 use oval_syntax::lexer::InputRejection;
 use oval_syntax::parser::{ParseResult, parse};
+use oval_syntax::text::split_lines;
 use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 const INDENT: &str = "  ";
@@ -261,24 +262,6 @@ fn canonical_text(token: &SyntaxToken) -> &str {
         return if trimmed.is_empty() { "0" } else { trimmed };
     }
     token.text()
-}
-
-fn split_lines(text: &str) -> Vec<&str> {
-    let mut lines = Vec::new();
-    let mut rest = text;
-    while let Some(i) = rest.find(['\n', '\r']) {
-        lines.push(&rest[..i]);
-        let after = if rest[i..].starts_with("\r\n") {
-            i + 2
-        } else {
-            i + 1
-        };
-        rest = &rest[after..];
-    }
-    if !rest.is_empty() {
-        lines.push(rest);
-    }
-    lines
 }
 
 #[cfg(test)]
