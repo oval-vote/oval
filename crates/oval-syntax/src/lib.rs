@@ -4,6 +4,7 @@ pub mod ast;
 pub mod lexer;
 pub mod parser;
 mod syntax_kind;
+pub mod text;
 
 pub use rowan::{TextRange, TextSize, WalkEvent};
 pub use syntax_kind::{Keyword, SyntaxKind};

@@ -4,10 +4,12 @@ mod dates;
 mod declarations;
 mod guide;
 mod identifiers;
+mod markdown;
 mod measures;
 mod questions;
 mod recommendations;
 mod structure;
+mod urls;
 pub(crate) mod version;
 
 use oval_syntax::TextRange;
@@ -28,6 +30,8 @@ pub(crate) fn check(document: &Document, index: &Index) -> Vec<Diagnostic> {
     dates::check(document, &mut diagnostics);
     declarations::check(document, index, &mut diagnostics);
     measures::check(index, &mut diagnostics);
+    markdown::check(document, &mut diagnostics);
+    urls::check(document, &mut diagnostics);
     diagnostics
 }
 
