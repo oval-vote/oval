@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use rowan::{NodeOrToken, TextRange, TextSize};
 
-use super::{ParseError, ParseResult, SyntaxError};
+use super::{ParseError, ParseErrorKind, ParseResult, SyntaxError};
 use crate::SyntaxKind;
 use crate::lexer::LexicalErrorKind;
 
@@ -175,6 +175,7 @@ fn the_version_marker_is_optional_to_the_parser_but_must_come_first() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MisplacedEntry,
             expected: TOP_LEVEL[2..].to_vec(),
             found: Some(SyntaxKind::OvalKeyword),
             range: span(source, "oval 1\n"),
@@ -185,6 +186,7 @@ fn the_version_marker_is_optional_to_the_parser_but_must_come_first() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MisplacedEntry,
             expected: TOP_LEVEL[1..].to_vec(),
             found: Some(SyntaxKind::OvalKeyword),
             range: span(source, "oval 2\n"),
@@ -198,6 +200,7 @@ fn the_version_marker_needs_a_version() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingValue,
             expected: vec![SyntaxKind::IntegerLiteral],
             found: Some(SyntaxKind::Newline),
             range: range(4, 4),
@@ -208,6 +211,7 @@ fn the_version_marker_needs_a_version() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::UnexpectedToken,
             expected: vec![SyntaxKind::Newline],
             found: Some(SyntaxKind::StringLiteral),
             range: span(source, "\"x\""),
@@ -278,6 +282,7 @@ fn a_missing_value_is_reported_where_it_should_be() {
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingValue,
             expected: vec![SyntaxKind::StringLiteral],
             found: Some(SyntaxKind::Newline),
             range: range(5, 5),
@@ -303,6 +308,7 @@ Document
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::UnexpectedToken,
             expected: vec![SyntaxKind::StringLiteral],
             found: Some(SyntaxKind::DateLiteral),
             range: range(6, 20),
@@ -328,6 +334,7 @@ Document
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::UnexpectedToken,
             expected: vec![SyntaxKind::Newline],
             found: Some(SyntaxKind::StringLiteral),
             range: range(10, 13),
@@ -350,6 +357,7 @@ fn a_repeated_field_is_an_error_node_and_names_what_was_still_allowed() {
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::RepeatedField,
             expected: vec![
                 SyntaxKind::ElectionKeyword,
                 SyntaxKind::NoteKeyword,
@@ -391,6 +399,7 @@ Document
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingBody,
             expected: vec![SyntaxKind::MarkdownBlock],
             found: Some(SyntaxKind::GuideKeyword),
             range: range(6, 6),
@@ -406,7 +415,8 @@ fn an_unknown_top_level_line_names_everything_that_could_start_one() {
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
-            expected: TOP_LEVEL.to_vec(),
+            kind: ParseErrorKind::UnexpectedEntry,
+            expected: TOP_LEVEL[1..].to_vec(),
             found: Some(SyntaxKind::ContestKeyword),
             range: range(0, 22),
         })]
@@ -656,6 +666,7 @@ fn declaration_headers_report_each_missing_part_once() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingIdentifier,
             expected: vec![SyntaxKind::At],
             found: Some(SyntaxKind::StringLiteral),
             range: range(6, 6),
@@ -665,6 +676,7 @@ fn declaration_headers_report_each_missing_part_once() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingName,
             expected: vec![SyntaxKind::StringLiteral],
             found: Some(SyntaxKind::Newline),
             range: range(8, 8),
@@ -690,6 +702,7 @@ fn unknown_and_repeated_fields_inside_a_block() {
         parse.errors(),
         [
             SyntaxError::Parse(ParseError {
+                kind: ParseErrorKind::UnexpectedEntry,
                 expected: vec![
                     SyntaxKind::AbbreviationKeyword,
                     SyntaxKind::WebsiteKeyword,
@@ -699,6 +712,7 @@ fn unknown_and_repeated_fields_inside_a_block() {
                 range: range(15, 31),
             }),
             SyntaxError::Parse(ParseError {
+                kind: ParseErrorKind::RepeatedField,
                 expected: vec![SyntaxKind::WebsiteKeyword, SyntaxKind::NoteKeyword],
                 found: Some(SyntaxKind::AbbreviationKeyword),
                 range: range(52, 69),
@@ -715,6 +729,7 @@ fn guide_fields_must_precede_declarations() {
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MisplacedEntry,
             expected: vec![
                 SyntaxKind::PartyKeyword,
                 SyntaxKind::CandidateKeyword,
@@ -849,6 +864,7 @@ fn unknown_lines_in_a_section_name_note_contest_and_measure() {
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::UnexpectedEntry,
             expected: vec![
                 SyntaxKind::NoteKeyword,
                 SyntaxKind::ContestKeyword,
@@ -903,6 +919,7 @@ fn ballots_and_sections_require_a_block() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingBlock,
             expected: vec![SyntaxKind::Indent],
             found: Some(SyntaxKind::BallotKeyword),
             range: range(14, 14),
@@ -923,6 +940,7 @@ fn declarations_must_precede_ballots() {
     assert_eq!(
         parse.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MisplacedEntry,
             expected: vec![SyntaxKind::BallotKeyword],
             found: Some(SyntaxKind::PartyKeyword),
             range: range(28, 41),
@@ -1006,6 +1024,7 @@ fn a_missing_or_unknown_contest_kind_is_one_error() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingContestKind,
             expected: vec![
                 SyntaxKind::SingleKeyword,
                 SyntaxKind::MultipleKeyword,
@@ -1034,6 +1053,7 @@ fn multiple_requires_a_seat_count() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingValue,
             expected: vec![SyntaxKind::IntegerLiteral],
             found: Some(SyntaxKind::Newline),
             range: TextRange::empty(span(&source, "multiple").end()),
@@ -1240,6 +1260,7 @@ fn a_repeated_flag_is_an_error_node() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::RepeatedFlag,
             expected: vec![SyntaxKind::WithdrawnKeyword, SyntaxKind::At],
             found: Some(SyntaxKind::IncumbentKeyword),
             range: TextRange::at(second, TextSize::from(9)),
@@ -1254,9 +1275,10 @@ fn a_campaign_needs_a_member_or_a_block() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingBlock,
             expected: vec![SyntaxKind::Indent],
             found: Some(SyntaxKind::CampaignKeyword),
-            range: TextRange::empty(span(&source, "campaign @y").start()),
+            range: TextRange::empty(span(&source, "campaign\n").end()),
         })]
     );
 }
@@ -1268,6 +1290,7 @@ fn a_role_needs_a_string() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingValue,
             expected: vec![SyntaxKind::StringLiteral],
             found: Some(SyntaxKind::Newline),
             range: TextRange::empty(span(&source, " as").end()),
@@ -1294,6 +1317,7 @@ fn unknown_lines_in_a_campaign_block_name_fields_and_members() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::UnexpectedEntry,
             expected: vec![
                 SyntaxKind::WebsiteKeyword,
                 SyntaxKind::NoteKeyword,
@@ -1408,6 +1432,7 @@ fn a_recommendation_with_no_stance_must_say_no_position() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::EmptyRecommendation,
             expected: vec![
                 SyntaxKind::SupportKeyword,
                 SyntaxKind::OpposeKeyword,
@@ -1426,9 +1451,10 @@ fn a_bare_recommend_needs_a_block() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingBlock,
             expected: vec![SyntaxKind::Indent],
             found: Some(SyntaxKind::CampaignKeyword),
-            range: TextRange::empty(span(&source, "campaign @x").start()),
+            range: TextRange::empty(span(&source, "recommend\n").end()),
         })]
     );
 }
@@ -1441,11 +1467,13 @@ fn support_and_oppose_need_identifiers_and_nothing_else() {
         result.errors(),
         [
             SyntaxError::Parse(ParseError {
+                kind: ParseErrorKind::MissingIdentifier,
                 expected: vec![SyntaxKind::At],
                 found: Some(SyntaxKind::Newline),
                 range: TextRange::empty(span(&source, "support").end()),
             }),
             SyntaxError::Parse(ParseError {
+                kind: ParseErrorKind::UnexpectedToken,
                 expected: vec![SyntaxKind::At, SyntaxKind::Newline],
                 found: Some(SyntaxKind::StringLiteral),
                 range: span(&source, "\"x\""),
@@ -1485,6 +1513,7 @@ fn stances_are_not_allowed_under_no_position() {
     assert_eq!(
         result.errors(),
         [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::UnexpectedEntry,
             expected: vec![SyntaxKind::JustificationKeyword, SyntaxKind::NoteKeyword],
             found: Some(SyntaxKind::SupportKeyword),
             range: span(&source, "support @a\n"),
@@ -1596,11 +1625,13 @@ fn string_lists() {
         result.errors(),
         [
             SyntaxError::Parse(ParseError {
+                kind: ParseErrorKind::MissingValue,
                 expected: vec![SyntaxKind::StringLiteral, SyntaxKind::NoneValueKeyword],
                 found: Some(SyntaxKind::Newline),
                 range: TextRange::empty(span(&source, "supporters").end()),
             }),
             SyntaxError::Parse(ParseError {
+                kind: ParseErrorKind::MissingValue,
                 expected: vec![SyntaxKind::StringLiteral],
                 found: Some(SyntaxKind::Newline),
                 range: TextRange::empty(span(&source, "\"a\",").end()),
@@ -1677,4 +1708,185 @@ fn measures_live_in_ballots_and_sections_with_fields_once() {
 fn the_embedded_sample_parses_clean() {
     let result = parse(SAMPLE);
     assert_eq!(result.errors(), []);
+}
+
+fn parse_errors(result: &ParseResult) -> Vec<(ParseErrorKind, TextRange)> {
+    result
+        .errors()
+        .iter()
+        .filter_map(|error| match error {
+            SyntaxError::Parse(e) => Some((e.kind, e.range)),
+            SyntaxError::Lexical(_) => None,
+        })
+        .collect()
+}
+
+fn counter_examples() -> Vec<(ParseErrorKind, String, TextRange)> {
+    let document = |body: &str| {
+        format!(
+            "oval 1\n\nguide \"Ashford Voter Guide\"\nelection \"November 3, 2026 General Election\"\n{body}"
+        )
+    };
+    let empty_at = |source: &str, needle: &str| TextRange::empty(span(source, needle).start());
+    let empty_after = |source: &str, needle: &str| TextRange::empty(span(source, needle).end());
+    let cases: Vec<(ParseErrorKind, String, TextRange)> = {
+        let unexpected_token = "date \"November 3, 2026\"\n".to_owned();
+        let missing_identifier = "party \"Democratic\"\n".to_owned();
+        let missing_name = in_ballot("measure @prop-a\n  recommend yes\n");
+        let missing_contest_kind = in_ballot("contest @mayor \"Mayor\"\n  recommend no-position\n");
+        let missing_value =
+            in_ballot("measure @prop-a \"Proposition A\"\n  subtitle\n  recommend yes\n");
+        let missing_body = "note:\ndate 2026-11-03\n".to_owned();
+        let missing_block = "ballot @city \"City of Ashford\"\nballot @county \"Franklin County\"\n  measure @prop-a \"Proposition A\"\n    recommend yes\n".to_owned();
+        let unexpected_block = "candidate @cfox \"Carl Fox\"\n  designation \"Small Business Owner\"\n    website https://fox.example\n".to_owned();
+        let unexpected_entry = "party @dem \"Democratic\"\n  designation \"D\"\n".to_owned();
+        let repeated_field = in_ballot(
+            "measure @prop-a \"Proposition A\"\n  subtitle \"Library parcel tax renewal\"\n  subtitle \"Measure A\"\n  recommend yes\n",
+        );
+        let repeated_flag =
+            in_contest("campaign incumbent incumbent @bsantos \"Beatriz Santos\"\n");
+        let misplaced_entry = document(
+            "\nballot @city \"City of Ashford\"\n  measure @prop-a \"Proposition A\"\n    recommend yes\n\ndate 2026-11-03\n",
+        );
+        let empty_recommendation =
+            in_contest("recommend\n  justification:\n    We could not reach either candidate.\n");
+        vec![
+            (
+                ParseErrorKind::UnexpectedToken,
+                unexpected_token.clone(),
+                span(&unexpected_token, "\"November 3, 2026\""),
+            ),
+            (
+                ParseErrorKind::MissingIdentifier,
+                missing_identifier.clone(),
+                empty_at(&missing_identifier, "\"Democratic\""),
+            ),
+            (
+                ParseErrorKind::MissingName,
+                missing_name.clone(),
+                empty_after(&missing_name, "@prop-a"),
+            ),
+            (
+                ParseErrorKind::MissingContestKind,
+                missing_contest_kind.clone(),
+                empty_after(&missing_contest_kind, "\"Mayor\""),
+            ),
+            (
+                ParseErrorKind::MissingValue,
+                missing_value.clone(),
+                empty_after(&missing_value, "subtitle"),
+            ),
+            (
+                ParseErrorKind::MissingBody,
+                missing_body.clone(),
+                empty_at(&missing_body, "date"),
+            ),
+            (
+                ParseErrorKind::MissingBlock,
+                missing_block.clone(),
+                empty_at(&missing_block, "ballot @county"),
+            ),
+            (
+                ParseErrorKind::UnexpectedBlock,
+                unexpected_block.clone(),
+                span(&unexpected_block, "website https://fox.example\n"),
+            ),
+            (
+                ParseErrorKind::UnexpectedEntry,
+                unexpected_entry.clone(),
+                span(&unexpected_entry, "designation \"D\"\n"),
+            ),
+            (
+                ParseErrorKind::RepeatedField,
+                repeated_field.clone(),
+                span(&repeated_field, "subtitle \"Measure A\"\n"),
+            ),
+            (
+                ParseErrorKind::RepeatedFlag,
+                repeated_flag.clone(),
+                TextRange::at(
+                    span(&repeated_flag, "incumbent incumbent").end() - TextSize::from(9),
+                    TextSize::from(9),
+                ),
+            ),
+            (
+                ParseErrorKind::MisplacedEntry,
+                misplaced_entry.clone(),
+                span(&misplaced_entry, "date 2026-11-03\n"),
+            ),
+            (
+                ParseErrorKind::EmptyRecommendation,
+                empty_recommendation.clone(),
+                span(&empty_recommendation, "recommend"),
+            ),
+        ]
+    };
+    cases
+}
+
+#[test]
+fn every_syntax_error_kind_has_the_specifications_counter_example() {
+    let cases = counter_examples();
+    let covered: Vec<ParseErrorKind> = cases.iter().map(|(kind, _, _)| *kind).collect();
+    assert_eq!(covered, ParseErrorKind::ALL);
+    for (kind, source, range) in cases {
+        let result = parse(&source);
+        assert_eq!(parse_errors(&result), [(kind, range)], "{source:?}");
+    }
+}
+
+#[test]
+fn error_tokens_are_skipped_and_silence_missing_token_errors() {
+    let source = in_ballot("measure @m \"M\"\n  subtitle\t\"Vote for one\"\n  recommend yes\n");
+    let result = parse(&source);
+    assert_eq!(parse_errors(&result), []);
+    assert_eq!(result.errors().len(), 1);
+
+    let source = "oval 1\ndate 2026-11-5\n";
+    let result = parse(source);
+    assert_eq!(parse_errors(&result), []);
+    assert_eq!(result.errors().len(), 1);
+
+    let source = "oval 1\n\t# only a comment after the tab\nguide \"G\"\n";
+    let result = parse(source);
+    assert_eq!(parse_errors(&result), []);
+    assert_eq!(result.errors().len(), 1);
+
+    let source = "oval 1\nparty @9 \"D\"\n";
+    let result = parse(source);
+    assert_eq!(
+        parse_errors(&result),
+        [
+            (
+                ParseErrorKind::MissingIdentifier,
+                TextRange::empty(span(source, "@").end())
+            ),
+            (ParseErrorKind::UnexpectedToken, span(source, "9 \"D\"")),
+        ]
+    );
+}
+
+#[test]
+fn a_skipped_line_takes_its_stray_body_with_it() {
+    let source =
+        in_ballot("measure @m \"M\"\n  subtitle \"S\":\n    not a body\n  recommend yes\n");
+    let result = parse(&source);
+    assert_eq!(
+        parse_errors(&result),
+        [(ParseErrorKind::UnexpectedToken, span(&source, ":"))]
+    );
+}
+
+#[test]
+fn every_kind_has_a_kebab_case_identifier_and_a_title() {
+    for kind in ParseErrorKind::ALL.iter().copied() {
+        let identifier = kind.identifier();
+        assert!(
+            identifier
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b == b'-'),
+            "{identifier}"
+        );
+        assert_eq!(kind.title().replace(' ', "-").to_lowercase(), identifier);
+    }
 }

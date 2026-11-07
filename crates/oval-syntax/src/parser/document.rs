@@ -1,8 +1,9 @@
-use super::Parser;
+use super::{ParseErrorKind, Parser};
 use crate::SyntaxKind::{
     self, AbbreviationKeyword, BallotKeyword, Candidate, CandidateKeyword, DateKeyword,
-    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, IntegerLiteral, NoteKeyword,
-    OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionMarker, WebsiteKeyword,
+    DesignationKeyword, Document, ElectionKeyword, GuideKeyword, IntegerLiteral, Newline,
+    NoteKeyword, OvalKeyword, Party, PartyKeyword, PartyReference, StringLiteral, VersionMarker,
+    WebsiteKeyword,
 };
 
 pub(super) const GUIDE_FIELDS: &[SyntaxKind] =
@@ -24,31 +25,62 @@ impl Parser<'_> {
     pub(super) fn document(&mut self) {
         self.builder.start_node(Document.into());
         let mut remaining = TOP_LEVEL.to_vec();
+        let mut seen_fields: Vec<SyntaxKind> = Vec::new();
         while let Some(kind) = self.current() {
             match kind {
+                Newline => self.bump(),
                 OvalKeyword => {
-                    self.field_once(kind, &mut remaining, Self::version_marker);
+                    if remaining.contains(&kind) {
+                        remaining.retain(|k| *k != OvalKeyword);
+                        self.version_marker(kind);
+                    } else {
+                        self.set_aside(
+                            ParseErrorKind::MisplacedEntry,
+                            kind,
+                            &remaining,
+                            Self::version_marker,
+                        );
+                    }
                 }
                 GuideKeyword | ElectionKeyword | DateKeyword | NoteKeyword => {
                     remaining.retain(|k| *k != OvalKeyword);
-                    self.field_once(kind, &mut remaining, Self::simple_field);
+                    let error = if seen_fields.contains(&kind) {
+                        ParseErrorKind::RepeatedField
+                    } else {
+                        ParseErrorKind::MisplacedEntry
+                    };
+                    seen_fields.push(kind);
+                    if remaining.contains(&kind) {
+                        remaining.retain(|k| *k != kind);
+                        self.simple_field(kind);
+                    } else {
+                        self.set_aside(error, kind, &remaining, Self::simple_field);
+                    }
                 }
                 PartyKeyword | CandidateKeyword => {
                     if remaining.contains(&kind) {
                         remaining.retain(|k| *k != OvalKeyword && !GUIDE_FIELDS.contains(k));
                         self.declaration(kind);
                     } else {
-                        self.misplaced(kind, &remaining, Self::declaration);
+                        self.set_aside(
+                            ParseErrorKind::MisplacedEntry,
+                            kind,
+                            &remaining,
+                            Self::declaration,
+                        );
                     }
                 }
                 BallotKeyword => {
                     remaining.retain(|k| *k == BallotKeyword);
                     self.ballot();
                 }
-                _ => self.recover_item(&remaining),
+                _ => {
+                    remaining.retain(|k| *k != OvalKeyword);
+                    self.recover_item(&remaining);
+                }
             }
         }
-        self.eat_trivia();
+        self.eat_skipped();
         self.finish_node();
     }
 

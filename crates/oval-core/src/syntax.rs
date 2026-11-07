@@ -1,13 +1,13 @@
 use oval_syntax::SyntaxKind;
 use oval_syntax::lexer::{LexicalError, LexicalErrorKind};
-use oval_syntax::parser::{ParseError, SyntaxError};
+use oval_syntax::parser::{ParseError, ParseErrorKind, SyntaxError};
 
 use crate::{Diagnostic, DiagnosticCode, Severity};
 
-pub(crate) fn diagnostic(error: &SyntaxError) -> Diagnostic {
+pub(crate) fn diagnostic(source: &str, error: &SyntaxError) -> Diagnostic {
     let message = match error {
         SyntaxError::Lexical(error) => lexical_message(error),
-        SyntaxError::Parse(error) => parse_message(error),
+        SyntaxError::Parse(error) => parse_message(source, error),
     };
     Diagnostic {
         code: DiagnosticCode::Syntax,
@@ -36,16 +36,50 @@ fn lexical_message(error: &LexicalError) -> String {
     .to_owned()
 }
 
-fn parse_message(error: &ParseError) -> String {
+fn parse_message(source: &str, error: &ParseError) -> String {
     let found = match error.found {
+        Some(SyntaxKind::Word) => format!("`{}`", leading_word(&source[error.range])),
         Some(kind) => describe(kind),
         None => "the end of the file".to_owned(),
     };
-    if error.expected.is_empty() {
-        return format!("unexpected {found}");
-    }
     let expected: Vec<String> = error.expected.iter().map(|k| describe(*k)).collect();
-    format!("expected {}, found {found}", list(&expected))
+    match error.kind {
+        ParseErrorKind::UnexpectedToken | ParseErrorKind::UnexpectedEntry => {
+            if expected.is_empty() {
+                format!("unexpected {found}")
+            } else {
+                format!("expected {}, found {found}", list(&expected))
+            }
+        }
+        ParseErrorKind::MissingIdentifier => "an identifier is required here: `@` and a name".to_owned(),
+        ParseErrorKind::MissingName => "a declaration needs a quoted name after its identifier".to_owned(),
+        ParseErrorKind::MissingContestKind => {
+            "a contest needs a kind after its name: `single`, `multiple`, `ranked`, or `retention`"
+                .to_owned()
+        }
+        ParseErrorKind::MissingValue => format!("expected {}, found {found}", list(&expected)),
+        ParseErrorKind::MissingBody => {
+            "this Markdown field has no body; indent the text under it or omit the field".to_owned()
+        }
+        ParseErrorKind::MissingBlock => "expected an indented block after this line".to_owned(),
+        ParseErrorKind::UnexpectedBlock => "this line does not take an indented block".to_owned(),
+        ParseErrorKind::RepeatedField => format!("{found} appears more than once in this block"),
+        ParseErrorKind::RepeatedFlag => format!("{found} appears more than once"),
+        ParseErrorKind::MisplacedEntry => {
+            format!("{found} cannot appear here; expected {}", list(&expected))
+        }
+        ParseErrorKind::EmptyRecommendation => {
+            "a `recommend` block needs a `support` or `oppose` line; write `recommend no-position` to take no position"
+                .to_owned()
+        }
+    }
+}
+
+fn leading_word(text: &str) -> &str {
+    let end = text
+        .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '-' | '_')))
+        .unwrap_or(text.len());
+    &text[..end]
 }
 
 fn list(items: &[String]) -> String {

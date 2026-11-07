@@ -1,5 +1,5 @@
-use super::Parser;
 use super::recommend::RECOMMEND_FIELDS;
+use super::{ParseErrorKind, Parser};
 use crate::SyntaxKind::{
     self, Comma, DescriptionKeyword, FiscalImpactKeyword, IfNoKeyword, IfYesKeyword, Measure,
     MeasureRecommend, Newline, NoKeyword, NoPositionKeyword, NoneValueKeyword, NoteKeyword,
@@ -52,7 +52,10 @@ impl Parser<'_> {
             }
         } else if !self.eat(NoneValueKeyword) {
             if self.at_line_end() {
-                self.error(&[StringLiteral, NoneValueKeyword]);
+                self.missing(
+                    ParseErrorKind::MissingValue,
+                    &[StringLiteral, NoneValueKeyword],
+                );
             } else {
                 self.recover_line(&[StringLiteral, NoneValueKeyword]);
             }
@@ -66,7 +69,9 @@ impl Parser<'_> {
         self.bump();
         match self.current() {
             Some(YesKeyword | NoKeyword | NoPositionKeyword) => self.bump(),
-            _ if self.at_line_end() => self.error(MEASURE_POSITIONS),
+            _ if self.at_line_end() => {
+                self.missing(ParseErrorKind::MissingValue, MEASURE_POSITIONS);
+            }
             _ => self.recover_line(MEASURE_POSITIONS),
         }
         self.end_of_line();

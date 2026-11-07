@@ -20,9 +20,100 @@ use crate::SyntaxKind::{
 use crate::lexer::{InputRejection, LexicalError, Token, lex};
 use crate::{Keyword, SyntaxNode};
 
+/// The syntax errors of the specification, Section 3.2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ParseErrorKind {
+    /// A token the grammar does not accept at that point, before the line has ended.
+    UnexpectedToken,
+    /// An identifier is required and the line ends or a string follows.
+    MissingIdentifier,
+    /// A declaration's identifier is followed by the end of the line instead of its name.
+    MissingName,
+    /// A contest's name is followed by the end of the line instead of a kind.
+    MissingContestKind,
+    /// A line ends where a value is required.
+    MissingValue,
+    /// A Markdown field's line ends with `:` and no body follows.
+    MissingBody,
+    /// A construct whose block is required is not followed by an indented line.
+    MissingBlock,
+    /// A line that takes no block is followed by one.
+    UnexpectedBlock,
+    /// A line begins with a token that cannot begin any entry the block accepts.
+    UnexpectedEntry,
+    /// A field keyword appears a second time in the same block.
+    RepeatedField,
+    /// `incumbent` or `withdrawn` appears twice on one campaign line.
+    RepeatedFlag,
+    /// A document-level entry appears after a group that must follow it has begun.
+    MisplacedEntry,
+    /// A contest's `recommend` has a block with neither `support` nor `oppose`.
+    EmptyRecommendation,
+}
+
+impl ParseErrorKind {
+    /// Every kind, in the specification's order.
+    pub const ALL: &'static [Self] = &[
+        Self::UnexpectedToken,
+        Self::MissingIdentifier,
+        Self::MissingName,
+        Self::MissingContestKind,
+        Self::MissingValue,
+        Self::MissingBody,
+        Self::MissingBlock,
+        Self::UnexpectedBlock,
+        Self::UnexpectedEntry,
+        Self::RepeatedField,
+        Self::RepeatedFlag,
+        Self::MisplacedEntry,
+        Self::EmptyRecommendation,
+    ];
+
+    /// The identifier the specification gives this error, such as `unexpected-token`.
+    pub const fn identifier(self) -> &'static str {
+        match self {
+            Self::UnexpectedToken => "unexpected-token",
+            Self::MissingIdentifier => "missing-identifier",
+            Self::MissingName => "missing-name",
+            Self::MissingContestKind => "missing-contest-kind",
+            Self::MissingValue => "missing-value",
+            Self::MissingBody => "missing-body",
+            Self::MissingBlock => "missing-block",
+            Self::UnexpectedBlock => "unexpected-block",
+            Self::UnexpectedEntry => "unexpected-entry",
+            Self::RepeatedField => "repeated-field",
+            Self::RepeatedFlag => "repeated-flag",
+            Self::MisplacedEntry => "misplaced-entry",
+            Self::EmptyRecommendation => "empty-recommendation",
+        }
+    }
+
+    /// The title of this error's entry in the specification.
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::UnexpectedToken => "Unexpected Token",
+            Self::MissingIdentifier => "Missing Identifier",
+            Self::MissingName => "Missing Name",
+            Self::MissingContestKind => "Missing Contest Kind",
+            Self::MissingValue => "Missing Value",
+            Self::MissingBody => "Missing Body",
+            Self::MissingBlock => "Missing Block",
+            Self::UnexpectedBlock => "Unexpected Block",
+            Self::UnexpectedEntry => "Unexpected Entry",
+            Self::RepeatedField => "Repeated Field",
+            Self::RepeatedFlag => "Repeated Flag",
+            Self::MisplacedEntry => "Misplaced Entry",
+            Self::EmptyRecommendation => "Empty Recommendation",
+        }
+    }
+}
+
 /// An error found while parsing tokens into a syntax tree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ParseError {
+    /// Which error it is.
+    pub kind: ParseErrorKind,
+
     /// The kinds that would have been accepted. Empty when nothing was acceptable.
     pub expected: Vec<SyntaxKind>,
 
@@ -80,6 +171,8 @@ pub fn parse(source: &str) -> Result<ParseResult, InputRejection> {
         tokens: lexed.tokens,
         pos: 0,
         offset: 0,
+        line_start: 0,
+        swallow_body: false,
         stances: 0,
         builder: GreenNodeBuilder::new(),
         errors: Vec::new(),
@@ -99,21 +192,31 @@ struct Parser<'a> {
     tokens: Vec<Token>,
     pos: usize,
     offset: usize,
+    line_start: usize,
+    swallow_body: bool,
     stances: usize,
     builder: GreenNodeBuilder<'static>,
     errors: Vec<ParseError>,
 }
 
+fn is_skipped(kind: SyntaxKind) -> bool {
+    kind.is_trivia() || kind == SyntaxKind::Error
+}
+
 impl Parser<'_> {
     fn declaration_header(&mut self) {
         self.identifier();
-        self.expect_value(StringLiteral);
+        self.expect_value_or(StringLiteral, ParseErrorKind::MissingName);
         self.end_of_line();
     }
 
     fn identifier(&mut self) -> bool {
         if !self.at(At) {
-            self.error(&[At]);
+            if self.at_line_end() || self.at(StringLiteral) {
+                self.missing(ParseErrorKind::MissingIdentifier, &[At]);
+            } else {
+                self.recover_line(&[At]);
+            }
             return false;
         }
         self.start_node(Identifier);
@@ -121,7 +224,7 @@ impl Parser<'_> {
         if self.at_word() {
             self.bump_as(Word);
         } else {
-            self.error(&[Word]);
+            self.missing(ParseErrorKind::MissingIdentifier, &[Word]);
         }
         self.finish_node();
         true
@@ -141,7 +244,7 @@ impl Parser<'_> {
         if self.at(Indent) {
             self.block(fields, items, parse);
         } else {
-            self.error(&[Indent]);
+            self.error_at(self.offset, ParseErrorKind::MissingBlock, &[Indent]);
         }
     }
 
@@ -161,7 +264,9 @@ impl Parser<'_> {
             if kind == Dedent {
                 break;
             }
-            if fields.contains(&kind) {
+            if kind == Newline {
+                self.bump();
+            } else if fields.contains(&kind) {
                 self.field_once(kind, &mut remaining, parse);
             } else if !(items.contains(&kind) && parse(self, kind)) {
                 let expected: Vec<SyntaxKind> = remaining.iter().chain(items).copied().collect();
@@ -182,12 +287,13 @@ impl Parser<'_> {
             remaining.retain(|k| *k != kind);
             parse(self, kind);
         } else {
-            self.misplaced(kind, remaining, parse);
+            self.set_aside(ParseErrorKind::RepeatedField, kind, remaining, parse);
         }
     }
 
-    fn misplaced(
+    fn set_aside(
         &mut self,
+        error_kind: ParseErrorKind,
         kind: SyntaxKind,
         expected: &[SyntaxKind],
         parse: fn(&mut Self, SyntaxKind) -> bool,
@@ -197,6 +303,7 @@ impl Parser<'_> {
         parse(self, kind);
         self.finish_node();
         self.errors.push(ParseError {
+            kind: error_kind,
             expected: expected.to_vec(),
             found: Some(kind),
             range: TextRange::new(text_size(start), text_size(self.offset)),
@@ -224,29 +331,34 @@ impl Parser<'_> {
     }
 
     fn markdown_value(&mut self) {
-        if !self.expect(Colon) {
+        if !self.expect_value(Colon) {
             self.end_of_line();
             return;
         }
         if self.at_line_end() {
             self.end_of_line();
             if !self.eat(MarkdownBlock) {
-                self.error(&[MarkdownBlock]);
+                self.error_at(self.offset, ParseErrorKind::MissingBody, &[MarkdownBlock]);
             }
         } else {
             self.end_of_line();
         }
     }
 
-    fn expect_value(&mut self, kind: SyntaxKind) {
+    fn expect_value(&mut self, kind: SyntaxKind) -> bool {
+        self.expect_value_or(kind, ParseErrorKind::MissingValue)
+    }
+
+    fn expect_value_or(&mut self, kind: SyntaxKind, missing: ParseErrorKind) -> bool {
         if self.eat(kind) {
-            return;
+            return true;
         }
         if self.at_line_end() {
-            self.error(&[kind]);
+            self.missing(missing, &[kind]);
         } else {
             self.recover_line(&[kind]);
         }
+        false
     }
 
     fn end_of_line(&mut self) {
@@ -254,6 +366,14 @@ impl Parser<'_> {
             self.recover_line(&[Newline]);
         }
         self.expect(Newline);
+        if self.swallow_body {
+            self.swallow_body = false;
+            if self.at(MarkdownBlock) {
+                self.start_node(ErrorNode);
+                self.bump();
+                self.finish_node();
+            }
+        }
     }
 
     fn at_line_end(&self) -> bool {
@@ -268,7 +388,9 @@ impl Parser<'_> {
             self.bump();
         }
         self.finish_node();
+        self.swallow_body = true;
         self.errors.push(ParseError {
+            kind: ParseErrorKind::UnexpectedToken,
             expected: expected.to_vec(),
             found,
             range: TextRange::new(text_size(start), text_size(self.offset)),
@@ -288,28 +410,43 @@ impl Parser<'_> {
         if self.eat(kind) {
             return true;
         }
-        self.error(&[kind]);
+        self.missing(ParseErrorKind::MissingValue, &[kind]);
         false
     }
 
-    fn error(&mut self, expected: &[SyntaxKind]) {
+    fn missing(&mut self, kind: ParseErrorKind, expected: &[SyntaxKind]) {
+        if self.line_contains_error() {
+            return;
+        }
         let offset = self.tokens[self.pos..]
             .iter()
-            .take_while(|token| token.kind.is_trivia())
+            .take_while(|token| is_skipped(token.kind))
             .map(|token| usize::from(token.len))
             .sum::<usize>()
             + self.offset;
+        self.error_at(offset, kind, expected);
+    }
+
+    fn error_at(&mut self, offset: usize, kind: ParseErrorKind, expected: &[SyntaxKind]) {
         self.errors.push(ParseError {
+            kind,
             expected: expected.to_vec(),
             found: self.current(),
             range: TextRange::empty(text_size(offset)),
         });
     }
 
+    fn line_contains_error(&self) -> bool {
+        self.tokens[self.line_start..]
+            .iter()
+            .take_while(|token| token.kind != Newline)
+            .any(|token| token.kind == SyntaxKind::Error)
+    }
+
     fn current(&self) -> Option<SyntaxKind> {
         let mut offset = self.offset;
         for token in &self.tokens[self.pos..] {
-            if !token.kind.is_trivia() {
+            if !is_skipped(token.kind) {
                 return Some(self.classify(*token, offset));
             }
             offset += usize::from(token.len);
@@ -330,7 +467,7 @@ impl Parser<'_> {
     }
 
     fn bump(&mut self) {
-        self.eat_trivia();
+        self.eat_skipped();
         self.bump_raw();
     }
 
@@ -341,7 +478,7 @@ impl Parser<'_> {
     }
 
     fn bump_as(&mut self, kind: SyntaxKind) {
-        self.eat_trivia();
+        self.eat_skipped();
         self.bump_raw_as(kind);
     }
 
@@ -352,20 +489,23 @@ impl Parser<'_> {
             .token(kind.into(), &self.source[self.offset..end]);
         self.offset = end;
         self.pos += 1;
+        if matches!(token.kind, Newline | MarkdownBlock) {
+            self.line_start = self.pos;
+        }
     }
 
-    fn eat_trivia(&mut self) {
+    fn eat_skipped(&mut self) {
         while self
             .tokens
             .get(self.pos)
-            .is_some_and(|token| token.kind.is_trivia())
+            .is_some_and(|token| is_skipped(token.kind))
         {
             self.bump_raw();
         }
     }
 
     fn start_node(&mut self, kind: SyntaxKind) {
-        self.eat_trivia();
+        self.eat_skipped();
         self.builder.start_node(kind.into());
     }
 
@@ -377,6 +517,11 @@ impl Parser<'_> {
         self.start_node(ErrorNode);
         let start = self.offset;
         let found = self.current();
+        let kind = if self.at(Indent) {
+            ParseErrorKind::UnexpectedBlock
+        } else {
+            ParseErrorKind::UnexpectedEntry
+        };
         if self.at(Indent) {
             self.skip_block();
         } else {
@@ -395,6 +540,7 @@ impl Parser<'_> {
         }
         self.finish_node();
         self.errors.push(ParseError {
+            kind,
             expected: expected.to_vec(),
             found,
             range: TextRange::new(text_size(start), text_size(self.offset)),
