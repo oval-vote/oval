@@ -43,9 +43,9 @@ up both; without it, rustup reads the toolchain file on its own and Node must be
 separately. JavaScript tooling is a dev dependency of `packages/oval`.
 
 ```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets
-cargo test --workspace
+mise run fmt            # rustfmt and Prettier
+mise run ci             # formatting, clippy, documentation, and version checks, as CI runs them
+cargo test --workspace  # the tests, which CI runs on Linux, macOS, and Windows
 ```
 
 `crates/oval-syntax/tests/fixtures/franklin.oval` is a fictional guide at the scale of a real

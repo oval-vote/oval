@@ -258,8 +258,10 @@ dependencies = [
 name = "oval-wasm"
 version = "0.1.2"
 dependencies = [
+ "oval-analysis",
  "oval-core",
  "oval-format",
+ "oval-syntax",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

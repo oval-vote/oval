@@ -14,7 +14,9 @@
   ],
   "scripts": {
     "build": "wasm-pack build ../../crates/oval-wasm --target nodejs --out-dir ../../packages/oval/pkg --out-name oval_wasm",
-    "test": "node --test test/*.test.js"
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run format:check && node --test test/*.test.js"
   },
   "repository": "github:oval-vote/oval",
   "homepage": "https://oval.vote",
@@ -22,6 +24,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "prettier": "3.9.10",
     "wasm-pack": "0.15.1"
   },
   "allowScripts": {
