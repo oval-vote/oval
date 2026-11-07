@@ -156,6 +156,17 @@ impl Identifier {
     pub fn name(&self) -> String {
         token(&self.0, SyntaxKind::Word).map_or_else(String::new, |word| word.text().to_owned())
     }
+
+    /// The range of the name alone, without the `@`.
+    ///
+    /// Empty at the end of the identifier when the parser recovered from an `@` with no word after
+    /// it. A tool that renames an identifier replaces this range.
+    pub fn name_range(&self) -> TextRange {
+        token(&self.0, SyntaxKind::Word).map_or_else(
+            || TextRange::empty(self.0.text_range().end()),
+            |word| word.text_range(),
+        )
+    }
 }
 
 /// A calendar date as written, with no check that it exists.

@@ -24,7 +24,7 @@
 
 pub mod compile;
 mod diagnostic;
-mod index;
+pub mod index;
 mod rules;
 mod syntax;
 

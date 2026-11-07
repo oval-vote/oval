@@ -30,6 +30,7 @@ cargo install --path crates/oval-cli
 |---|---|
 | `oval-syntax` | Lexer, parser, lossless syntax tree, and typed AST |
 | `oval-core` | Identifier resolution, the validation rules, and the compiled model |
+| `oval-analysis` | Symbols, outlines, and the other queries an editor makes |
 | `oval-format` | Formatter |
 | `oval-cli` | The `oval` binary |
 | `oval-wasm` | WebAssembly bindings, published to npm as `@oval-vote/oval` from `packages/oval` |
