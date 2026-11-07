@@ -148,7 +148,26 @@ impl Formatter {
             }
         }
         trailing.extend(leading);
+        let originally_first = entries.first().map(|entry| entry.node.clone());
         entries.sort_by_key(|entry| group(block, entry.node.kind()));
+        if let Some(first) = entries
+            .first_mut()
+            .filter(|first| originally_first.as_ref() != Some(&first.node))
+        {
+            let comment = first
+                .leading
+                .iter()
+                .position(|token| token.kind() == SyntaxKind::Comment)
+                .unwrap_or(first.leading.len());
+            first.leading.splice(
+                0..comment,
+                first.leading[..comment]
+                    .iter()
+                    .filter(|token| token.kind() != SyntaxKind::BlankLine)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            );
+        }
         for entry in entries {
             self.tokens(&entry.leading);
             self.node(&entry.node);
@@ -380,6 +399,21 @@ mod tests {
     }
 
     #[test]
+    fn a_blank_line_that_would_begin_a_block_is_removed() {
+        check(
+            "ballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n\n    subtitle \"S\"\n",
+            "ballot @b \"B\"\n  measure @m \"M\"\n    subtitle \"S\"\n    recommend yes\n",
+        );
+        check(
+            "ballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n\n    # about the subtitle\n\n    subtitle \"S\"\n",
+            "ballot @b \"B\"\n  measure @m \"M\"\n    # about the subtitle\n\n    subtitle \"S\"\n    recommend yes\n",
+        );
+        let source =
+            "ballot @b \"B\"\n  measure @m \"M\"\n    subtitle \"S\"\n\n    recommend yes\n";
+        check(source, source);
+    }
+
+    #[test]
     fn blank_lines_inside_markdown_are_content_and_are_kept() {
         let source = "note:\n  One.\n\n\n\n  Two.\n";
         check(source, source);
@@ -496,7 +530,7 @@ mod tests {
     fn comments_and_blank_lines_travel_with_the_entry_they_precede() {
         check(
             "ballot @b \"B\"\n  contest @c \"C\" single\n    # the advice\n    recommend\n      support @x\n\n    # the field\n    subtitle \"S\"\n\n    # the only campaign\n    campaign @x \"X\"\n    # end of contest\n",
-            "ballot @b \"B\"\n  contest @c \"C\" single\n\n    # the field\n    subtitle \"S\"\n\n    # the only campaign\n    campaign @x \"X\"\n    # the advice\n    recommend\n      support @x\n# end of contest\n",
+            "ballot @b \"B\"\n  contest @c \"C\" single\n    # the field\n    subtitle \"S\"\n\n    # the only campaign\n    campaign @x \"X\"\n    # the advice\n    recommend\n      support @x\n# end of contest\n",
         );
     }
 
