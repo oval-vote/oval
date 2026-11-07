@@ -1,13 +1,13 @@
 use oval_syntax::ast::{AstNode, Document, VersionMarker};
 use oval_syntax::{SUPPORTED_LANGUAGE_MAJOR, SyntaxKind, TextRange};
 
-use super::error;
-use crate::{Diagnostic, Rule};
+use super::report;
+use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) -> bool {
     let Some(marker) = document.version() else {
-        out.push(error(
-            Rule::SupportedVersion,
+        out.push(report(
+            ValidationRule::UnsupportedVersion,
             TextRange::empty(first_content_offset(document)),
             format!(
                 "the document has no version marker; its first line should be `oval {SUPPORTED_LANGUAGE_MAJOR}`"
@@ -21,8 +21,8 @@ pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) -> bool {
     if major == SUPPORTED_LANGUAGE_MAJOR {
         return true;
     }
-    out.push(error(
-        Rule::SupportedVersion,
+    out.push(report(
+        ValidationRule::UnsupportedVersion,
         marker_range(&marker),
         format!(
             "this document is written to Oval {major}, but this implementation reads Oval {SUPPORTED_LANGUAGE_MAJOR}"

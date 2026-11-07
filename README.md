@@ -12,8 +12,9 @@ oval check guide.oval            # parse and validate; one line per diagnostic
 oval compile --pretty guide.oval # the canonical JSON form, for renderers and other tools
 ```
 
-`check` prints diagnostics as `file:line:column: severity[code]: message`, where the code is
-`syntax` or a validation rule such as `V7`, and exits 1 if any are errors. `compile` prints JSON
+`check` prints diagnostics as `file:line:column: severity[code]: message`, where the code is the
+identifier of the error's entry in the specification, such as `illegal-tab` or `invalid-date`, and
+exits 1 if any are errors. `compile` prints JSON
 that validates against the specification's `guide.schema.json`, or prints diagnostics to stderr
 and exits 1 if the document has errors.
 

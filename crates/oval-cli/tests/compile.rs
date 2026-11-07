@@ -48,7 +48,7 @@ fn a_document_with_errors_prints_diagnostics_on_stderr_and_no_json() {
     assert_eq!(String::from_utf8_lossy(&output.stdout), "");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("error[V2]: the document has no `election` field"),
+        stderr.contains("error[missing-guide-field]: the document has no `election` field"),
         "{stderr}"
     );
     std::fs::remove_file(path).ok();
