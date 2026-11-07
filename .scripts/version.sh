@@ -52,7 +52,7 @@ set_version() {
   fi
   sed -i.bak '/^\[workspace\.package\]/,/^\[/s/^version = ".*"$/version = "'"$version"'"/' Cargo.toml
   rm Cargo.toml.bak
-  cargo update --workspace --offline --quiet
+  cargo update --workspace --quiet
   (cd packages/oval && npm version "$version" --no-git-tag-version --allow-same-version >/dev/null)
   check
 }
