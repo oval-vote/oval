@@ -25,6 +25,8 @@ pub enum ValidationRule {
     UnsupportedVersion,
     /// `guide`, `election`, or `date` is absent at the document level.
     MissingGuideField,
+    /// The document has no root ballot.
+    EmptyDocument,
     /// A `date` does not exist on the calendar.
     InvalidDate,
     /// A reference names an identifier no declaration declares.
@@ -90,6 +92,7 @@ impl ValidationRule {
     pub const ALL: &'static [Self] = &[
         Self::UnsupportedVersion,
         Self::MissingGuideField,
+        Self::EmptyDocument,
         Self::InvalidDate,
         Self::UndeclaredReference,
         Self::DuplicateDeclaration,
@@ -126,6 +129,7 @@ impl ValidationRule {
         match self {
             Self::UnsupportedVersion => "unsupported-version",
             Self::MissingGuideField => "missing-guide-field",
+            Self::EmptyDocument => "empty-document",
             Self::InvalidDate => "invalid-date",
             Self::UndeclaredReference => "undeclared-reference",
             Self::DuplicateDeclaration => "duplicate-declaration",
@@ -163,6 +167,7 @@ impl ValidationRule {
         match self {
             Self::UnsupportedVersion => "Unsupported Version",
             Self::MissingGuideField => "Missing Guide Field",
+            Self::EmptyDocument => "Empty Document",
             Self::InvalidDate => "Invalid Date",
             Self::UndeclaredReference => "Undeclared Reference",
             Self::DuplicateDeclaration => "Duplicate Declaration",
@@ -200,6 +205,7 @@ impl ValidationRule {
         match self {
             Self::UnsupportedVersion
             | Self::MissingGuideField
+            | Self::EmptyDocument
             | Self::InvalidDate
             | Self::UndeclaredReference
             | Self::DuplicateDeclaration
@@ -357,7 +363,7 @@ mod tests {
     #[test]
     fn every_code_has_a_unique_kebab_case_identifier() {
         let all = DiagnosticCode::all();
-        assert_eq!(all.len(), 7 + 13 + 31);
+        assert_eq!(all.len(), 7 + 13 + 32);
         let identifiers: HashSet<&str> = all.iter().map(|code| code.identifier()).collect();
         assert_eq!(identifiers.len(), all.len());
         for code in &all {

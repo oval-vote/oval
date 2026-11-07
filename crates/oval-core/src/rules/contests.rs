@@ -15,25 +15,35 @@ fn kind_arguments(contest: &Contest, out: &mut Vec<Diagnostic>) {
     let Some(kind) = contest.kind() else {
         return;
     };
-    let range = kind_range(contest);
+    let argument = contest
+        .kind_argument_range()
+        .unwrap_or_else(|| kind_range(contest));
     match kind {
         ContestKind::Multiple { seats: Some(seats) } if seats < 2 => out.push(report(
             ValidationRule::InvalidMultipleCount,
-            range,
+            argument,
             "`multiple` needs at least 2 seats; a one-seat contest is `single`".to_owned(),
         )),
         ContestKind::Ranked { max: Some(0) } => out.push(report(
             ValidationRule::InvalidRankedMax,
-            range,
+            argument,
             "`max` must be at least 1".to_owned(),
         )),
         ContestKind::Retention => {
-            let campaigns = contest.campaigns().count();
-            if campaigns != 1 {
+            let campaigns: Vec<_> = contest.campaigns().collect();
+            if campaigns.is_empty() && contest.has_block() {
                 out.push(report(
                     ValidationRule::RetentionCampaignCount,
-                    range,
-                    format!("a retention contest has exactly one campaign, not {campaigns}"),
+                    contest.header_line_range(),
+                    "a retention contest has exactly one campaign, and this one has none"
+                        .to_owned(),
+                ));
+            }
+            for extra in campaigns.iter().skip(1) {
+                out.push(report(
+                    ValidationRule::RetentionCampaignCount,
+                    extra.range(),
+                    "a retention contest has exactly one campaign".to_owned(),
                 ));
             }
         }
@@ -46,5 +56,5 @@ fn kind_range(contest: &Contest) -> TextRange {
         .syntax()
         .children()
         .find(|n| n.kind() == SyntaxKind::ContestKind)
-        .map_or_else(|| contest.range(), |n| n.text_range())
+        .map_or_else(|| contest.header_line_range(), |n| n.text_range())
 }

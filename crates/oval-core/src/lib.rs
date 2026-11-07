@@ -350,7 +350,7 @@ ballot @b \"B\"
             [] as [String; 0]
         );
         let report = check("oval 1\nelection \"E\"\ndate 2026-11-03\n");
-        assert_eq!(u32::from(report.diagnostics()[0].range.start()), 0);
+        assert_eq!(u32::from(report.diagnostics()[0].range.start()), 6);
     }
 
     #[test]
@@ -539,8 +539,8 @@ ballot @b \"B\"
             [
                 "`multiple` needs at least 2 seats; a one-seat contest is `single`",
                 "`max` must be at least 1",
-                "a retention contest has exactly one campaign, not 2",
-                "a retention contest has exactly one campaign, not 0",
+                "a retention contest has exactly one campaign",
+                "a retention contest has exactly one campaign, and this one has none",
             ]
         );
         let report = check(source);
@@ -558,7 +558,7 @@ ballot @b \"B\"
                 )
             })
             .unwrap();
-        let expected = source.find("multiple 1").unwrap();
+        let expected = source.find("multiple 1").unwrap() + "multiple ".len();
         assert_eq!(usize::from(first.range.start()), expected);
     }
 

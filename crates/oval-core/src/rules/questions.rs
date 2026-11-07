@@ -7,16 +7,12 @@ use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
-        let header = contest
-            .id()
-            .map_or_else(|| contest.range(), |id| id.range());
+        let header = contest.header_line_range();
         let ranges: Vec<TextRange> = contest.recommendations().map(|r| r.range()).collect();
         exactly_one("contest", header, &ranges, out);
     }
     for measure in &index.measures {
-        let header = measure
-            .id()
-            .map_or_else(|| measure.range(), |id| id.range());
+        let header = measure.header_line_range();
         let ranges: Vec<TextRange> = measure.recommendations().map(|r| r.range()).collect();
         exactly_one("measure", header, &ranges, out);
     }

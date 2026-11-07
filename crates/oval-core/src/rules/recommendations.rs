@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use oval_syntax::ast::{AstNode, Contest, ContestKind, ContestRecommend};
+use oval_syntax::ast::{AstNode, Contest, ContestKind, ContestRecommend, Oppose, Support};
+use oval_syntax::{SyntaxKind, TextRange};
 
 use super::report;
 use crate::index::{EntityKind, Index};
@@ -11,7 +12,7 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
         let campaign_of = campaign_memberships(contest);
         for recommendation in contest.recommendations() {
             in_contest(index, &recommendation, &campaign_of, out);
-            shape(&recommendation, &campaign_of, out);
+            shape(&recommendation, out);
             head_of_ticket(contest, &recommendation, out);
             if let Some(kind) = contest.kind() {
                 kind_specific(kind, &recommendation, out);
@@ -23,10 +24,6 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
 fn kind_specific(kind: ContestKind, recommendation: &ContestRecommend, out: &mut Vec<Diagnostic>) {
     let tiers: Vec<_> = recommendation.support().collect();
     let named: usize = tiers.iter().map(|t| t.candidates().count()).sum();
-    let opposed: usize = recommendation
-        .oppose()
-        .map(|o| o.candidates().count())
-        .sum();
     match kind {
         ContestKind::Single => {
             for tier in tiers.iter().skip(1) {
@@ -38,34 +35,60 @@ fn kind_specific(kind: ContestKind, recommendation: &ContestRecommend, out: &mut
             }
         }
         ContestKind::Multiple { seats: Some(seats) } if named > seats as usize => {
-            out.push(report(
-                ValidationRule::SupportOverCount,
-                recommendation.range(),
-                format!("this recommendation supports {named} candidates for {seats} seats; later tiers are fallbacks"),
-            ));
-        }
-        ContestKind::Ranked { max: Some(max) } if named > max as usize => {
-            let mut running = 0;
-            for tier in &tiers {
-                running += tier.candidates().count();
-                if running > max as usize {
-                    out.push(report(
-                        ValidationRule::SupportOverMax,
-                        tier.range(),
-                        format!("this recommendation ranks {named} candidates but voters may rank only {max}"),
-                    ));
-                    break;
-                }
+            if let Some(beyond) = reference_beyond(&tiers, seats as usize) {
+                out.push(report(
+                    ValidationRule::SupportOverCount,
+                    beyond,
+                    format!("this recommendation supports {named} candidates for {seats} seats; later tiers are fallbacks"),
+                ));
             }
         }
-        ContestKind::Retention if named + opposed > 1 || (named == 1 && opposed == 1) => {
+        ContestKind::Ranked { max: Some(max) } if named > max as usize => {
+            if let Some(beyond) = reference_beyond(&tiers, max as usize) {
+                out.push(report(
+                    ValidationRule::SupportOverMax,
+                    beyond,
+                    format!("this recommendation ranks {named} candidates but voters may rank only {max}"),
+                ));
+            }
+        }
+        ContestKind::Retention => retention_stance(recommendation, out),
+        _ => {}
+    }
+}
+
+fn reference_beyond(tiers: &[Support], limit: usize) -> Option<TextRange> {
+    tiers
+        .iter()
+        .flat_map(|tier| tier.candidates().collect::<Vec<_>>())
+        .nth(limit)
+        .map(|candidate| candidate.range())
+}
+
+fn retention_stance(recommendation: &ContestRecommend, out: &mut Vec<Diagnostic>) {
+    let lines = recommendation
+        .syntax()
+        .children()
+        .filter(|node| node.kind() == SyntaxKind::Block)
+        .flat_map(|block| block.children())
+        .filter_map(|node| {
+            Support::cast(node.clone())
+                .map(|support| (support.range(), support.candidates().count()))
+                .or_else(|| {
+                    Oppose::cast(node).map(|oppose| (oppose.range(), oppose.candidates().count()))
+                })
+        });
+    let mut references = 0;
+    for (range, count) in lines {
+        references += count;
+        if references > 1 {
             out.push(report(
                 ValidationRule::RetentionStance,
-                recommendation.range(),
+                range,
                 "a retention recommendation is one `support` or one `oppose` of the single campaign".to_owned(),
             ));
+            return;
         }
-        _ => {}
     }
 }
 
@@ -145,11 +168,7 @@ fn campaign_memberships(contest: &Contest) -> HashMap<String, usize> {
     map
 }
 
-fn shape(
-    recommendation: &ContestRecommend,
-    campaign_of: &HashMap<String, usize>,
-    out: &mut Vec<Diagnostic>,
-) {
+fn shape(recommendation: &ContestRecommend, out: &mut Vec<Diagnostic>) {
     for extra in recommendation.oppose().skip(1) {
         out.push(report(
             ValidationRule::RepeatedOppose,
@@ -165,21 +184,14 @@ fn shape(
                 .oppose()
                 .flat_map(|o| o.candidates().collect::<Vec<_>>()),
         );
-    let mut seen: HashMap<usize, String> = HashMap::new();
+    let mut seen: HashSet<String> = HashSet::new();
     for id in named {
-        let Some(campaign) = campaign_of.get(&id.name()) else {
-            continue;
-        };
-        match seen.get(campaign) {
-            None => {
-                seen.insert(*campaign, id.name());
-            }
-            Some(first) if *first == id.name() => out.push(report(
+        if !seen.insert(id.name()) {
+            out.push(report(
                 ValidationRule::RepeatedStance,
                 id.range(),
                 format!("`@{}` is named more than once", id.name()),
-            )),
-            Some(_) => {}
+            ));
         }
     }
 }
