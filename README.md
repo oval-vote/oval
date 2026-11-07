@@ -26,14 +26,14 @@ cargo install --path crates/oval-cli
 
 ## Crates
 
-| Crate | Purpose |
-|---|---|
-| `oval-syntax` | Lexer, parser, lossless syntax tree, and typed AST |
-| `oval-core` | Identifier resolution, the validation rules, and the compiled model |
-| `oval-analysis` | Symbols, outlines, and the other queries an editor makes |
-| `oval-format` | Formatter |
-| `oval-cli` | The `oval` binary |
-| `oval-wasm` | WebAssembly bindings, published to npm as `@oval-vote/oval` from `packages/oval` |
+| Crate           | Purpose                                                                          |
+| --------------- | -------------------------------------------------------------------------------- |
+| `oval-syntax`   | Lexer, parser, lossless syntax tree, and typed AST                               |
+| `oval-core`     | Identifier resolution, the validation rules, and the compiled model              |
+| `oval-analysis` | Symbols, outlines, and the other queries an editor makes                         |
+| `oval-format`   | Formatter                                                                        |
+| `oval-cli`      | The `oval` binary                                                                |
+| `oval-wasm`     | WebAssembly bindings, published to npm as `@oval-vote/oval` from `packages/oval` |
 
 ## Developing
 
@@ -78,10 +78,26 @@ check.
 
 ### Releasing
 
-A release is a tag. Run `mise run set-version <version>`, commit, tag the commit `v<version>`, and
-push the tag. The release workflow builds the package, runs its tests, checks that every version
-agrees and matches the tag, and publishes to npm with provenance through
-[trusted publishing](https://docs.npmjs.com/trusted-publishers), so no token is stored anywhere.
+The version in `Cargo.toml` and `packages/oval/package.json` is the version the next release will
+have. Three workflows under Actions manage it, each run from `main` as the organization's release
+app:
+
+- **Set Version** takes a version and commits `Set version to <version>`, through
+  `mise run set-version`. It makes no release.
+- **Release** takes an optional version. It refuses unless the version is greater than the latest
+  release, is not tagged or on npm, and every check on the latest commit of `main` is green. When a
+  version was given it sets it, runs `mise run ci`, and commits `Release <version>`. Then it creates
+  the GitHub release, tagged `v<version>`, with an empty body. The tag runs the same workflow's
+  `publish` job, which builds the package, runs its tests, checks the versions against the tag, and
+  publishes to npm with provenance through
+  [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no token is stored anywhere.
+- **Unrelease** takes the latest version, reverts its release commit if there was one, and deletes
+  the GitHub release and tag. A version that reached npm cannot be removed; the workflow says so, and
+  the next release takes a new number.
+
+The app's ID and private key are the `OVAL_RELEASE_APP_ID` and `OVAL_RELEASE_APP_PRIVATE_KEY`
+organization secrets. Commits and tags made with its token trigger the CI and publish workflows,
+which commits made with the default `GITHUB_TOKEN` would not.
 
 npm only lets a package trust a workflow once the package exists, so the first version of
 `@oval-vote/oval` was published by hand with `npm publish` from `packages/oval`. After that, the

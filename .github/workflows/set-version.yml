@@ -1,0 +1,65 @@
+name: Set Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to set, as MAJOR.MINOR.PATCH
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  set-version:
+    runs-on: ubuntu-latest
+    steps:
+      - if: github.ref != 'refs/heads/main'
+        run: |
+          echo "the version is set on main, not ${GITHUB_REF_NAME}" >&2
+          exit 1
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OVAL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OVAL_RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+      - name: Validate the request
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$VERSION is not MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          current="$(node -p "require('./packages/oval/package.json').version")"
+          if [ "$VERSION" = "$current" ]; then
+            echo "the version is already $VERSION" >&2
+            exit 1
+          fi
+          latest="$(git tag --list 'v*' | sort -V | tail -1)"
+          if [ -n "$latest" ] && ! node -e 'const [a, b] = process.argv.slice(1).map((v) => v.split(".").map(Number)); process.exit((a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0 ? 0 : 1)' "$VERSION" "${latest#v}"; then
+            echo "$VERSION is not greater than the latest release ${latest#v}" >&2
+            exit 1
+          fi
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          mise run set-version "$VERSION"
+          id="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock packages/oval/package.json packages/oval/package-lock.json
+          git commit -m "Set version to $VERSION"
+          git push origin HEAD:main

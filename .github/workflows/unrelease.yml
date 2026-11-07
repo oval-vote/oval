@@ -1,0 +1,79 @@
+name: Unrelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to withdraw, as MAJOR.MINOR.PATCH; only the latest release can be withdrawn
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  unrelease:
+    runs-on: ubuntu-latest
+    steps:
+      - if: github.ref != 'refs/heads/main'
+        run: |
+          echo "releases are withdrawn from main, not ${GITHUB_REF_NAME}" >&2
+          exit 1
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OVAL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OVAL_RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+      - name: Validate the request
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          latest="$(gh release list --limit 1 --json tagName --jq '.[0].tagName')"
+          if [ "$latest" != "v$VERSION" ]; then
+            echo "v$VERSION is not the latest release (${latest:-none})" >&2
+            exit 1
+          fi
+          commit="$(git rev-parse "v$VERSION^{commit}")"
+          if ! git merge-base --is-ancestor "$commit" HEAD; then
+            echo "the release commit $commit is not on main" >&2
+            exit 1
+          fi
+          if [ "$(git log -1 --format=%s "$commit")" = "Release $VERSION" ]; then
+            echo "revert=$commit" >> "$GITHUB_ENV"
+          fi
+      - name: Revert the release commit
+        if: env.revert != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          id="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git revert --no-edit --no-commit "$revert"
+          git commit -m "Unrelease $VERSION"
+          git push origin HEAD:main
+      - name: Delete the release and its tag
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh release delete "v$VERSION" --yes --cleanup-tag
+      - name: Report the npm package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$(npm view "@oval-vote/oval@$VERSION" version 2>/dev/null)" ]; then
+            echo "::warning::@oval-vote/oval@$VERSION is on npm; deprecate it by hand with npm deprecate, since published versions cannot be removed, and release the next version under a new number"
+          else
+            echo "@oval-vote/oval@$VERSION was never published to npm"
+          fi
