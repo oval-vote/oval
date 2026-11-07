@@ -70,15 +70,16 @@ implementation and says nothing about the language. The language has its own maj
 documents declare with `oval 1`; the one this implementation reads is
 `oval_syntax::SUPPORTED_LANGUAGE_MAJOR`, which the npm package exposes as `languageMajor()`. The specification is published in dated editions at [spec.oval.vote](https://spec.oval.vote).
 
-The implementation version lives in two places: `[workspace.package]` in `Cargo.toml`, which every
-crate inherits, and `packages/oval/package.json`. A test in `oval-wasm` fails when they differ.
+The implementation version is set in `[workspace.package]` in `Cargo.toml`, which every crate
+inherits, and mirrored in `Cargo.lock` and `packages/oval/package.json`. `mise run set-version
+<version>` writes all of them, `mise run version:check` fails when any disagrees, and CI runs the
+check.
 
 ### Releasing
 
-A release is a tag. Set the version in both places (`npm version <version> --no-git-tag-version`
-in `packages/oval` updates the lockfile too), commit, tag the commit `v<version>`, and push the
-tag. The release workflow builds the package, runs its tests, checks that the tag matches both
-versions, and publishes to npm with provenance through
+A release is a tag. Run `mise run set-version <version>`, commit, tag the commit `v<version>`, and
+push the tag. The release workflow builds the package, runs its tests, checks that every version
+agrees and matches the tag, and publishes to npm with provenance through
 [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no token is stored anywhere.
 
 npm only lets a package trust a workflow once the package exists, so the first version of
