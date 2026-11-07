@@ -60,7 +60,7 @@ fn files_with_syntax_errors_are_reported_and_left_alone() {
     let path = write_temp("broken.oval", "oval 1\nguide yes\n");
     let output = oval(&["fmt".as_ref(), path.as_os_str()]);
     assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("error[syntax]"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("error[unexpected-token]"));
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
         "oval 1\nguide yes\n"

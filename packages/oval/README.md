@@ -9,7 +9,7 @@ const oval = require("@oval-vote/oval");
 const source = fs.readFileSync("guide.oval", "utf8");
 
 oval.check(source);
-// [{ code: "V14", severity: "warning", range: { start: 120, end: 124 }, message: "..." }]
+// [{ code: "unused-declaration", severity: "warning", range: { start: 120, end: 124 }, message: "..." }]
 
 oval.compile(source);
 // The canonical JSON model described by the specification's guide.schema.json.

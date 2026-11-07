@@ -14,7 +14,7 @@ use oval_syntax::TextRange;
 use oval_syntax::ast::Document;
 
 use crate::index::Index;
-use crate::{Diagnostic, DiagnosticCode, Rule, Severity};
+use crate::{Diagnostic, DiagnosticCode, ValidationRule};
 
 pub(crate) fn check(document: &Document, index: &Index) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
@@ -31,20 +31,6 @@ pub(crate) fn check(document: &Document, index: &Index) -> Vec<Diagnostic> {
     diagnostics
 }
 
-fn error(rule: Rule, range: TextRange, message: String) -> Diagnostic {
-    Diagnostic {
-        code: DiagnosticCode::Rule(rule),
-        severity: Severity::Error,
-        range,
-        message,
-    }
-}
-
-fn warning(rule: Rule, range: TextRange, message: String) -> Diagnostic {
-    Diagnostic {
-        code: DiagnosticCode::Rule(rule),
-        severity: Severity::Warning,
-        range,
-        message,
-    }
+fn report(rule: ValidationRule, range: TextRange, message: String) -> Diagnostic {
+    Diagnostic::new(DiagnosticCode::Validation(rule), range, message)
 }

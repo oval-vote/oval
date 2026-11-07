@@ -2,19 +2,18 @@ use oval_syntax::SyntaxKind;
 use oval_syntax::lexer::{LexicalError, LexicalErrorKind};
 use oval_syntax::parser::{ParseError, ParseErrorKind, SyntaxError};
 
-use crate::{Diagnostic, DiagnosticCode, Severity};
+use crate::{Diagnostic, DiagnosticCode};
 
 pub(crate) fn diagnostic(source: &str, error: &SyntaxError) -> Diagnostic {
     let message = match error {
         SyntaxError::Lexical(error) => lexical_message(error),
         SyntaxError::Parse(error) => parse_message(source, error),
     };
-    Diagnostic {
-        code: DiagnosticCode::Syntax,
-        severity: Severity::Error,
-        range: error.range(),
-        message,
-    }
+    let code = match error {
+        SyntaxError::Lexical(error) => DiagnosticCode::Lexical(error.kind),
+        SyntaxError::Parse(error) => DiagnosticCode::Syntax(error.kind),
+    };
+    Diagnostic::new(code, error.range(), message)
 }
 
 fn lexical_message(error: &LexicalError) -> String {

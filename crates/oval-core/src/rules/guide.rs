@@ -1,8 +1,8 @@
 use oval_syntax::TextRange;
 use oval_syntax::ast::Document;
 
-use super::error;
-use crate::{Diagnostic, Rule};
+use super::report;
+use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     let missing = [
@@ -12,8 +12,8 @@ pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     ];
     for (name, is_missing) in missing {
         if is_missing {
-            out.push(error(
-                Rule::RequiredGuideFields,
+            out.push(report(
+                ValidationRule::MissingGuideField,
                 TextRange::empty(0.into()),
                 format!("the document has no `{name}` field"),
             ));

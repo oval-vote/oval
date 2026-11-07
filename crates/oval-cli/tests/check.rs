@@ -41,8 +41,8 @@ fn diagnostics_are_printed_with_positions_and_codes() {
     assert_eq!(
         stdout,
         format!(
-            "{shown}:4:1: error[V13]: 2026-02-30 is not a calendar date\n\
-             {shown}:6:11: warning[V14]: `@c` is declared but is not in any campaign\n"
+            "{shown}:4:1: error[invalid-date]: 2026-02-30 is not a calendar date\n\
+             {shown}:6:11: warning[unused-declaration]: `@c` is declared but is not in any campaign\n"
         )
     );
     std::fs::remove_file(path).ok();
@@ -56,7 +56,7 @@ fn warnings_alone_do_not_fail() {
     );
     let output = oval(&["check".as_ref(), path.as_os_str()]);
     assert!(output.status.success(), "{output:?}");
-    assert!(String::from_utf8_lossy(&output.stdout).contains("warning[V14]"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("warning[unused-declaration]"));
     std::fs::remove_file(path).ok();
 }
 

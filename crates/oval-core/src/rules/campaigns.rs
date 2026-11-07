@@ -3,9 +3,9 @@ use std::collections::HashSet;
 use oval_syntax::SyntaxKind;
 use oval_syntax::ast::{AstNode, Campaign, Member};
 
-use super::error;
+use super::report;
 use crate::index::Index;
-use crate::{Diagnostic, Rule};
+use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
@@ -16,14 +16,14 @@ pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
                 member_block(&member, out);
                 if let Some(id) = member.id() {
                     if !in_campaign.insert(id.name()) {
-                        out.push(error(
-                            Rule::NoDuplicateMembers,
+                        out.push(report(
+                            ValidationRule::DuplicateMember,
                             id.range(),
                             format!("`@{}` is already a member of this campaign", id.name()),
                         ));
                     } else if !in_contest.insert(id.name()) {
-                        out.push(error(
-                            Rule::OneCampaignPerCandidate,
+                        out.push(report(
+                            ValidationRule::CandidateInTwoCampaigns,
                             id.range(),
                             format!(
                                 "`@{}` is already in another campaign of this contest",
@@ -50,8 +50,8 @@ fn member_block(member: &Member, out: &mut Vec<Diagnostic>) {
         return;
     };
     let name = member.id().map(|id| id.name()).unwrap_or_default();
-    out.push(error(
-        Rule::MemberBlocksOnlyOnDeclarations,
+    out.push(report(
+        ValidationRule::BlockOnReference,
         block.text_range(),
         format!("`@{name}` refers to a candidate declared elsewhere, so it cannot have a block"),
     ));
@@ -72,8 +72,8 @@ fn candidate_fields(campaign: &Campaign, out: &mut Vec<Diagnostic>) {
         .into_iter()
         .chain(campaign.party().map(|p| ("party", p.range())));
     for (name, range) in fields {
-        out.push(error(
-            Rule::CandidateFieldsInPlace,
+        out.push(report(
+            ValidationRule::MisplacedCandidateField,
             range,
             format!("`{name}` is not allowed here: {reason}"),
         ));

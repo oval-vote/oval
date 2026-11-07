@@ -35,10 +35,10 @@ test("diagnostics carry code, severity, range, and message", () => {
   const diagnostics = oval.check("oval 1\nguide yes\n");
   assert.deepEqual(
     diagnostics.map((d) => d.code),
-    ["V2", "V2", "syntax"],
+    ["missing-guide-field", "missing-guide-field", "unexpected-token"],
   );
   assert.deepEqual(diagnostics[2], {
-    code: "syntax",
+    code: "unexpected-token",
     severity: "error",
     range: { start: 13, end: 16 },
     message: "expected a string, found `yes`",
@@ -48,14 +48,14 @@ test("diagnostics carry code, severity, range, and message", () => {
 test("a document without a version marker gets only that diagnostic", () => {
   assert.deepEqual(
     oval.check("guide yes\n").map((d) => d.code),
-    ["V19"],
+    ["unsupported-version"],
   );
 });
 
 test("compile and format throw the diagnostics for a broken document", () => {
   assert.throws(() => oval.compile("oval 1\nguide yes\n"), (thrown) => {
     assert.equal(thrown.length, 3);
-    assert.ok(thrown.some((d) => d.code === "syntax"));
+    assert.ok(thrown.some((d) => d.code === "unexpected-token"));
     return true;
   });
   assert.throws(() => oval.format("oval 1\nguide yes\n"), (thrown) => {

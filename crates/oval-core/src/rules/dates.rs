@@ -1,7 +1,7 @@
 use oval_syntax::ast::{AstNode, Date, Document};
 
-use super::error;
-use crate::{Diagnostic, Rule};
+use super::report;
+use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     let Some(field) = document.date() else {
@@ -11,8 +11,8 @@ pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
         return;
     };
     if !is_calendar_date(date) {
-        out.push(error(
-            Rule::Dates,
+        out.push(report(
+            ValidationRule::InvalidDate,
             field.range(),
             format!(
                 "{:04}-{:02}-{:02} is not a calendar date",

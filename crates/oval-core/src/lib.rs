@@ -7,7 +7,7 @@ mod rules;
 mod syntax;
 
 pub use compile::Compiled;
-pub use diagnostic::{Diagnostic, DiagnosticCode, Rule, Severity};
+pub use diagnostic::{Diagnostic, DiagnosticCode, SPECIFICATION_URL, Severity, ValidationRule};
 pub use oval_syntax::SUPPORTED_LANGUAGE_MAJOR;
 pub use oval_syntax::lexer::InputRejection;
 
@@ -85,7 +85,7 @@ pub fn check(source: &str) -> Result<Report, InputRejection> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CompileError, DiagnosticCode, Report, Rule, Severity};
+    use super::{CompileError, DiagnosticCode, Report, Severity, ValidationRule};
 
     const FIXTURE: &str = include_str!("../../oval-syntax/tests/fixtures/franklin.oval");
 
@@ -104,27 +104,27 @@ mod tests {
     fn syntax_errors_become_error_diagnostics_with_messages() {
         let report = check("oval 1\nguide yes\n\tbad\n");
         assert!(report.has_errors());
-        let messages: Vec<(&DiagnosticCode, Severity, &str)> = report
+        let messages: Vec<(&str, Severity, &str)> = report
             .diagnostics()
             .iter()
-            .filter(|d| d.code == DiagnosticCode::Syntax)
-            .map(|d| (&d.code, d.severity, d.message.as_str()))
+            .filter(|d| is_syntax(d.code))
+            .map(|d| (d.code.identifier(), d.severity, d.message.as_str()))
             .collect();
         assert_eq!(
             messages,
             [
                 (
-                    &DiagnosticCode::Syntax,
+                    "unexpected-token",
                     Severity::Error,
                     "expected a string, found `yes`"
                 ),
                 (
-                    &DiagnosticCode::Syntax,
+                    "illegal-tab",
                     Severity::Error,
                     "tabs are not allowed outside strings, comments, and Markdown bodies"
                 ),
                 (
-                    &DiagnosticCode::Syntax,
+                    "unexpected-entry",
                     Severity::Error,
                     "expected `election`, `date`, `note`, `party`, `candidate`, or `ballot`, found `bad`"
                 ),
@@ -138,7 +138,7 @@ mod tests {
             check(source)
                 .diagnostics()
                 .iter()
-                .find(|d| d.code == DiagnosticCode::Syntax)
+                .find(|d| is_syntax(d.code))
                 .map(|d| d.message.clone())
         };
         assert_eq!(
@@ -157,11 +157,19 @@ mod tests {
         oval_syntax::TextRange::new(start.into(), (start + len).into())
     }
 
-    fn rule_messages(source: &str, rule: Rule) -> Vec<String> {
+    fn is_one_of(code: DiagnosticCode, rules: &[ValidationRule]) -> bool {
+        matches!(code, DiagnosticCode::Validation(rule) if rules.contains(&rule))
+    }
+
+    fn is_syntax(code: DiagnosticCode) -> bool {
+        matches!(code, DiagnosticCode::Lexical(_) | DiagnosticCode::Syntax(_))
+    }
+
+    fn rule_messages(source: &str, rules: &[ValidationRule]) -> Vec<String> {
         check(source)
             .diagnostics()
             .iter()
-            .filter(|d| d.code == DiagnosticCode::Rule(rule))
+            .filter(|d| is_one_of(d.code, rules))
             .map(|d| d.message.clone())
             .collect()
     }
@@ -182,7 +190,14 @@ ballot @b \"B\"
     recommend yes
 ";
         assert_eq!(
-            rule_messages(source, Rule::Identifiers),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::UndeclaredReference,
+                    ValidationRule::DuplicateDeclaration,
+                    ValidationRule::MismatchedReference
+                ]
+            ),
             [
                 "`@dem` is already declared as a party",
                 "`@dem` is already declared as a party",
@@ -194,7 +209,16 @@ ballot @b \"B\"
         let range = report
             .diagnostics()
             .iter()
-            .find(|d| d.code == DiagnosticCode::Rule(Rule::Identifiers))
+            .find(|d| {
+                is_one_of(
+                    d.code,
+                    &[
+                        ValidationRule::UndeclaredReference,
+                        ValidationRule::DuplicateDeclaration,
+                        ValidationRule::MismatchedReference,
+                    ],
+                )
+            })
             .unwrap()
             .range;
         assert_eq!(usize::from(range.start()), second_dem);
@@ -217,7 +241,14 @@ ballot @b \"B\"
       oppose @ghost
 ";
         assert_eq!(
-            rule_messages(source, Rule::Identifiers),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::UndeclaredReference,
+                    ValidationRule::DuplicateDeclaration,
+                    ValidationRule::MismatchedReference
+                ]
+            ),
             [
                 "`@nope` is not declared",
                 "`@ghost` is not declared",
@@ -243,7 +274,14 @@ ballot @b \"B\"
       support @dem
 ";
         assert_eq!(
-            rule_messages(source, Rule::Identifiers),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::UndeclaredReference,
+                    ValidationRule::DuplicateDeclaration,
+                    ValidationRule::MismatchedReference
+                ]
+            ),
             [
                 "`@c` is a candidate, not a party",
                 "`@dem` is a party, not a candidate",
@@ -268,18 +306,38 @@ ballot @b \"B\"
     recommend
       support @c
 ";
-        assert_eq!(rule_messages(source, Rule::Identifiers), [] as [String; 0]);
+        assert_eq!(
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::UndeclaredReference,
+                    ValidationRule::DuplicateDeclaration,
+                    ValidationRule::MismatchedReference
+                ]
+            ),
+            [] as [String; 0]
+        );
     }
 
     #[test]
     fn v1_is_silent_on_the_fixture() {
-        assert_eq!(rule_messages(FIXTURE, Rule::Identifiers), [] as [String; 0]);
+        assert_eq!(
+            rule_messages(
+                FIXTURE,
+                &[
+                    ValidationRule::UndeclaredReference,
+                    ValidationRule::DuplicateDeclaration,
+                    ValidationRule::MismatchedReference
+                ]
+            ),
+            [] as [String; 0]
+        );
     }
 
     #[test]
     fn v2_each_required_guide_field_is_named_when_missing() {
         assert_eq!(
-            rule_messages("oval 1\nnote:\n  x\n", Rule::RequiredGuideFields),
+            rule_messages("oval 1\nnote:\n  x\n", &[ValidationRule::MissingGuideField]),
             [
                 "the document has no `guide` field",
                 "the document has no `election` field",
@@ -288,7 +346,7 @@ ballot @b \"B\"
         );
         let source = "guide \"G\"\nelection \"E\"\ndate 2026-11-03\n";
         assert_eq!(
-            rule_messages(source, Rule::RequiredGuideFields),
+            rule_messages(source, &[ValidationRule::MissingGuideField]),
             [] as [String; 0]
         );
         let report = check("oval 1\nelection \"E\"\ndate 2026-11-03\n");
@@ -311,7 +369,7 @@ ballot @b \"B\"
       support @a
 ";
         assert_eq!(
-            rule_messages(source, Rule::MemberBlocksOnlyOnDeclarations),
+            rule_messages(source, &[ValidationRule::BlockOnReference]),
             ["`@a` refers to a candidate declared elsewhere, so it cannot have a block"]
         );
     }
@@ -337,7 +395,7 @@ ballot @b \"B\"
       support @a
 ";
         assert_eq!(
-            rule_messages(source, Rule::CandidateFieldsInPlace),
+            rule_messages(source, &[ValidationRule::MisplacedCandidateField]),
             [
                 "`designation` is not allowed here: the candidate is declared elsewhere, so its fields belong on that declaration",
                 "`party` is not allowed here: the candidate is declared elsewhere, so its fields belong on that declaration",
@@ -364,9 +422,14 @@ ballot @b \"B\"
       oppose @nobody
 ";
         assert_eq!(
-            rule_messages(source, Rule::RecommendationShape),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::RepeatedOppose,
+                    ValidationRule::RepeatedStance
+                ]
+            ),
             [
-                "`@v` is on the same ticket as `@p`, which is already named",
                 "`@c` is named more than once",
                 "a recommendation may have only one `oppose` line",
             ]
@@ -376,12 +439,17 @@ ballot @b \"B\"
     #[test]
     fn v2_through_v5_are_silent_on_the_fixture() {
         for rule in [
-            Rule::RequiredGuideFields,
-            Rule::MemberBlocksOnlyOnDeclarations,
-            Rule::CandidateFieldsInPlace,
-            Rule::RecommendationShape,
+            ValidationRule::MissingGuideField,
+            ValidationRule::BlockOnReference,
+            ValidationRule::MisplacedCandidateField,
+            ValidationRule::RepeatedOppose,
+            ValidationRule::RepeatedStance,
         ] {
-            assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+            assert_eq!(
+                rule_messages(FIXTURE, &[rule]),
+                [] as [String; 0],
+                "{rule:?}"
+            );
         }
     }
 
@@ -399,7 +467,7 @@ ballot @b \"B\"
       oppose @nobody @dem
 ";
         assert_eq!(
-            rule_messages(source, Rule::RecommendationReferencesInContest),
+            rule_messages(source, &[ValidationRule::CampaignNotInContest]),
             ["`@elsewhere` is not in any campaign of this contest"]
         );
     }
@@ -422,14 +490,14 @@ ballot @b \"B\"
       support @a
 ";
         assert_eq!(
-            rule_messages(source, Rule::NoDuplicateMembers),
+            rule_messages(source, &[ValidationRule::DuplicateMember]),
             [
                 "`@a` is already a member of this campaign",
                 "`@p` is already a member of this campaign"
             ]
         );
         assert_eq!(
-            rule_messages(source, Rule::OneCampaignPerCandidate),
+            rule_messages(source, &[ValidationRule::CandidateInTwoCampaigns]),
             ["`@a` is already in another campaign of this contest"]
         );
     }
@@ -460,7 +528,14 @@ ballot @b \"B\"
       support @f
 ";
         assert_eq!(
-            rule_messages(source, Rule::ContestKindArguments),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::InvalidMultipleCount,
+                    ValidationRule::InvalidRankedMax,
+                    ValidationRule::RetentionCampaignCount
+                ]
+            ),
             [
                 "`multiple` needs at least 2 seats; a one-seat contest is `single`",
                 "`max` must be at least 1",
@@ -472,7 +547,16 @@ ballot @b \"B\"
         let first = report
             .diagnostics()
             .iter()
-            .find(|d| d.code == DiagnosticCode::Rule(Rule::ContestKindArguments))
+            .find(|d| {
+                is_one_of(
+                    d.code,
+                    &[
+                        ValidationRule::InvalidMultipleCount,
+                        ValidationRule::InvalidRankedMax,
+                        ValidationRule::RetentionCampaignCount,
+                    ],
+                )
+            })
             .unwrap();
         let expected = source.find("multiple 1").unwrap();
         assert_eq!(usize::from(first.range.start()), expected);
@@ -481,12 +565,18 @@ ballot @b \"B\"
     #[test]
     fn v6_through_v9_are_silent_on_the_fixture() {
         for rule in [
-            Rule::RecommendationReferencesInContest,
-            Rule::OneCampaignPerCandidate,
-            Rule::NoDuplicateMembers,
-            Rule::ContestKindArguments,
+            ValidationRule::CampaignNotInContest,
+            ValidationRule::CandidateInTwoCampaigns,
+            ValidationRule::DuplicateMember,
+            ValidationRule::InvalidMultipleCount,
+            ValidationRule::InvalidRankedMax,
+            ValidationRule::RetentionCampaignCount,
         ] {
-            assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+            assert_eq!(
+                rule_messages(FIXTURE, &[rule]),
+                [] as [String; 0],
+                "{rule:?}"
+            );
         }
     }
 
@@ -509,7 +599,13 @@ ballot @b \"B\"
     recommend no
 ";
         assert_eq!(
-            rule_messages(source, Rule::EveryQuestionHasARecommendation),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::MissingRecommendation,
+                    ValidationRule::RepeatedRecommendation
+                ]
+            ),
             [
                 "this contest has no recommendation; write `recommend no-position` to take none",
                 "this contest already has a recommendation",
@@ -555,7 +651,17 @@ ballot @b \"B\"
         let v11: Vec<(Severity, &str)> = report
             .diagnostics()
             .iter()
-            .filter(|d| d.code == DiagnosticCode::Rule(Rule::KindSpecificRecommendation))
+            .filter(|d| {
+                is_one_of(
+                    d.code,
+                    &[
+                        ValidationRule::TiersInSingle,
+                        ValidationRule::SupportOverMax,
+                        ValidationRule::RetentionStance,
+                        ValidationRule::SupportOverCount,
+                    ],
+                )
+            })
             .map(|d| (d.severity, d.message.as_str()))
             .collect();
         assert_eq!(
@@ -604,7 +710,15 @@ ballot @b \"B\"
       oppose @k
 ";
         assert_eq!(
-            rule_messages(source, Rule::KindSpecificRecommendation),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::TiersInSingle,
+                    ValidationRule::SupportOverMax,
+                    ValidationRule::RetentionStance,
+                    ValidationRule::SupportOverCount
+                ]
+            ),
             [] as [String; 0]
         );
     }
@@ -626,7 +740,15 @@ ballot @b \"B\"
     recommend no-position
 ";
         assert_eq!(
-            rule_messages(source, Rule::BallotStructure),
+            rule_messages(
+                source,
+                &[
+                    ValidationRule::EmptyBallot,
+                    ValidationRule::EmptySection,
+                    ValidationRule::ContestWithoutCampaigns,
+                    ValidationRule::CampaignWithoutMembers
+                ]
+            ),
             [
                 "this ballot has no contests, measures, sections, or sub-ballots",
                 "this section has no contests or measures",
@@ -648,7 +770,10 @@ ballot @b \"B\"
             ("2026-00-10", false),
             ("2026-06-00", false),
         ] {
-            let messages = rule_messages(&format!("oval 1\ndate {date}\n"), Rule::Dates);
+            let messages = rule_messages(
+                &format!("oval 1\ndate {date}\n"),
+                &[ValidationRule::InvalidDate],
+            );
             if valid {
                 assert_eq!(messages, [] as [String; 0], "{date}");
             } else {
@@ -660,20 +785,31 @@ ballot @b \"B\"
     #[test]
     fn v10_through_v13_are_silent_on_the_fixture() {
         for rule in [
-            Rule::EveryQuestionHasARecommendation,
-            Rule::KindSpecificRecommendation,
-            Rule::BallotStructure,
-            Rule::Dates,
+            ValidationRule::MissingRecommendation,
+            ValidationRule::RepeatedRecommendation,
+            ValidationRule::TiersInSingle,
+            ValidationRule::SupportOverMax,
+            ValidationRule::RetentionStance,
+            ValidationRule::SupportOverCount,
+            ValidationRule::EmptyBallot,
+            ValidationRule::EmptySection,
+            ValidationRule::ContestWithoutCampaigns,
+            ValidationRule::CampaignWithoutMembers,
+            ValidationRule::InvalidDate,
         ] {
-            assert_eq!(rule_messages(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+            assert_eq!(
+                rule_messages(FIXTURE, &[rule]),
+                [] as [String; 0],
+                "{rule:?}"
+            );
         }
     }
 
-    fn warnings(source: &str, rule: Rule) -> Vec<String> {
+    fn warnings(source: &str, rules: &[ValidationRule]) -> Vec<String> {
         check(source)
             .diagnostics()
             .iter()
-            .filter(|d| d.code == DiagnosticCode::Rule(rule))
+            .filter(|d| is_one_of(d.code, rules))
             .inspect(|d| assert_eq!(d.severity, Severity::Warning, "{}", d.message))
             .map(|d| d.message.clone())
             .collect()
@@ -697,7 +833,7 @@ ballot @b \"B\"
       support @used
 ";
         assert_eq!(
-            warnings(source, Rule::UnusedDeclarations),
+            warnings(source, &[ValidationRule::UnusedDeclaration]),
             [
                 "`@gop` is declared but no candidate belongs to it",
                 "`@idle` is declared but is not in any campaign",
@@ -725,7 +861,7 @@ ballot @b \"B\"
       support @a
 ";
         assert_eq!(
-            warnings(source, Rule::DuplicatePartyNames),
+            warnings(source, &[ValidationRule::DuplicatePartyName]),
             [
                 "`@dems` has the same name as `@dem`, \"Democratic\"",
                 "`@d2` has the same name as `@dem`, \"Democratic\"",
@@ -750,7 +886,7 @@ ballot @b \"City\"
       recommend yes
 ";
         assert_eq!(
-            warnings(source, Rule::SuspiciousBallots),
+            warnings(source, &[ValidationRule::DuplicateBallotTitle]),
             [
                 "another ballot at this level is also titled \"District 5\"",
                 "another ballot at this level is also titled \"City\"",
@@ -775,7 +911,7 @@ ballot @b \"B\"
       oppose @q
 ";
         assert_eq!(
-            warnings(source, Rule::HeadOfTicketReferences),
+            warnings(source, &[ValidationRule::NonHeadReference]),
             ["`@v` is not the head of its ticket; name `@p` instead"]
         );
     }
@@ -801,7 +937,7 @@ ballot @b \"B\"
     recommend yes
 ";
         assert_eq!(
-            warnings(source, Rule::PairedYesNoStatements),
+            warnings(source, &[ValidationRule::UnpairedOutcome]),
             [
                 "`if_yes` is present without `if_no`; the ballot prints both or neither",
                 "`if_no` is present without `if_yes`; the ballot prints both or neither",
@@ -812,13 +948,13 @@ ballot @b \"B\"
     #[test]
     fn v14_through_v18_are_silent_on_the_fixture() {
         for rule in [
-            Rule::UnusedDeclarations,
-            Rule::DuplicatePartyNames,
-            Rule::SuspiciousBallots,
-            Rule::HeadOfTicketReferences,
-            Rule::PairedYesNoStatements,
+            ValidationRule::UnusedDeclaration,
+            ValidationRule::DuplicatePartyName,
+            ValidationRule::DuplicateBallotTitle,
+            ValidationRule::NonHeadReference,
+            ValidationRule::UnpairedOutcome,
         ] {
-            assert_eq!(warnings(FIXTURE, rule), [] as [String; 0], "{rule:?}");
+            assert_eq!(warnings(FIXTURE, &[rule]), [] as [String; 0], "{rule:?}");
         }
         assert_eq!(check(FIXTURE).diagnostics(), []);
     }
@@ -981,7 +1117,7 @@ ballot @b \"B\"
         let diagnostic = &report.diagnostics()[0];
         assert_eq!(
             diagnostic.code,
-            DiagnosticCode::Rule(Rule::SupportedVersion)
+            DiagnosticCode::Validation(ValidationRule::UnsupportedVersion)
         );
         assert_eq!(
             diagnostic.range,
@@ -1002,7 +1138,7 @@ ballot @b \"B\"
         let diagnostic = &report.diagnostics()[0];
         assert_eq!(
             diagnostic.code,
-            DiagnosticCode::Rule(Rule::SupportedVersion)
+            DiagnosticCode::Validation(ValidationRule::UnsupportedVersion)
         );
         assert_eq!(diagnostic.severity, Severity::Error);
         assert_eq!(diagnostic.range, span(source, "oval 2"));
@@ -1015,20 +1151,21 @@ ballot @b \"B\"
     #[test]
     fn v19_accepts_leading_zeros_and_leaves_a_malformed_marker_to_the_parser() {
         assert_eq!(
-            rule_messages("oval 01\nguide \"G\"\n", Rule::SupportedVersion),
+            rule_messages(
+                "oval 01\nguide \"G\"\n",
+                &[ValidationRule::UnsupportedVersion]
+            ),
             [] as [String; 0]
         );
         let report = check("oval 1.0\nguide \"G\"\n");
         assert_eq!(
-            rule_messages("oval 1.0\nguide \"G\"\n", Rule::SupportedVersion),
+            rule_messages(
+                "oval 1.0\nguide \"G\"\n",
+                &[ValidationRule::UnsupportedVersion]
+            ),
             [] as [String; 0]
         );
-        assert!(
-            report
-                .diagnostics()
-                .iter()
-                .any(|d| d.code == DiagnosticCode::Syntax)
-        );
+        assert!(report.diagnostics().iter().any(|d| is_syntax(d.code)));
     }
 
     #[test]

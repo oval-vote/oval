@@ -2,9 +2,9 @@ use std::collections::HashSet;
 
 use oval_syntax::ast::{AstNode, Ballot, BallotItem, ContestKind, Document};
 
-use super::{error, warning};
+use super::report;
 use crate::index::Index;
-use crate::{Diagnostic, Rule};
+use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
     sibling_titles(document.ballots(), out);
@@ -18,8 +18,8 @@ pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic
     for ballot in &index.ballots {
         if ballot.items().next().is_none() {
             let range = ballot.id().map_or_else(|| ballot.range(), |id| id.range());
-            out.push(error(
-                Rule::BallotStructure,
+            out.push(report(
+                ValidationRule::EmptyBallot,
                 range,
                 "this ballot has no contests, measures, sections, or sub-ballots".to_owned(),
             ));
@@ -27,8 +27,8 @@ pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic
     }
     for section in &index.sections {
         if section.items().next().is_none() {
-            out.push(error(
-                Rule::BallotStructure,
+            out.push(report(
+                ValidationRule::EmptySection,
                 section.range(),
                 "this section has no contests or measures".to_owned(),
             ));
@@ -37,8 +37,8 @@ pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic
     for contest in &index.contests {
         for campaign in contest.campaigns() {
             if campaign.members().next().is_none() {
-                out.push(error(
-                    Rule::BallotStructure,
+                out.push(report(
+                    ValidationRule::CampaignWithoutMembers,
                     campaign.range(),
                     "this campaign has no members".to_owned(),
                 ));
@@ -48,8 +48,8 @@ pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic
             let range = contest
                 .id()
                 .map_or_else(|| contest.range(), |id| id.range());
-            out.push(error(
-                Rule::BallotStructure,
+            out.push(report(
+                ValidationRule::ContestWithoutCampaigns,
                 range,
                 "this contest has no campaigns".to_owned(),
             ));
@@ -65,8 +65,8 @@ fn sibling_titles(ballots: impl Iterator<Item = Ballot>, out: &mut Vec<Diagnosti
         };
         if !seen.insert(title.clone()) {
             let range = ballot.id().map_or_else(|| ballot.range(), |id| id.range());
-            out.push(warning(
-                Rule::SuspiciousBallots,
+            out.push(report(
+                ValidationRule::DuplicateBallotTitle,
                 range,
                 format!("another ballot at this level is also titled \"{title}\""),
             ));

@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use oval_syntax::ast::{AstNode, Contest, ContestKind, ContestRecommend};
 
-use super::{error, warning};
+use super::report;
 use crate::index::{EntityKind, Index};
-use crate::{Diagnostic, Rule};
+use crate::{Diagnostic, ValidationRule};
 
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
@@ -30,16 +30,16 @@ fn kind_specific(kind: ContestKind, recommendation: &ContestRecommend, out: &mut
     match kind {
         ContestKind::Single => {
             for tier in tiers.iter().skip(1) {
-                out.push(error(
-                    Rule::KindSpecificRecommendation,
+                out.push(report(
+                    ValidationRule::TiersInSingle,
                     tier.range(),
                     "a vote-for-one contest takes one `support` line; put interchangeable choices on it together".to_owned(),
                 ));
             }
         }
         ContestKind::Multiple { seats: Some(seats) } if named > seats as usize => {
-            out.push(warning(
-                Rule::KindSpecificRecommendation,
+            out.push(report(
+                ValidationRule::SupportOverCount,
                 recommendation.range(),
                 format!("this recommendation supports {named} candidates for {seats} seats; later tiers are fallbacks"),
             ));
@@ -49,8 +49,8 @@ fn kind_specific(kind: ContestKind, recommendation: &ContestRecommend, out: &mut
             for tier in &tiers {
                 running += tier.candidates().count();
                 if running > max as usize {
-                    out.push(error(
-                        Rule::KindSpecificRecommendation,
+                    out.push(report(
+                        ValidationRule::SupportOverMax,
                         tier.range(),
                         format!("this recommendation ranks {named} candidates but voters may rank only {max}"),
                     ));
@@ -59,8 +59,8 @@ fn kind_specific(kind: ContestKind, recommendation: &ContestRecommend, out: &mut
             }
         }
         ContestKind::Retention if named + opposed > 1 || (named == 1 && opposed == 1) => {
-            out.push(error(
-                Rule::KindSpecificRecommendation,
+            out.push(report(
+                ValidationRule::RetentionStance,
                 recommendation.range(),
                 "a retention recommendation is one `support` or one `oppose` of the single campaign".to_owned(),
             ));
@@ -88,8 +88,8 @@ fn in_contest(
             .resolve(&id.name())
             .is_some_and(|d| d.kind == EntityKind::Candidate);
         if declared_candidate && !campaign_of.contains_key(&id.name()) {
-            out.push(error(
-                Rule::RecommendationReferencesInContest,
+            out.push(report(
+                ValidationRule::CampaignNotInContest,
                 id.range(),
                 format!("`@{}` is not in any campaign of this contest", id.name()),
             ));
@@ -121,8 +121,8 @@ fn head_of_ticket(contest: &Contest, recommendation: &ContestRecommend, out: &mu
         );
     for id in named {
         if let Some(head) = head_of.get(&id.name()) {
-            out.push(warning(
-                Rule::HeadOfTicketReferences,
+            out.push(report(
+                ValidationRule::NonHeadReference,
                 id.range(),
                 format!(
                     "`@{}` is not the head of its ticket; name `@{head}` instead",
@@ -151,8 +151,8 @@ fn shape(
     out: &mut Vec<Diagnostic>,
 ) {
     for extra in recommendation.oppose().skip(1) {
-        out.push(error(
-            Rule::RecommendationShape,
+        out.push(report(
+            ValidationRule::RepeatedOppose,
             extra.range(),
             "a recommendation may have only one `oppose` line".to_owned(),
         ));
@@ -174,19 +174,12 @@ fn shape(
             None => {
                 seen.insert(*campaign, id.name());
             }
-            Some(first) if *first == id.name() => out.push(error(
-                Rule::RecommendationShape,
+            Some(first) if *first == id.name() => out.push(report(
+                ValidationRule::RepeatedStance,
                 id.range(),
                 format!("`@{}` is named more than once", id.name()),
             )),
-            Some(first) => out.push(error(
-                Rule::RecommendationShape,
-                id.range(),
-                format!(
-                    "`@{}` is on the same ticket as `@{first}`, which is already named",
-                    id.name()
-                ),
-            )),
+            Some(_) => {}
         }
     }
 }
