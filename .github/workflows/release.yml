@@ -1,16 +1,100 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to release, as MAJOR.MINOR.PATCH; the version on main when empty
+        required: false
+        type: string
   push:
     tags: ["v*"]
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  npm:
+  release:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    steps:
+      - if: github.ref != 'refs/heads/main'
+        run: |
+          echo "releases are cut from main, not ${GITHUB_REF_NAME}" >&2
+          exit 1
+      - id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OVAL_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OVAL_RELEASE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+          fetch-depth: 0
+      - uses: jdx/mise-action@v5
+      - name: Validate the request
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          current="$(node -p "require('./packages/oval/package.json').version")"
+          version="${REQUESTED:-$current}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "$version is not MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already released" >&2
+            exit 1
+          fi
+          if [ -n "$(npm view "@oval-vote/oval@$version" version 2>/dev/null)" ]; then
+            echo "$version is already on npm and cannot be released again" >&2
+            exit 1
+          fi
+          latest="$(git tag --list 'v*' | sort -V | tail -1)"
+          if [ -n "$latest" ] && ! node -e 'const [a, b] = process.argv.slice(1).map((v) => v.split(".").map(Number)); process.exit((a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0 ? 0 : 1)' "$version" "${latest#v}"; then
+            echo "$version is not greater than the latest release ${latest#v}" >&2
+            exit 1
+          fi
+          runs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" --paginate --jq '.check_runs[] | select(.name != "release") | "\(.name): \(.status) \(.conclusion)"')"
+          if [ -z "$runs" ]; then
+            echo "no checks have run on $GITHUB_SHA" >&2
+            exit 1
+          fi
+          echo "$runs"
+          if echo "$runs" | grep -vE ': completed (success|skipped|neutral)$'; then
+            echo "checks on $GITHUB_SHA are not all green" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Set the version
+        if: inputs.version != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          mise run set-version "$VERSION"
+          mise run ci
+          id="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock packages/oval/package.json packages/oval/package-lock.json
+          git commit -m "Release $VERSION"
+          git push origin HEAD:main
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: gh release create "v$VERSION" --target "$(git rev-parse HEAD)" --title "v$VERSION" --notes ""
+
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     defaults:
       run:
         working-directory: packages/oval
