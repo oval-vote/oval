@@ -4,6 +4,7 @@ use oval_syntax::ast::{AstNode, Document};
 use super::report;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks that the `guide`, `election`, and `date` fields are present.
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     let missing = [
         ("guide", document.guide().is_none()),

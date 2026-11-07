@@ -1,4 +1,20 @@
 //! WebAssembly bindings for the Oval voting guide format.
+//!
+//! This crate is the source of the `@oval-vote/oval` npm package. It exposes [`check`],
+//! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`] to JavaScript through
+//! `wasm-bindgen`, with [`catalog`], [`language_major`], and [`version`] beside them. Every
+//! function is synchronous and takes the document's source text as a string.
+//!
+//! Results cross into JavaScript as plain values. Strings and numbers arrive as themselves;
+//! diagnostics, catalog entries, and the compiled model arrive as ordinary objects and arrays
+//! produced by `serde-wasm-bindgen`, not as class instances. Failures are thrown. A function that
+//! cannot read its input at all, because it contains U+0000, throws a string that says so; one
+//! that fails because the document has errors throws the array of diagnostics that [`check`]
+//! would return. Should a value fail to convert to JavaScript, the function throws that
+//! conversion error.
+//!
+//! [`TYPES`] declares the TypeScript types of these values and is appended to the package's
+//! generated typings.
 
 use oval_core::{CompileError, DiagnosticCode, InputRejection, Report, Severity};
 use oval_format::FormatError;
@@ -6,6 +22,16 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 /// The TypeScript declarations appended to the package's typings.
+///
+/// They name the values the functions return.
+///
+/// - `DiagnosticIdentifier` is the union of every identifier [`DiagnosticCode::all`] lists, in
+///   the specification's order.
+/// - `Severity` is `"error"` or `"warning"`.
+/// - `Diagnostic` is the shape of each element [`check`] returns.
+/// - `CatalogEntry` is the shape of each element [`catalog`] returns.
+/// - `Compiled` is the canonical model, typed as a record because its shape is fixed by the
+///   specification's `guide.schema.json` rather than by this package.
 pub const TYPES: &str = r#"
 export type DiagnosticIdentifier =
   | "illegal-tab"
@@ -94,20 +120,38 @@ struct CatalogEntry {
     url: String,
 }
 
-/// The major version of the Oval language this package reads.
+/// The major version of the Oval language this package reads, `1`.
+///
+/// Exported to JavaScript as `languageMajor()`, returning a number. A document whose version
+/// marker names another major version is reported as `unsupported-version` rather than parsed.
 #[wasm_bindgen(js_name = languageMajor)]
 pub fn language_major() -> u32 {
     oval_core::SUPPORTED_LANGUAGE_MAJOR
 }
 
-/// The version of this package.
+/// The version of this package, as a semantic version string.
+///
+/// It is the Cargo version of this crate, which the npm package mirrors.
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
-/// Every diagnostic the implementation can report, in the specification's order, with the
-/// address of its entry on the specification's site.
+/// Every diagnostic this package can report, in the specification's order.
+///
+/// Returns an array of `CatalogEntry` objects, one per [`DiagnosticCode`], each with the code's
+/// `identifier`, `severity`, `title`, and `url`, the address of its entry on the specification's
+/// site. A tool uses it to list what it reports or to link a diagnostic to its documentation.
+///
+/// ```js
+/// const { catalog } = require("@oval-vote/oval");
+/// const entry = catalog().find((e) => e.identifier === "invalid-date");
+/// console.log(entry.title, entry.url);
+/// ```
+///
+/// # Errors
+///
+/// Throws only when the entries cannot be converted to a JavaScript value.
 #[wasm_bindgen(unchecked_return_type = "CatalogEntry[]")]
 pub fn catalog() -> Result<JsValue, JsValue> {
     let entries: Vec<CatalogEntry> = DiagnosticCode::all()
@@ -123,12 +167,52 @@ pub fn catalog() -> Result<JsValue, JsValue> {
 }
 
 /// Parses and validates `source`, returning every diagnostic in source order.
+///
+/// Returns an array of `Diagnostic` objects, errors and warnings alike, each with its `code` (the
+/// identifier), `severity`, `range`, and `message`. The range is `{ start, end }` in byte offsets
+/// into the UTF-8 source, not in JavaScript string indices. The array is empty when the document
+/// is valid and has no warnings. When the version marker is missing or names another major
+/// version, the array contains only `unsupported-version`.
+///
+/// ```js
+/// const { check } = require("@oval-vote/oval");
+/// const diagnostics = check('oval 1\nguide "Franklin Voter Guide"\n');
+/// const errors = diagnostics.filter((d) => d.severity === "error");
+/// console.log(errors.map((d) => `${d.code}: ${d.message}`));
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000, the one input that is not an Oval document at
+/// all.
 #[wasm_bindgen(unchecked_return_type = "Diagnostic[]")]
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
     diagnostics(&oval_core::check(source).map_err(rejected)?)
 }
 
-/// Compiles `source` to its canonical form, or fails with the diagnostics.
+/// Compiles `source` to the canonical model, or throws its diagnostics.
+///
+/// Returns the object the specification's `guide.schema.json` describes, Section 5, which is the
+/// guide with every reference resolved and the derived fields filled in, as a plain JavaScript
+/// object. It is the same value `oval compile` prints as JSON.
+///
+/// ```js
+/// const { compile } = require("@oval-vote/oval");
+/// let compiled;
+/// try {
+///   compiled = compile(source);
+/// } catch (thrown) {
+///   if (Array.isArray(thrown)) console.error(thrown);
+///   throw thrown;
+/// }
+/// console.log(compiled.guide.name, compiled.counts.contests);
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000. Throws the array of `Diagnostic` objects that
+/// [`check`] would return when the document has any error. Warnings alone do not prevent
+/// compilation and are not reported here, so a tool that wants them calls [`check`] as well.
 #[wasm_bindgen(unchecked_return_type = "Compiled")]
 pub fn compile(source: &str) -> Result<JsValue, JsValue> {
     match oval_core::compile(source) {
@@ -138,7 +222,22 @@ pub fn compile(source: &str) -> Result<JsValue, JsValue> {
     }
 }
 
-/// Formats `source`, or fails with the diagnostics.
+/// Formats `source` in the canonical style of Section 6, or throws its diagnostics.
+///
+/// Returns the formatted document as a string. It uses `\n` as its line terminator, ends with
+/// exactly one, and formatting it again returns it unchanged. A document with validation errors
+/// formats normally; only lexical and syntax errors prevent formatting.
+///
+/// ```js
+/// const { format } = require("@oval-vote/oval");
+/// format('oval 01\nguide   "G"\n'); // 'oval 1\nguide "G"\n'
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000. Throws the array of `Diagnostic` objects that
+/// [`check`] would return when the document has lexical or syntax errors, so a caller sees every
+/// problem and not only the ones that stopped the formatter.
 #[wasm_bindgen]
 pub fn format(source: &str) -> Result<String, JsValue> {
     match oval_format::format(source) {

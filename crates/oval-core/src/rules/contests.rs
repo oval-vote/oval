@@ -5,6 +5,7 @@ use super::report;
 use crate::index::Index;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the contest kinds. A `multiple` count is at least 2, a `ranked` limit is at least 2, and a `retention` contest has exactly one campaign.
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
         kind_arguments(contest, out);

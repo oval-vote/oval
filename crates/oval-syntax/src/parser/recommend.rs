@@ -67,8 +67,11 @@ impl Parser<'_> {
         self.bump();
         self.stances += 1;
         if !self.at(At) {
-            if self.at_line_end() || self.at(StringLiteral) {
+            if self.at_line_end() {
                 self.missing(ParseErrorKind::MissingIdentifier, &[At]);
+            } else if self.at(StringLiteral) {
+                self.missing(ParseErrorKind::MissingIdentifier, &[At]);
+                self.skip_token();
             } else {
                 self.recover_line(&[At]);
             }

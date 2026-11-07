@@ -1,3 +1,10 @@
+//! The kinds of token and node in an Oval syntax tree, and the keywords of the language.
+//!
+//! [`Keyword`] lists the words of Appendix B of the specification. [`SyntaxKind`] gives every
+//! keyword a token kind, adds the other tokens of Sections 2.2 through 2.4 and the nodes the
+//! parser builds, and is the kind type of the [`rowan`] tree. Both are re-exported at the crate
+//! root.
+
 macro_rules! define_syntax {
     (
         keywords { $( $keyword_text:literal => $keyword:ident / $keyword_kind:ident ),+ $(,)? }
@@ -5,6 +12,12 @@ macro_rules! define_syntax {
         nodes { $( $node:ident : $node_doc:literal ),+ $(,)? }
     ) => {
         /// A word that a syntactic production of the Oval language names literally.
+        ///
+        /// Appendix B of the specification lists the keywords. They are case-sensitive, and no
+        /// word is reserved, since every identifier begins with `@`. The lexer does not
+        /// distinguish them. Every bare word lexes as [`SyntaxKind::Word`], and the parser
+        /// classifies words with [`from_text`](Self::from_text). Each keyword has a token kind of
+        /// its own in [`SyntaxKind`], reached through [`From`] and [`SyntaxKind::as_keyword`].
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[repr(u16)]
         pub enum Keyword {
@@ -12,21 +25,44 @@ macro_rules! define_syntax {
         }
 
         impl Keyword {
-            /// Every keyword, in declaration order.
+            /// Every keyword, in the order Appendix B lists them.
             pub const ALL: &'static [Self] = &[ $( Self::$keyword, )+ ];
 
-            /// The source text of this keyword.
+            /// The source text of this keyword, such as `ballot`.
             pub const fn text(self) -> &'static str {
                 match self { $( Self::$keyword => $keyword_text, )+ }
             }
 
-            /// The keyword whose source text is `text`, if any.
+            /// The keyword whose source text is exactly `text`, or `None` for any other word.
+            ///
+            /// The match is case-sensitive, so `Ballot` is not a keyword.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use oval_syntax::Keyword;
+            ///
+            /// assert_eq!(Keyword::from_text("ballot"), Some(Keyword::Ballot));
+            /// assert_eq!(Keyword::from_text("Ballot"), None);
+            /// assert_eq!(Keyword::Ballot.text(), "ballot");
+            /// ```
             pub fn from_text(text: &str) -> Option<Self> {
                 match text { $( $keyword_text => Some(Self::$keyword), )+ _ => None }
             }
         }
 
         /// Every kind of token and node in an Oval syntax tree.
+        ///
+        /// The kinds come in three groups.
+        ///
+        /// - One token kind per [`Keyword`].
+        /// - The other token kinds of Sections 2.2 through 2.4 of the specification.
+        /// - The node kinds the parser builds.
+        ///
+        /// [`is_token`](Self::is_token) and [`is_node`](Self::is_node) partition the kinds;
+        /// [`is_keyword`](Self::is_keyword) and [`is_trivia`](Self::is_trivia) pick out subsets
+        /// of the tokens. The enum is non-exhaustive because later editions of the language add
+        /// constructs.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         #[repr(u16)]
         #[non_exhaustive]
@@ -46,7 +82,7 @@ macro_rules! define_syntax {
         ];
 
         impl SyntaxKind {
-            /// The keyword this kind represents, if it is a keyword token.
+            /// The keyword this kind is the token of, or `None` for any other kind.
             pub const fn as_keyword(self) -> Option<Keyword> {
                 match self {
                     $( Self::$keyword_kind => Some(Keyword::$keyword), )+
@@ -113,51 +149,51 @@ define_syntax! {
         "none" => NoneValue / NoneValueKeyword,
     }
     tokens {
-        Word: "A bare word: a letter followed by letters, digits, hyphens, and underscores.",
-        At: "The `@` punctuator.",
-        StringLiteral: "A double-quoted string token.",
-        IntegerLiteral: "An unsigned integer token.",
-        DateLiteral: "An ISO 8601 calendar date token.",
-        UrlLiteral: "A bare `http` or `https` URL token.",
-        Colon: "The `:` punctuator.",
-        Comma: "The `,` punctuator.",
-        MarkdownBlock: "The body of a Markdown field, as one opaque token.",
+        Word: "A bare word, which is a letter followed by letters, digits, hyphens, and underscores. The lexer emits it for every word; in the tree, a word whose text is a keyword has the keyword's kind unless it follows `@`.",
+        At: "The `@` punctuator, which begins an identifier.",
+        StringLiteral: "A double-quoted string, with its quotes and escapes as written.",
+        IntegerLiteral: "An unsigned integer, leading zeros included.",
+        DateLiteral: "A calendar date in the shape `YYYY-MM-DD`; whether it exists on the calendar is a validation rule.",
+        UrlLiteral: "A bare `http` or `https` URL, running to the next space, tab, or line terminator.",
+        Colon: "The `:` punctuator, which opens a Markdown body.",
+        Comma: "The `,` punctuator, which separates the strings of a list.",
+        MarkdownBlock: "The body of a Markdown field as one opaque token, from the first content line's leading spaces through the last content line's terminator.",
         Comment: "A `#` comment running to the end of the line.",
-        Whitespace: "Spaces within a line.",
-        Newline: "The end of a non-blank line.",
-        BlankLine: "The end of a line with no tokens.",
-        Indent: "An increase in indentation.",
-        Dedent: "A decrease in indentation.",
-        Error: "Text the lexer could not tokenize.",
+        Whitespace: "A run of spaces within a line, or a byte order mark at the start of the input.",
+        Newline: "The terminator of a line with tokens; zero-length at end of input.",
+        BlankLine: "The terminator of a line with no tokens other than whitespace and a comment.",
+        Indent: "A zero-length token before the first token of a line indented more than the enclosing level.",
+        Dedent: "A zero-length token before the first token of a line that returns to an enclosing level, or at end of input, one per level closed.",
+        Error: "Text the lexer could not tokenize; exactly one [`LexicalError`](crate::lexer::LexicalError) spans it.",
     }
     nodes {
-        Document: "The root node: a whole document.",
-        Identifier: "An identifier: `@` followed by a word.",
-        VersionMarker: "The `oval` version marker.",
-        Party: "A `party` declaration.",
-        Candidate: "A `candidate` declaration.",
-        PartyReference: "A `party` field on a candidate or campaign.",
-        Ballot: "A `ballot` declaration.",
-        Section: "A `section`.",
-        Contest: "A `contest` declaration.",
-        ContestKind: "The voting method on a contest header line.",
-        Campaign: "A `campaign`.",
-        Member: "A member of a campaign.",
-        ContestRecommend: "A contest `recommend`.",
-        Support: "A `support` tier.",
-        Oppose: "An `oppose` line.",
-        Measure: "A `measure` declaration.",
-        MeasureRecommend: "A measure `recommend`.",
-        Block: "An indented block of fields and children.",
+        Document: "The root node, a whole document whose text is the source.",
+        Identifier: "An identifier, which is `@` followed by a word.",
+        VersionMarker: "The `oval` version marker that opens a document.",
+        Party: "A top-level `party` declaration with its block.",
+        Candidate: "A top-level `candidate` declaration with its block.",
+        PartyReference: "A `party` field on a candidate or campaign member, which is either a reference or an inline declaration with its name and block.",
+        Ballot: "A `ballot` declaration with its block.",
+        Section: "A `section` with its block.",
+        Contest: "A `contest` declaration with its block.",
+        ContestKind: "The voting method on a contest header line, with its `multiple` count or `max` limit.",
+        Campaign: "A `campaign` with its block.",
+        Member: "A member of a campaign, on the header line or in the block. It is an identifier, optionally with a name and an `as` role.",
+        ContestRecommend: "A contest `recommend` with its block.",
+        Support: "A `support` line of a contest recommendation, which is one tier of identifiers.",
+        Oppose: "An `oppose` line of a contest recommendation.",
+        Measure: "A `measure` declaration with its block.",
+        MeasureRecommend: "A measure `recommend` with its position and block.",
+        Block: "An indented block of fields and children, from `Indent` to `Dedent`.",
         StringField: "A field whose value is a string.",
         IntegerField: "A field whose value is an integer.",
         DateField: "A field whose value is a date.",
         UrlField: "A field whose value is a URL.",
         ReferenceField: "A field whose value is an identifier reference.",
-        MarkdownField: "A field whose value is a Markdown block.",
-        StringListField: "A field whose value is a list of strings or `none`.",
-        Flag: "A bare keyword flag on a header line.",
-        ErrorNode: "A node the parser could not recognize.",
+        MarkdownField: "A field whose value is a Markdown body, made of the keyword, the `:`, and the `MarkdownBlock` token.",
+        StringListField: "A field whose value is a comma-separated list of strings or `none`.",
+        Flag: "An `incumbent` or `withdrawn` flag on a `campaign` line.",
+        ErrorNode: "Text the parser discarded or set aside, kept so that the tree covers every byte of the source.",
     }
 }
 
@@ -172,7 +208,10 @@ impl SyntaxKind {
         !self.is_node() && !matches!(self, Self::__Last)
     }
 
-    /// Whether this kind is a token the parser ignores.
+    /// Whether this kind is a comment, whitespace, or a blank line, the ignored tokens of
+    /// Section 2.3.
+    ///
+    /// [`Error`](Self::Error) tokens are not trivia, although the parser skips them too.
     pub const fn is_trivia(self) -> bool {
         matches!(self, Self::Comment | Self::Whitespace | Self::BlankLine)
     }

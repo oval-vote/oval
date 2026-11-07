@@ -1,4 +1,15 @@
 //! Converts source text into a flat sequence of tokens.
+//!
+//! The lexer implements Sections 2.2 through 2.4 of the specification and the lexical errors of
+//! Section 3.1. [`lex`] reads the whole input and returns every token, including whitespace,
+//! comments, and the zero-length layout tokens [`SyntaxKind::Indent`] and [`SyntaxKind::Dedent`].
+//! Text it cannot tokenize becomes a [`SyntaxKind::Error`] token with a [`LexicalError`] spanning
+//! it, and lexing continues with the recovery the specification gives for that error.
+//!
+//! Tokens carry a kind and a length but no text. A caller that needs the text of a token takes it
+//! from the source by accumulating lengths, as the parser does when it builds the tree. Every
+//! bare word lexes as [`SyntaxKind::Word`]; the parser decides which words are keywords with
+//! [`Keyword::from_text`](crate::Keyword::from_text).
 
 use std::fmt;
 
@@ -6,38 +17,60 @@ use rowan::{TextRange, TextSize};
 
 use crate::SyntaxKind;
 
-/// An oval syntax token.
+/// A token of the lexer's output, with a kind and a length but no text of its own.
+///
+/// Tokens are contiguous. The first begins at offset zero and each one begins where the one
+/// before ends, so the text of a token is the slice of the source its accumulated offsets name.
+/// [`Indent`](SyntaxKind::Indent), [`Dedent`](SyntaxKind::Dedent), and a
+/// [`Newline`](SyntaxKind::Newline) at end of input have length zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Token {
-    /// The kind of token.
+    /// The kind of the token.
+    ///
+    /// The lexer emits [`SyntaxKind::Word`] for every bare word and never a keyword kind.
     pub kind: SyntaxKind,
 
-    /// The length of the token, in bytes.
+    /// The length of the token in bytes.
     pub len: TextSize,
 }
 
 /// The lexical errors of the specification, Section 3.1.
+///
+/// Each variant is one entry of that section; [`identifier`](Self::identifier) and
+/// [`title`](Self::title) give the entry's identifier and title. The recovery named on each
+/// variant is the one the specification prescribes, so two conformant lexers produce the same
+/// tokens and the same errors for the same broken document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LexicalErrorKind {
-    /// A horizontal tab outside a string, a comment, or a Markdown body.
+    /// A tab outside a string, a comment, or a Markdown body; the run of tabs becomes one
+    /// [`SyntaxKind::Error`] token and lexing continues after it.
     IllegalTab,
 
-    /// A character that cannot begin any token.
+    /// A character that cannot begin any token where one must begin, such as `-`, `\`, or a
+    /// character outside ASCII; it becomes one [`SyntaxKind::Error`] token and lexing continues
+    /// after it.
     UnexpectedCharacter,
 
-    /// A string literal with no closing quote before the end of the line.
+    /// A line terminator or end of input before the closing quote of a string; the text from the
+    /// opening quote to the end of the line becomes one [`SyntaxKind::Error`] token and the
+    /// terminator lexes normally.
     UnterminatedString,
 
-    /// A backslash in a string followed by something other than `"` or `\\`.
+    /// A backslash in a string followed by anything other than `"` or `\`; the error spans the
+    /// two characters and the string remains a [`SyntaxKind::StringLiteral`].
     InvalidEscape,
 
-    /// A run beginning with a digit that is neither an integer nor a date.
+    /// A run of letters, digits, `-`, `_`, and `.` that begins with a digit and is neither an
+    /// integer nor a date; the run becomes one [`SyntaxKind::Error`] token.
     MalformedNumber,
 
-    /// A URL scheme and `://` with nothing after them.
+    /// `http://` or `https://` followed by a space, a tab, a line terminator, or end of input; the
+    /// scheme and `://` become one [`SyntaxKind::Error`] token and lexing continues after them.
     MalformedUrl,
 
-    /// A line indented less than the enclosing block but matching no open level.
+    /// A line indented less than the enclosing block and equal to no enclosing level; the error
+    /// spans the leading spaces, which remain [`SyntaxKind::Whitespace`], and the line is treated
+    /// as being at the nearest enclosing level.
     InconsistentDedent,
 }
 
@@ -53,7 +86,9 @@ impl LexicalErrorKind {
         Self::InconsistentDedent,
     ];
 
-    /// The identifier the specification gives this error, such as `illegal-tab`.
+    /// The identifier of this error's entry in the specification, such as `illegal-tab`.
+    ///
+    /// Identifiers are stable across editions, so tools report errors by identifier.
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::IllegalTab => "illegal-tab",
@@ -66,7 +101,7 @@ impl LexicalErrorKind {
         }
     }
 
-    /// The title of this error's entry in the specification.
+    /// The title of this error's entry in the specification, such as `Illegal Tab`.
     pub const fn title(self) -> &'static str {
         match self {
             Self::IllegalTab => "Illegal Tab",
@@ -80,20 +115,24 @@ impl LexicalErrorKind {
     }
 }
 
-/// A lexical error.
+/// A lexical error, with its kind and the range it covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LexicalError {
-    /// Which error it is.
+    /// The error that occurred.
     pub kind: LexicalErrorKind,
 
-    /// Where it went wrong.
+    /// The range the specification assigns the error. It is the whole [`SyntaxKind::Error`]
+    /// token, or the flaw within a token that kept its kind.
     pub range: TextRange,
 }
 
 /// Input that is rejected as a whole and produces no tokens.
+///
+/// Section 2.1 rejects input that contains U+0000. A Rust string is already well-formed UTF-8, so
+/// this is the only rejection, and no token or error is produced for any part of such input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct InputRejection {
-    /// The offset of the first U+0000 in the input.
+    /// The byte offset of the first U+0000 in the input.
     pub offset: TextSize,
 }
 
@@ -109,20 +148,49 @@ impl fmt::Display for InputRejection {
 
 impl std::error::Error for InputRejection {}
 
-/// The result of lexing a source string.
+/// The tokens and lexical errors of one input.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LexResult {
     /// The tokens, in source order.
-    /// Their lengths sum to the length of the input.
+    ///
+    /// Their lengths sum to the length of the input, so a caller recovers the text of each token
+    /// by accumulating them.
     pub tokens: Vec<Token>,
 
-    /// Errors, in source order.
-    /// Every [`SyntaxKind::Error`] token has exactly one error spanning it;
-    /// other tokens may carry errors over part of their text.
+    /// The lexical errors, in source order.
+    ///
+    /// Every [`SyntaxKind::Error`] token has exactly one error spanning it. An
+    /// [`InvalidEscape`](LexicalErrorKind::InvalidEscape) or
+    /// [`InconsistentDedent`](LexicalErrorKind::InconsistentDedent) error spans part of a token
+    /// that keeps its kind.
     pub errors: Vec<LexicalError>,
 }
 
-/// Lexes the given source text into a flat sequence of tokens, or rejects it as a whole.
+/// Lexes `source` into tokens, or rejects it as a whole.
+///
+/// Lexing never stops at an error. Every byte of `source` ends up in exactly one token, and every
+/// error is reported with the recovery Section 3.1 prescribes. A byte order mark at the start of
+/// the input lexes as [`SyntaxKind::Whitespace`].
+///
+/// # Errors
+///
+/// Returns an [`InputRejection`] when `source` contains U+0000. No other input is rejected.
+///
+/// # Panics
+///
+/// Panics when `source` is longer than a [`TextSize`] can address, 4 GiB.
+///
+/// # Examples
+///
+/// ```
+/// use oval_syntax::lexer::lex;
+///
+/// let source = "oval 1\nguide \"G\"\n";
+/// let lexed = lex(source).unwrap();
+/// let covered: usize = lexed.tokens.iter().map(|token| usize::from(token.len)).sum();
+/// assert_eq!(covered, source.len());
+/// assert!(lexed.errors.is_empty());
+/// ```
 pub fn lex(source: &str) -> Result<LexResult, InputRejection> {
     if let Some(offset) = source.find('\0') {
         return Err(InputRejection {
@@ -144,6 +212,7 @@ pub fn lex(source: &str) -> Result<LexResult, InputRejection> {
     Ok(lexer.out)
 }
 
+/// The state of one pass over the source text.
 struct Lexer<'a> {
     source: &'a str,
     pos: usize,

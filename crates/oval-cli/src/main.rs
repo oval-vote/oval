@@ -1,4 +1,32 @@
 //! The `oval` command line tool.
+//!
+//! `oval` reads Oval voting guides from files and checks, compiles, or formats them with
+//! [`oval_core`] and [`oval_format`]. It has three subcommands.
+//!
+//! - `oval check FILE...` parses and validates each file and prints every diagnostic, errors and
+//!   warnings alike, to standard output. With `--strict`, a warning fails the file as an error
+//!   does.
+//! - `oval compile FILE` compiles one file to its canonical JSON form, Section 5 of the
+//!   specification, on standard output, either compact or indented with `--pretty`. Diagnostics
+//!   go to standard error.
+//! - `oval fmt FILE...` rewrites each file in the canonical style of Section 6. With `--check` it
+//!   rewrites nothing and instead names each file that would change. A file with lexical or
+//!   syntax errors is left as it is and its diagnostics go to standard error.
+//!
+//! Diagnostics are printed one per line as `file:line:column: severity[identifier]: message`.
+//! `line` and `column` are one-based and `column` counts characters; `severity` is `error` or
+//! `warning`; `identifier` is the diagnostic's identifier in the specification, such as
+//! `missing-guide-field`. With `--json` each subcommand prints one JSON array instead, with an
+//! object per diagnostic whose fields are `path`, `code`, `severity`, `message`, `start` and `end`
+//! as `{ line, column }`, and `range` as `{ start, end }` in byte offsets. `check` prints the
+//! array even when it is empty; `compile` and `fmt` print it only when there is something to
+//! report.
+//!
+//! The exit status is 0 on success, including when the only diagnostics are warnings and `--strict`
+//! is not given. It is 1 when a checked file has an error, or a warning under `--strict`, when a
+//! compiled file is invalid, or when a formatted file has syntax errors or, under `--check`, would
+//! change. It is 2 when a file cannot be read or written, contains
+//! U+0000, or its compiled form cannot be written as JSON.
 
 mod line_index;
 
@@ -13,6 +41,7 @@ use serde::Serialize;
 
 use crate::line_index::LineIndex;
 
+/// The command line, as clap parses it.
 #[derive(Parser)]
 #[command(name = "oval", version, about = "Tools for Oval voting guides")]
 struct Cli {
@@ -20,6 +49,7 @@ struct Cli {
     command: Command,
 }
 
+/// The subcommands.
 #[derive(Subcommand)]
 enum Command {
     /// Parse and validate one or more documents.
@@ -30,6 +60,9 @@ enum Command {
         /// Print diagnostics as a JSON array instead of text lines.
         #[arg(long)]
         json: bool,
+        /// Fail when a file has warnings, not only errors.
+        #[arg(long)]
+        strict: bool,
     },
     /// Compile a document to its canonical JSON form.
     Compile {
@@ -56,18 +89,21 @@ enum Command {
     },
 }
 
+/// A one-based line and column, as `--json` output reports positions.
 #[derive(Serialize)]
 struct Position {
     line: usize,
     column: usize,
 }
 
+/// A range of byte offsets, as `--json` output reports it.
 #[derive(Serialize)]
 struct ByteRange {
     start: u32,
     end: u32,
 }
 
+/// One diagnostic as `--json` output prints it.
 #[derive(Serialize)]
 struct Entry {
     path: String,
@@ -79,6 +115,7 @@ struct Entry {
     range: ByteRange,
 }
 
+/// Collects diagnostics and prints them as text lines or, with `--json`, as one array.
 struct Printer {
     json: bool,
     entries: Vec<Entry>,
@@ -146,7 +183,11 @@ impl Printer {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
-        Command::Check { files, json } => check(&files, json),
+        Command::Check {
+            files,
+            json,
+            strict,
+        } => check(&files, json, strict),
         Command::Compile { file, pretty, json } => compile(&file, pretty, json),
         Command::Fmt { files, check, json } => fmt(&files, check, json),
     }
@@ -230,7 +271,7 @@ fn compile(path: &PathBuf, pretty: bool, json: bool) -> ExitCode {
     }
 }
 
-fn check(files: &[PathBuf], json: bool) -> ExitCode {
+fn check(files: &[PathBuf], json: bool, strict: bool) -> ExitCode {
     let mut worst = ExitCode::SUCCESS;
     let mut printer = Printer::new(json);
     for path in files {
@@ -249,7 +290,7 @@ fn check(files: &[PathBuf], json: bool) -> ExitCode {
             }
         };
         printer.report(&mut std::io::stdout(), path, &source, &report);
-        if report.has_errors() {
+        if report.has_errors() || (strict && report.has_diagnostics()) {
             worst = ExitCode::FAILURE;
         }
     }

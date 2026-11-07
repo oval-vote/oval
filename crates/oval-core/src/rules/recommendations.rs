@@ -7,6 +7,7 @@ use super::report;
 use crate::index::{EntityKind, Index};
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the recommendations of contests. References name campaigns in that contest by their head, each campaign is named once, and the tiers and counts fit the contest's kind.
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
         let campaign_of = campaign_memberships(contest);

@@ -61,6 +61,20 @@ fn warnings_alone_do_not_fail() {
 }
 
 #[test]
+fn strict_fails_on_warnings_alone() {
+    let path = write_temp(
+        "strict.oval",
+        "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nparty @dem \"D\"\ncandidate @c \"C\"\n  party @dem\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n",
+    );
+    let output = oval(&["check".as_ref(), "--strict".as_ref(), path.as_os_str()]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(String::from_utf8_lossy(&output.stdout).contains("warning[unused-declaration]"));
+    let clean = oval(&["check".as_ref(), "--strict".as_ref(), fixture().as_os_str()]);
+    assert!(clean.status.success(), "{clean:?}");
+    std::fs::remove_file(path).ok();
+}
+
+#[test]
 fn an_unreadable_file_is_exit_code_two() {
     let output = oval(&["check".as_ref(), "/definitely/not/here.oval".as_ref()]);
     assert_eq!(output.status.code(), Some(2));

@@ -3,6 +3,7 @@ use oval_syntax::ast::{Date, Document};
 use super::report;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks that every date names a day that exists.
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     let Some(field) = document.date() else {
         return;

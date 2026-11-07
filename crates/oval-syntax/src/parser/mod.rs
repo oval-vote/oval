@@ -1,4 +1,15 @@
 //! Builds a lossless syntax tree from source text.
+//!
+//! [`parse`] lexes its input with [`crate::lexer`] and matches the tokens against the syntactic
+//! grammar of Section 2 of the specification, building a [`rowan`] tree whose kinds are
+//! [`SyntaxKind`]. The tree covers every byte of the source. Trivia, lexer errors, and text the
+//! parser discards or sets aside all appear in it, the last two inside [`SyntaxKind::ErrorNode`]
+//! nodes.
+//!
+//! The parser never stops at an error. Each syntax error of Section 3.2 is recorded as a
+//! [`ParseError`] and recovered from as the specification prescribes, by skipping the line or the
+//! entry, by assuming the missing token, or by setting the entry aside. The typed views in
+//! [`crate::ast`] read the resulting tree whether or not it has errors.
 
 mod ballot;
 mod contest;
@@ -21,33 +32,51 @@ use crate::lexer::{InputRejection, LexicalError, Token, lex};
 use crate::{Keyword, SyntaxNode};
 
 /// The syntax errors of the specification, Section 3.2.
+///
+/// Each variant is one entry of that section; [`identifier`](Self::identifier) and
+/// [`title`](Self::title) give the entry's identifier and title. The recovery named on each
+/// variant is the one the specification prescribes, so two conformant parsers build the same tree
+/// and report the same errors for the same broken document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ParseErrorKind {
-    /// A token the grammar does not accept at that point, before the line has ended.
+    /// A token the grammar does not accept where the line has not yet ended; the line is skipped
+    /// from that token on, and the construct keeps what was parsed before it.
     UnexpectedToken,
-    /// An identifier is required and the line ends or a string follows.
+    /// An identifier is required and the line ends or a string follows where it should begin, or
+    /// `@` is not followed by a word; the missing token is assumed.
     MissingIdentifier,
-    /// A declaration's identifier is followed by the end of the line instead of its name.
+    /// A declaration's identifier is followed by the end of the line instead of its name; the
+    /// missing token is assumed.
     MissingName,
-    /// A contest's name is followed by the end of the line instead of a kind.
+    /// A contest's name is followed by the end of the line instead of a kind; the missing token
+    /// is assumed and the contest is kept with no kind.
     MissingContestKind,
-    /// A line ends where a value is required.
+    /// A line ends where a value is required, such as after a field keyword or after `oval`; the
+    /// missing token is assumed and the field is kept with no value.
     MissingValue,
-    /// A Markdown field's line ends with `:` and no body follows.
+    /// A Markdown field's line ends with `:` and the next line with content is not indented more
+    /// than it; the missing token is assumed and the field is kept with an empty body.
     MissingBody,
-    /// A construct whose block is required is not followed by an indented line.
+    /// A construct whose block is required is not followed by an indented line; the missing token
+    /// is assumed and the construct is kept with an empty block.
     MissingBlock,
-    /// A line that takes no block is followed by one.
+    /// A line that takes no block is followed by one; the block is skipped and the line before it
+    /// is kept.
     UnexpectedBlock,
-    /// A line begins with a token that cannot begin any entry the block accepts.
+    /// A line begins with a token that cannot begin any entry the enclosing block accepts; the
+    /// entry is skipped together with its block, if any.
     UnexpectedEntry,
-    /// A field keyword appears a second time in the same block.
+    /// A field keyword appears a second time in the same block or at the document level; the
+    /// second entry is set aside and the first stands.
     RepeatedField,
-    /// `incumbent` or `withdrawn` appears twice on one campaign line.
+    /// `incumbent` or `withdrawn` appears twice on one `campaign` line; the second flag is set
+    /// aside.
     RepeatedFlag,
-    /// A document-level entry appears after a group that must follow it has begun.
+    /// A document-level entry appears after a group that must follow it has begun, such as a
+    /// guide field after the first root ballot; the entry is set aside.
     MisplacedEntry,
-    /// A contest's `recommend` has a block with neither `support` nor `oppose`.
+    /// A contest's `recommend` has a block with neither `support` nor `oppose`; nothing is
+    /// discarded and the error spans the keyword.
     EmptyRecommendation,
 }
 
@@ -69,7 +98,9 @@ impl ParseErrorKind {
         Self::EmptyRecommendation,
     ];
 
-    /// The identifier the specification gives this error, such as `unexpected-token`.
+    /// The identifier of this error's entry in the specification, such as `unexpected-token`.
+    ///
+    /// Identifiers are stable across editions, so tools report errors by identifier.
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::UnexpectedToken => "unexpected-token",
@@ -88,7 +119,7 @@ impl ParseErrorKind {
         }
     }
 
-    /// The title of this error's entry in the specification.
+    /// The title of this error's entry in the specification, such as `Unexpected Token`.
     pub const fn title(self) -> &'static str {
         match self {
             Self::UnexpectedToken => "Unexpected Token",
@@ -108,26 +139,31 @@ impl ParseErrorKind {
     }
 }
 
-/// An error found while parsing tokens into a syntax tree.
+/// A syntax error, with its kind, what the parser expected and found, and the range it covers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ParseError {
-    /// Which error it is.
+    /// The error that occurred.
     pub kind: ParseErrorKind,
 
-    /// The kinds that would have been accepted. Empty when nothing was acceptable.
+    /// The kinds the grammar would have accepted at that point. Empty when nothing was
+    /// acceptable.
     pub expected: Vec<SyntaxKind>,
 
-    /// The kind actually found, or `None` at end of input.
+    /// The kind the parser found instead, or `None` at end of input.
+    ///
+    /// Words are classified, so a keyword appears as its keyword kind rather than as
+    /// [`SyntaxKind::Word`].
     pub found: Option<SyntaxKind>,
 
-    /// The skipped text, or an empty range where something was missing.
+    /// The range the specification assigns the error. It is the discarded or set-aside text, or
+    /// an empty range where a missing token would begin.
     pub range: TextRange,
 }
 
-/// Any error found while turning source text into a tree.
+/// An error from either stage of turning source text into a tree.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SyntaxError {
-    /// The lexer could not tokenize some text.
+    /// The lexer could not tokenize some text, or found a flaw in a token it kept.
     Lexical(LexicalError),
 
     /// The parser could not fit the tokens to the grammar.
@@ -135,7 +171,7 @@ pub enum SyntaxError {
 }
 
 impl SyntaxError {
-    /// The range of source text where the error occurred.
+    /// The range of the error, whichever stage reported it.
     pub fn range(&self) -> TextRange {
         match self {
             Self::Lexical(error) => error.range,
@@ -144,7 +180,11 @@ impl SyntaxError {
     }
 }
 
-/// The result of parsing source text into a syntax tree.
+/// The tree and the errors of one parse.
+///
+/// The tree is present whether or not there are errors; it covers every byte of the source, and
+/// [`errors`](Self::errors) lists what went wrong. A result with no errors is a well-formed
+/// document in the specification's sense.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseResult {
     root: GreenNode,
@@ -152,18 +192,44 @@ pub struct ParseResult {
 }
 
 impl ParseResult {
-    /// The root of the syntax tree.
+    /// The root of the tree, a [`SyntaxKind::Document`] node whose text is the source.
     pub fn syntax(&self) -> SyntaxNode {
         SyntaxNode::new_root(self.root.clone())
     }
 
-    /// All errors, in source order.
+    /// Every lexical and syntax error, in source order.
     pub fn errors(&self) -> &[SyntaxError] {
         &self.errors
     }
 }
 
 /// Parses `source` into a tree, or rejects the input as a whole.
+///
+/// Parsing never stops at an error. The tree of the result covers every byte of `source`, and
+/// its errors list every lexical and syntax error in source order, each recovered from as
+/// Sections 3.1 and 3.2 prescribe.
+///
+/// # Errors
+///
+/// Returns an [`InputRejection`] when `source` contains U+0000. No other input is rejected.
+///
+/// # Panics
+///
+/// Panics when `source` is longer than a [`TextSize`] can address, 4 GiB.
+///
+/// # Examples
+///
+/// ```
+/// use oval_syntax::parser::{ParseErrorKind, SyntaxError, parse};
+///
+/// let source = "oval 1\nguide\n";
+/// let result = parse(source).unwrap();
+/// assert!(matches!(
+///     result.errors(),
+///     [SyntaxError::Parse(error)] if error.kind == ParseErrorKind::MissingValue
+/// ));
+/// assert_eq!(result.syntax().text().to_string(), source);
+/// ```
 pub fn parse(source: &str) -> Result<ParseResult, InputRejection> {
     let lexed = lex(source)?;
     let mut parser = Parser {
@@ -187,6 +253,7 @@ pub fn parse(source: &str) -> Result<ParseResult, InputRejection> {
     })
 }
 
+/// The state of one pass over the token stream, building the tree as it goes.
 struct Parser<'a> {
     source: &'a str,
     tokens: Vec<Token>,
@@ -378,6 +445,12 @@ impl Parser<'_> {
 
     fn at_line_end(&self) -> bool {
         matches!(self.current(), None | Some(Newline | Indent | Dedent))
+    }
+
+    fn skip_token(&mut self) {
+        self.start_node(ErrorNode);
+        self.bump();
+        self.finish_node();
     }
 
     fn recover_line(&mut self, expected: &[SyntaxKind]) {

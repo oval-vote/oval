@@ -3,6 +3,7 @@ use oval_syntax::ast::{AstNode, Document, UrlField};
 use super::report;
 use crate::{Diagnostic, ValidationRule};
 
+/// Warns about `website` fields that use the `http` scheme.
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     for field in document.syntax().descendants().filter_map(UrlField::cast) {
         let Some(value) = field.value() else {

@@ -1,4 +1,22 @@
-//! Formats Oval documents.
+//! Formats Oval documents in the canonical style of the specification.
+//!
+//! [`format()`] rewrites a well-formed document with two spaces of indentation per level, one
+//! space between tokens, the entries of each block in the order the specification lists them,
+//! `@` attached to its word, no trailing spaces after a comment, and no leading zeros in the
+//! version marker. Every comment and every deliberate blank line survives. Formatting never
+//! changes what a document means. The result compiles to the same canonical output as the
+//! original, and formatting it again changes nothing.
+//!
+//! A document with lexical or syntax errors cannot be formatted, since the formatter would have to
+//! guess at the structure of the broken lines. Validation errors do not stop it, so an author can
+//! format a guide that still lacks a recommendation.
+//!
+//! # Examples
+//!
+//! ```
+//! let formatted = oval_format::format("oval 01\nguide   \"G\"\n").unwrap();
+//! assert_eq!(formatted, "oval 1\nguide \"G\"\n");
+//! ```
 
 use oval_syntax::lexer::InputRejection;
 use oval_syntax::parser::{ParseResult, parse};
@@ -7,16 +25,40 @@ use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 const INDENT: &str = "  ";
 
-/// Why a document could not be formatted.
+/// An error produced when [`format()`] cannot produce output.
+///
+/// Both cases mean the input is not a well-formed document. A tool that shows diagnostics should
+/// check the document instead, which reports every error with its identifier; the formatter only
+/// says that there were some.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormatError {
-    /// The input was rejected as a whole and produced no tokens.
+    /// The input contains U+0000 and was rejected before lexing. Nothing in it was read.
     Rejected(InputRejection),
-    /// The document has lexical or syntax errors, listed in the parse result.
+
+    /// The document has lexical or syntax errors. The parse result carries the tree and every
+    /// error, so a caller can report them without parsing again.
     SyntaxErrors(ParseResult),
 }
 
-/// Formats `source`, or returns why it cannot be formatted.
+/// Formats `source` in the canonical style.
+///
+/// The result uses `\n` as its line terminator and ends with exactly one. Formatting is
+/// idempotent, so formatting the result returns it unchanged.
+///
+/// # Errors
+///
+/// Returns [`FormatError::Rejected`] when `source` contains U+0000 and
+/// [`FormatError::SyntaxErrors`] when the document is not well-formed. A document with validation
+/// errors formats normally.
+///
+/// # Examples
+///
+/// ```
+/// let source = "oval 1\nballot @city \"City\"\n    measure @a \"A\"\n        recommend yes\n";
+/// let formatted = oval_format::format(source).unwrap();
+/// assert_eq!(formatted, "oval 1\nballot @city \"City\"\n  measure @a \"A\"\n    recommend yes\n");
+/// assert_eq!(oval_format::format(&formatted).unwrap(), formatted);
+/// ```
 pub fn format(source: &str) -> Result<String, FormatError> {
     let result = parse(source).map_err(FormatError::Rejected)?;
     if !result.errors().is_empty() {
@@ -35,6 +77,7 @@ pub fn format(source: &str) -> Result<String, FormatError> {
     Ok(formatter.finish())
 }
 
+/// One entry of a block together with the comments and blank lines that precede it.
 struct Entry {
     leading: Vec<SyntaxToken>,
     node: SyntaxNode,
@@ -81,11 +124,15 @@ fn trailing_trivia(node: &SyntaxNode) -> Vec<SyntaxToken> {
     out
 }
 
+/// Text the formatter has decided to emit but has not yet placed on a line.
 enum Pending {
+    /// A comment, with its trailing spaces removed.
     Comment(String),
+    /// A blank line.
     Blank,
 }
 
+/// The state of one formatting pass over a tree.
 struct Formatter {
     out: String,
     depth: usize,

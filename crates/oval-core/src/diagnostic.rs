@@ -1,3 +1,5 @@
+//! The code, severity, position, and message of every problem the checker reports.
+
 use std::fmt;
 
 use oval_syntax::TextRange;
@@ -5,39 +7,56 @@ use oval_syntax::lexer::LexicalErrorKind;
 use oval_syntax::parser::ParseErrorKind;
 use serde::{Serialize, Serializer};
 
-/// Where the specification this implementation follows is published.
+/// The address of the edition of the specification this implementation follows.
+///
+/// [`DiagnosticCode::url`] appends a fragment to it to address one entry.
 pub const SPECIFICATION_URL: &str = "https://spec.oval.vote/draft/";
 
-/// How serious a diagnostic is.
+/// The seriousness of a diagnostic, either an error or a warning.
+///
+/// Serializes as `"error"` or `"warning"`. Errors order before warnings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
-    /// The document is not valid Oval.
+    /// The document is not valid Oval. A document with any error does not compile.
     Error,
-    /// The document is valid but probably not what the author meant.
+    /// The document is valid but probably not what the author meant, Section 3.4. Warnings do not
+    /// prevent compilation.
     Warning,
 }
 
 /// The validation errors and warnings of the specification, Sections 3.3 and 3.4.
+///
+/// Each variant is one entry of those sections, in the specification's order, and gives its
+/// [`identifier`](Self::identifier), [`title`](Self::title), and [`severity`](Self::severity).
+/// Lexical and syntax errors are not rules; they are the other two variants of
+/// [`DiagnosticCode`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValidationRule {
-    /// The document has no version marker, or names an unsupported major version.
+    /// The document has no version marker, or its marker names a major version this
+    /// implementation does not read. When it is reported, nothing else is.
     UnsupportedVersion,
-    /// `guide`, `election`, or `date` is absent at the document level.
+    /// `guide`, `election`, or `date` is absent at the document level; reported once per absent
+    /// field.
     MissingGuideField,
     /// The document has no root ballot.
     EmptyDocument,
-    /// A `date` does not exist on the calendar.
+    /// A date does not exist on the proleptic Gregorian calendar.
     InvalidDate,
-    /// A reference names an identifier no declaration declares.
+    /// A reference names an identifier that no declaration in the document declares.
     UndeclaredReference,
-    /// An identifier is declared more than once.
+    /// An identifier is declared more than once, at the top level or inline, whatever the kinds
+    /// of the declarations.
     DuplicateDeclaration,
-    /// A reference resolves to a declaration of a kind its position does not accept.
+    /// A reference resolves to a declaration of a kind its position does not accept. A `party`
+    /// line must name a party, and a member, `support`, or `oppose` must name a candidate.
     MismatchedReference,
-    /// A member that is a reference is followed by a block of candidate fields.
+    /// A member that is a reference, not an inline declaration, is followed by an indented block
+    /// of candidate fields.
     BlockOnReference,
-    /// `designation` or `party` appears where it cannot describe a candidate.
+    /// `designation` or `party` appears where it cannot describe a candidate, either at the
+    /// campaign level of a block-form campaign or on a one-line campaign whose member is a
+    /// reference.
     MisplacedCandidateField,
     /// A ballot has fields but no items.
     EmptyBallot,
@@ -57,42 +76,55 @@ pub enum ValidationRule {
     InvalidRankedMax,
     /// A `retention` contest has no campaign or more than one.
     RetentionCampaignCount,
-    /// A contest or measure has no recommendation.
+    /// A contest or measure has no recommendation; `recommend no-position` is how an author takes
+    /// none.
     MissingRecommendation,
     /// A contest or measure has more than one recommendation.
     RepeatedRecommendation,
-    /// A `support` or `oppose` reference names a candidate in no campaign of the contest.
+    /// A `support` or `oppose` reference names a candidate who is a member of no campaign in the
+    /// enclosing contest.
     CampaignNotInContest,
     /// A recommendation has more than one `oppose` line.
     RepeatedOppose,
-    /// A candidate is referenced more than once across a recommendation's lines.
+    /// A candidate is referenced more than once across a recommendation's `support` lines and its
+    /// `oppose` line.
     RepeatedStance,
     /// A `single` contest's recommendation has more than one `support` line.
     TiersInSingle,
-    /// A `ranked` contest's `support` lines name more campaigns than its `max`.
+    /// A `ranked` contest declares `max` *n* and its recommendation's `support` lines name more
+    /// than *n* campaigns in total.
     SupportOverMax,
-    /// A `retention` contest's recommendation is not one `support` or one `oppose` reference.
+    /// A `retention` contest's recommendation is anything other than one `support` line with one
+    /// reference, one `oppose` line with one reference, or `recommend no-position`.
     RetentionStance,
-    /// A Markdown body uses a construct outside the profile.
+    /// A Markdown body contains a construct outside the profile of Section 2.2, or a link whose
+    /// destination is not an absolute `http` or `https` URL. Its identifier is `markdown-profile`.
     UnsupportedMarkdown,
-    /// A top-level party or candidate declaration is never used.
+    /// A top-level party is named by no `party` line, or a top-level candidate is a member of no
+    /// campaign. This rule is a warning.
     UnusedDeclaration,
-    /// Two parties have the same name and different identifiers.
+    /// Two party declarations have the same name and different identifiers. This rule is a
+    /// warning.
     DuplicatePartyName,
-    /// Two root or sibling ballots have identical titles.
+    /// Two root ballots, or two sibling sub-ballots, have identical titles. This rule is a
+    /// warning.
     DuplicateBallotTitle,
-    /// A `multiple` contest's `support` lines name more campaigns than there are seats.
+    /// A `multiple` contest elects *n* and its recommendation's `support` lines name more than
+    /// *n* campaigns in total. This rule is a warning.
     SupportOverCount,
-    /// A reference names a ticket member other than its first.
+    /// A `support` or `oppose` reference names a member of a multi-member campaign other than
+    /// its first member. This rule is a warning.
     NonHeadReference,
-    /// A measure has exactly one of `if_yes` and `if_no`.
+    /// A measure has exactly one of `if_yes` and `if_no`. This rule is a warning.
     UnpairedOutcome,
-    /// A URL or link destination uses `http` rather than `https`.
+    /// A URL, or a link destination inside a Markdown body, uses the `http` scheme rather than
+    /// `https`. This rule is a warning.
     InsecureUrl,
 }
 
 impl ValidationRule {
-    /// Every rule, in the specification's order.
+    /// Every rule, in the specification's order. The errors of Section 3.3 come first, then the
+    /// warnings of Section 3.4.
     pub const ALL: &'static [Self] = &[
         Self::UnsupportedVersion,
         Self::MissingGuideField,
@@ -131,6 +163,8 @@ impl ValidationRule {
     ];
 
     /// The identifier the specification gives this rule, such as `invalid-date`.
+    ///
+    /// Identifiers are stable across editions, so tools report diagnostics by identifier.
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::UnsupportedVersion => "unsupported-version",
@@ -170,7 +204,7 @@ impl ValidationRule {
         }
     }
 
-    /// The title of this rule's entry in the specification.
+    /// The title of this rule's entry in the specification, such as `Invalid Date`.
     pub const fn title(self) -> &'static str {
         match self {
             Self::UnsupportedVersion => "Unsupported Version",
@@ -211,6 +245,8 @@ impl ValidationRule {
     }
 
     /// Whether breaking this rule makes the document invalid.
+    ///
+    /// The rules of Section 3.3 are errors and those of Section 3.4 are warnings.
     pub const fn severity(self) -> Severity {
         match self {
             Self::UnsupportedVersion
@@ -251,19 +287,49 @@ impl ValidationRule {
     }
 }
 
-/// What a diagnostic is about: one entry of the specification's Section 3.
+/// The subject of a diagnostic, which is one entry of the specification's Section 3.
+///
+/// The three variants are the three families of Section 3 and the three stages of checking that
+/// report them. Every code has an [`identifier`](Self::identifier), a [`title`](Self::title), and
+/// a [`severity`](Self::severity), taken from the kind or rule inside it, and an address on the
+/// specification's site built from the title. [`anchor`](Self::anchor) is `sec-` followed by the
+/// title with each space replaced by `-`, and [`url`](Self::url) is [`SPECIFICATION_URL`]
+/// followed by `#` and the anchor.
+///
+/// Displays and serializes as its identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DiagnosticCode {
-    /// A lexical error, Section 3.1.
+    /// A lexical error, Section 3.1, which is text the lexer could not tokenize or a flaw within
+    /// a token.
     Lexical(LexicalErrorKind),
-    /// A syntax error, Section 3.2.
+    /// A syntax error, Section 3.2, which is a token the grammar did not expect.
     Syntax(ParseErrorKind),
-    /// A validation error or warning, Sections 3.3 and 3.4.
+    /// A validation error or warning, Sections 3.3 and 3.4, which is a rule that a well-formed
+    /// document breaks.
     Validation(ValidationRule),
 }
 
 impl DiagnosticCode {
-    /// Every code, in the specification's order.
+    /// Every code, in the specification's order. Lexical errors come first, then syntax errors,
+    /// then validation rules.
+    ///
+    /// This is the catalog a tool uses to list what it can report, with each code's identifier,
+    /// title, severity, and address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oval_core::{DiagnosticCode, Severity};
+    ///
+    /// let all = DiagnosticCode::all();
+    /// let identifiers: Vec<&str> = all.iter().map(|code| code.identifier()).collect();
+    /// assert_eq!(identifiers.first(), Some(&"illegal-tab"));
+    /// assert_eq!(identifiers.last(), Some(&"insecure-url"));
+    /// assert!(identifiers.contains(&"missing-guide-field"));
+    ///
+    /// let warnings = all.iter().filter(|code| code.severity() == Severity::Warning).count();
+    /// assert_eq!(warnings, 7);
+    /// ```
     pub fn all() -> Vec<Self> {
         LexicalErrorKind::ALL
             .iter()
@@ -278,6 +344,8 @@ impl DiagnosticCode {
     }
 
     /// The identifier the specification gives this code, such as `illegal-tab`.
+    ///
+    /// Identifiers are unique across the three families and stable across editions.
     pub const fn identifier(self) -> &'static str {
         match self {
             Self::Lexical(kind) => kind.identifier(),
@@ -286,7 +354,7 @@ impl DiagnosticCode {
         }
     }
 
-    /// The title of this code's entry in the specification.
+    /// The title of this code's entry in the specification, such as `Illegal Tab`.
     pub const fn title(self) -> &'static str {
         match self {
             Self::Lexical(kind) => kind.title(),
@@ -295,7 +363,10 @@ impl DiagnosticCode {
         }
     }
 
-    /// How serious a diagnostic with this code is.
+    /// The severity of a diagnostic with this code.
+    ///
+    /// Lexical and syntax errors are always errors; a validation rule's severity is
+    /// [`ValidationRule::severity`].
     pub const fn severity(self) -> Severity {
         match self {
             Self::Lexical(_) | Self::Syntax(_) => Severity::Error,
@@ -303,12 +374,24 @@ impl DiagnosticCode {
         }
     }
 
-    /// The fragment of this code's entry on the specification's site.
+    /// The fragment of this code's entry on the specification's site, which is `sec-` followed by
+    /// the [`title`](Self::title) with each space replaced by `-`, such as `sec-Illegal-Tab`.
     pub fn anchor(self) -> String {
         format!("sec-{}", self.title().replace(' ', "-"))
     }
 
-    /// The address of this code's entry on the specification's site.
+    /// The address of this code's entry on the specification's site. It is [`SPECIFICATION_URL`]
+    /// followed by `#` and the [`anchor`](Self::anchor).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oval_core::{DiagnosticCode, ValidationRule};
+    ///
+    /// let code = DiagnosticCode::Validation(ValidationRule::TiersInSingle);
+    /// assert_eq!(code.anchor(), "sec-Tiers-in-a-Single-Contest");
+    /// assert_eq!(code.url(), "https://spec.oval.vote/draft/#sec-Tiers-in-a-Single-Contest");
+    /// ```
     pub fn url(self) -> String {
         format!("{SPECIFICATION_URL}#{}", self.anchor())
     }
@@ -320,22 +403,43 @@ impl fmt::Display for DiagnosticCode {
     }
 }
 
-/// One problem found in a document.
+/// One problem found in a document, with a code, a severity, a range, and a message.
+///
+/// Serializes as an object with `code` (the identifier), `severity`, `range` (`start` and `end`
+/// as byte offsets), and `message`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Diagnostic {
-    /// What the diagnostic is about.
+    /// The entry of the specification the diagnostic reports.
     pub code: DiagnosticCode,
-    /// How serious it is.
+    /// The severity, which [`new`](Self::new) takes from the code.
     pub severity: Severity,
-    /// Where it is.
+    /// The location, as a range of byte offsets into the UTF-8 source, empty when the specification
+    /// places the diagnostic at a point.
     #[serde(serialize_with = "serialize_range")]
     pub range: TextRange,
     /// A one-sentence explanation for the author.
+    ///
+    /// Messages are this implementation's wording and may change; the code is the stable part.
     pub message: String,
 }
 
 impl Diagnostic {
-    /// A diagnostic whose severity is the one its code carries.
+    /// Creates a diagnostic for `code` at `range`, with the severity the code carries.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oval_core::{Diagnostic, DiagnosticCode, Severity, ValidationRule};
+    /// use oval_syntax::TextRange;
+    ///
+    /// let code = DiagnosticCode::Validation(ValidationRule::UnusedDeclaration);
+    /// let range = TextRange::new(7.into(), 30.into());
+    /// let message = "`@gop` is declared but no candidate belongs to it".to_owned();
+    /// let diagnostic = Diagnostic::new(code, range, message);
+    /// assert_eq!(diagnostic.severity, Severity::Warning);
+    /// assert_eq!(diagnostic.code.identifier(), "unused-declaration");
+    /// assert_eq!(u32::from(diagnostic.range.start()), 7);
+    /// ```
     pub fn new(code: DiagnosticCode, range: TextRange, message: String) -> Self {
         Self {
             code,

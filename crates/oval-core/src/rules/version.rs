@@ -4,6 +4,10 @@ use oval_syntax::{SUPPORTED_LANGUAGE_MAJOR, SyntaxKind, TextRange};
 use super::report;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the version marker.
+///
+/// Returns `false` when the marker is missing or names a major version this crate does not read,
+/// in which case `unsupported-version` is the only diagnostic the document gets.
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) -> bool {
     let Some(marker) = document.version() else {
         out.push(report(

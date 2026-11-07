@@ -5,6 +5,7 @@ use pulldown_cmark::{CodeBlockKind, Event, LinkType, Options, Parser, Tag};
 use super::report;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks every Markdown body against the profile of Section 2.2 and warns about `http` links.
 pub(crate) fn check(document: &Document, out: &mut Vec<Diagnostic>) {
     for field in document
         .syntax()
