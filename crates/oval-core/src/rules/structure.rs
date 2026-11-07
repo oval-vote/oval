@@ -7,6 +7,7 @@ use super::report;
 use crate::index::Index;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the structure. A document has a root ballot, every ballot and section has questions, every contest has campaigns, every campaign has members, and sibling ballots have distinct titles.
 pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
     if document.ballots().next().is_none() {
         out.push(report(

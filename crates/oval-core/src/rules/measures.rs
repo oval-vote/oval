@@ -4,6 +4,7 @@ use super::report;
 use crate::index::Index;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks that a measure gives `if_yes` and `if_no` together or not at all.
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for measure in &index.measures {
         match (measure.if_yes(), measure.if_no()) {

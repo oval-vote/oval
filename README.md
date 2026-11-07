@@ -14,7 +14,7 @@ oval compile --pretty guide.oval # the canonical JSON form, for renderers and ot
 
 `check` prints diagnostics as `file:line:column: severity[code]: message`, where the code is the
 identifier of the error's entry in the specification, such as `illegal-tab` or `invalid-date`, and
-exits 1 if any are errors. `compile` prints JSON
+exits 1 if any are errors, or if any are warnings and `--strict` is given. `compile` prints JSON
 that validates against the specification's `guide.schema.json`, or prints diagnostics to stderr
 and exits 1 if the document has errors.
 

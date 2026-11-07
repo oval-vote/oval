@@ -1,4 +1,26 @@
-//! Resolution and validation for the Oval voting guide format.
+//! Validation and compilation for the Oval voting guide format.
+//!
+//! This crate is the reference implementation of Sections 3 through 5 of the specification. It
+//! parses a document with [`oval_syntax`], resolves its identifiers, checks every validation rule,
+//! and compiles a valid document to the canonical model that renderers consume.
+//!
+//! [`check`] parses and validates a document and returns a [`Report`] with every diagnostic in
+//! source order, errors and warnings alike. [`compile()`] does the same and then produces the
+//! [`Compiled`] model, or fails with the report when the document has errors. An editor or linter
+//! calls `check`; a renderer calls `compile`.
+//!
+//! Every [`Diagnostic`] carries a [`DiagnosticCode`], which names its entry in the specification by
+//! the identifier used there, such as `missing-guide-field`, and gives the address of that entry
+//! with [`DiagnosticCode::url`].
+//!
+//! # Examples
+//!
+//! ```
+//! let report = oval_core::check("oval 1\nguide \"Franklin Voter Guide\"\n").unwrap();
+//! let codes: Vec<&str> = report.diagnostics().iter().map(|d| d.code.identifier()).collect();
+//! assert!(codes.contains(&"missing-guide-field"));
+//! assert!(report.has_errors());
+//! ```
 
 pub mod compile;
 mod diagnostic;
@@ -14,16 +36,23 @@ pub use oval_syntax::lexer::InputRejection;
 use oval_syntax::ast::{AstNode, Document};
 use oval_syntax::parser::{ParseResult, parse};
 
-/// Why a document could not be compiled.
+/// An error produced when [`compile()`] cannot produce a model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
-    /// The input was rejected as a whole and produced no tokens.
+    /// The input contains U+0000 and was rejected before lexing. Nothing in it was read.
     Rejected(InputRejection),
-    /// The document has errors, listed in the report.
+
+    /// The document has at least one error. The report lists every diagnostic, warnings included,
+    /// so a caller can show all of them.
     Invalid(Report),
 }
 
-/// Everything a tool needs to report about one document.
+/// The outcome of checking one document, with its syntax tree and every diagnostic.
+///
+/// A report is complete. It carries every lexical error, syntax error, broken validation rule, and
+/// warning, in source order, so that an author sees all of them in one pass. The tree is the
+/// lossless tree from [`oval_syntax`], so tools that need positions or structure, such as a
+/// formatter or an editor, read it from here rather than parsing again.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Report {
     parse: ParseResult,
@@ -31,25 +60,55 @@ pub struct Report {
 }
 
 impl Report {
-    /// The syntax tree and its errors.
+    /// Parse the syntax tree
+    ///
+    /// The same errors appear in [`diagnostics`](Self::diagnostics) as diagnostics with messages;
+    /// this form keeps their kinds and expected tokens for tools that want to inspect them.
     pub fn parse(&self) -> &ParseResult {
         &self.parse
     }
 
-    /// Every diagnostic, in source order.
+    /// Every diagnostic, in source order, errors and warnings alike.
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
     }
 
-    /// Whether any diagnostic is an error.
+    /// Whether any diagnostic is an error, which is to say whether the document is invalid.
+    ///
+    /// Warnings do not count. A document whose only diagnostics are warnings is valid and compiles.
     pub fn has_errors(&self) -> bool {
         self.diagnostics
             .iter()
             .any(|d| d.severity == Severity::Error)
     }
+
+    /// Whether the report has any diagnostics, errors or warnings.
+    pub fn has_diagnostics(&self) -> bool {
+        !self.diagnostics.is_empty()
+    }
 }
 
-/// Parses, validates, and compiles `source`. Fails with the report when the document has errors.
+/// Parses, validates, and compiles `source` to the canonical model.
+///
+/// The model is the one the specification's `guide.schema.json` describes. It is the guide with
+/// every reference resolved and with the derived fields any renderer would otherwise recompute.
+/// Two documents that differ only in comments, whitespace, or formatting compile to the same model.
+///
+/// # Errors
+///
+/// Returns [`CompileError::Rejected`] when `source` contains U+0000 and
+/// [`CompileError::Invalid`] when the document has any error. Warnings alone do not prevent
+/// compilation; they are in the report that [`check`] returns.
+///
+/// # Examples
+///
+/// ```
+/// let source = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\n\
+///     ballot @city \"City\"\n  measure @a \"Proposition A\"\n    recommend yes\n";
+/// let compiled = oval_core::compile(source).unwrap();
+/// assert_eq!(compiled.oval, 1);
+/// assert_eq!(compiled.counts.measures, 1);
+/// ```
 pub fn compile(source: &str) -> Result<Compiled, CompileError> {
     let report = check(source).map_err(CompileError::Rejected)?;
     if report.has_errors() {
@@ -59,7 +118,27 @@ pub fn compile(source: &str) -> Result<Compiled, CompileError> {
     compiled.ok_or(CompileError::Invalid(report))
 }
 
-/// Parses and validates `source`, or rejects the input as a whole.
+/// Parses and validates `source`, reporting every diagnostic.
+///
+/// Checking runs the three stages the specification describes, which are lexing, parsing, and
+/// validation. Each stage continues past errors, so the report is complete even for a badly broken
+/// document. One exception keeps the output useful. When the version marker is missing or names a
+/// major version this crate does not read, the report contains only `unsupported-version`, since
+/// every other diagnostic would be noise about a document written to another language.
+///
+/// # Errors
+///
+/// Returns the [`InputRejection`] when `source` contains U+0000, the one input that is not an
+/// Oval document at all. Every other input is checked and produces a report.
+///
+/// # Examples
+///
+/// ```
+/// let source = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-13-01\n";
+/// let report = oval_core::check(source).unwrap();
+/// let codes: Vec<&str> = report.diagnostics().iter().map(|d| d.code.identifier()).collect();
+/// assert_eq!(codes, ["invalid-date", "empty-document"]);
+/// ```
 pub fn check(source: &str) -> Result<Report, InputRejection> {
     let parse = parse(source)?;
     let document = Document::cast(parse.syntax());

@@ -1,9 +1,12 @@
+//! Messages for lexical and syntax errors, which the parser reports by kind alone.
+
 use oval_syntax::SyntaxKind;
 use oval_syntax::lexer::{LexicalError, LexicalErrorKind};
 use oval_syntax::parser::{ParseError, ParseErrorKind, SyntaxError};
 
 use crate::{Diagnostic, DiagnosticCode};
 
+/// A diagnostic for `error`, with a message that names what was expected and what was found.
 pub(crate) fn diagnostic(source: &str, error: &SyntaxError) -> Diagnostic {
     let message = match error {
         SyntaxError::Lexical(error) => lexical_message(error),

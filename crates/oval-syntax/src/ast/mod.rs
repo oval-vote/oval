@@ -1,4 +1,41 @@
 //! Typed views over the syntax tree.
+//!
+//! Each view wraps a [`SyntaxNode`] of one kind and exposes the parts of that construct which the
+//! specification names. There is [`Document`] for the root, [`Ballot`] and [`Section`] for the
+//! tree of questions, [`Contest`], [`Campaign`], and [`Member`] for offices, [`Measure`] for
+//! yes-or-no questions, and the field types for the values written under them. Every accessor is
+//! total. A part the parser did not find is `None` or an empty iterator, since a document with
+//! errors still has a tree and tools still read it.
+//!
+//! [`AstNode`] is the trait the views share. [`AstNode::cast`] turns a node into a view and
+//! [`AstNode::syntax`] returns the node. A view is the node and nothing more, so it clones cheaply
+//! and reads the tree each time an accessor is called.
+//!
+//! # Examples
+//!
+//! ```
+//! use oval_syntax::ast::{AstNode, BallotItem, Document};
+//! use oval_syntax::parser::parse;
+//!
+//! let source = r#"oval 1
+//! guide "G"
+//! election "E"
+//! date 2026-11-03
+//! ballot @city "City"
+//!   contest @mayor "Mayor" single
+//!     campaign @delgado "Rosa Delgado"
+//!     recommend
+//!       support @delgado
+//! "#;
+//! let result = parse(source).unwrap();
+//! let document = Document::cast(result.syntax()).unwrap();
+//! let ballot = document.ballots().next().unwrap();
+//! let Some(BallotItem::Contest(contest)) = ballot.items().next() else {
+//!     panic!("the first item is a contest");
+//! };
+//! assert_eq!(contest.title().as_deref(), Some("Mayor"));
+//! assert_eq!(contest.campaigns().count(), 1);
+//! ```
 
 mod ballot;
 mod contest;
@@ -18,23 +55,47 @@ pub use recommend::{ContestRecommend, Oppose, Support};
 
 use crate::{Keyword, SyntaxKind, SyntaxNode, SyntaxToken, TextSize};
 
-/// A typed wrapper around a [`SyntaxNode`] of one particular kind.
+/// A typed view over a [`SyntaxNode`] of one particular kind.
+///
+/// Every view in this module implements it. The three required methods are the whole contract;
+/// the provided ones read positions and structure that every construct has.
 pub trait AstNode: Sized {
     /// Whether nodes of `kind` can be viewed as this type.
     fn can_cast(kind: SyntaxKind) -> bool;
 
     /// Wraps `node` if it has the right kind.
+    ///
+    /// `None` when [`can_cast`](Self::can_cast) is false for the node's kind.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oval_syntax::ast::{AstNode, Document, Party};
+    /// use oval_syntax::parser::parse;
+    ///
+    /// let result = parse("oval 1\nparty @dem \"Democratic\"\n").unwrap();
+    /// assert!(Party::cast(result.syntax()).is_none());
+    /// let document = Document::cast(result.syntax()).unwrap();
+    /// assert_eq!(document.parties().count(), 1);
+    /// ```
     fn cast(node: SyntaxNode) -> Option<Self>;
 
-    /// The underlying node.
+    /// The node this view wraps.
     fn syntax(&self) -> &SyntaxNode;
 
     /// The source range the node covers.
+    ///
+    /// A construct with a block covers the block too, so the range of a ballot spans every question
+    /// in it. [`header_line_range`](Self::header_line_range) is the first line alone.
     fn range(&self) -> TextRange {
         self.syntax().text_range()
     }
 
     /// The range of the node's first line, up to its line terminator.
+    ///
+    /// For a construct with a block this is the header line. It covers the keyword, the
+    /// identifier, the name, and whatever else precedes the block. Diagnostics about a construct
+    /// as a whole point here.
     fn header_line_range(&self) -> TextRange {
         let node = self.syntax();
         let end = tokens(node)
@@ -47,6 +108,10 @@ pub trait AstNode: Sized {
     }
 
     /// Whether an indented block follows the node's first line.
+    ///
+    /// `false` when the construct ends at its first line, whether or not the grammar allows that.
+    /// A required block that is missing is the syntax error `missing-block`, and the tree records
+    /// nothing in its place.
     fn has_block(&self) -> bool {
         block(self.syntax()).is_some()
     }
@@ -76,107 +141,147 @@ macro_rules! ast_node {
 pub(crate) use ast_node;
 
 ast_node! {
-    /// An identifier: `@` followed by a word.
+    /// An identifier, written as `@` followed by a word.
+    ///
+    /// Identifiers name parties, candidates, ballots, contests, and measures, and share one
+    /// namespace (Section 2.7). The same node is a declaration or a reference depending on where it
+    /// is written; the construct around it says which.
     Identifier
 }
 
 impl Identifier {
     /// The name after the `@`.
+    ///
+    /// Empty when the parser recovered from an `@` with no word after it.
     pub fn name(&self) -> String {
         token(&self.0, SyntaxKind::Word).map_or_else(String::new, |word| word.text().to_owned())
     }
 }
 
 /// A calendar date as written, with no check that it exists.
+///
+/// The lexer matches the shape `YYYY-MM-DD` only, so `2026-02-30` is a [`Date`]. Whether a date is
+/// on the calendar is the validation rule `invalid-date`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Date {
-    /// Four-digit year.
+    /// The year, four digits.
     pub year: u16,
-    /// Month, 1 through 12 if valid.
+    /// The month as written, 1 through 12 when valid.
     pub month: u8,
-    /// Day of month, 1 through 31 if valid.
+    /// The day of the month as written, 1 through 31 when valid.
     pub day: u8,
 }
 
 ast_node! {
-    /// A field whose value is a string.
+    /// A field whose value is a string, such as `guide`, `subtitle`, or `designation`.
     StringField
 }
 
 ast_node! {
-    /// A field whose value is a date.
+    /// A field whose value is a date, which is to say `date`.
     DateField
 }
 
 ast_node! {
-    /// A field whose value is a URL.
+    /// A field whose value is a URL, which is to say `website`.
     UrlField
 }
 
 ast_node! {
-    /// A field whose value is a Markdown body.
+    /// A field whose value is a Markdown body, which is to say `note`, `justification`,
+    /// `description`, `if_yes`, or `if_no`.
     MarkdownField
 }
 
 impl StringField {
-    /// Which field this is.
+    /// The keyword that names the field, such as [`Keyword::Guide`] or [`Keyword::Subtitle`].
+    ///
+    /// The parser begins every field with its keyword, so this is `None` only for a node built
+    /// some other way.
     pub fn keyword(&self) -> Option<Keyword> {
         keyword(&self.0)
     }
 
     /// The string with its escapes resolved.
+    ///
+    /// Only `\"` and `\\` are escapes (Section 2.2); any other backslash is kept as written.
+    /// `None` when the line ended before the value.
     pub fn value(&self) -> Option<String> {
         token(&self.0, SyntaxKind::StringLiteral).map(|t| string_value(t.text()))
     }
 }
 
 impl DateField {
-    /// Which field this is.
+    /// The keyword that names the field, which is [`Keyword::Date`].
+    ///
+    /// The parser begins every field with its keyword, so this is `None` only for a node built
+    /// some other way.
     pub fn keyword(&self) -> Option<Keyword> {
         keyword(&self.0)
     }
 
     /// The date as written.
+    ///
+    /// The parts are split from the text without validation, so a month of 13 comes back as 13.
+    /// `None` when the line ended before the value.
     pub fn value(&self) -> Option<Date> {
         token(&self.0, SyntaxKind::DateLiteral).map(|t| date_value(t.text()))
     }
 
-    /// The range of the date itself.
+    /// The range of the date itself, without the keyword.
+    ///
+    /// `None` when the line ended before the value.
     pub fn value_range(&self) -> Option<TextRange> {
         token_range(&self.0, SyntaxKind::DateLiteral)
     }
 }
 
 impl UrlField {
-    /// Which field this is.
+    /// The keyword that names the field, which is [`Keyword::Website`].
+    ///
+    /// The parser begins every field with its keyword, so this is `None` only for a node built
+    /// some other way.
     pub fn keyword(&self) -> Option<Keyword> {
         keyword(&self.0)
     }
 
-    /// The URL text.
+    /// The URL text, exactly as written.
+    ///
+    /// `None` when the line ended before the value.
     pub fn value(&self) -> Option<String> {
         token(&self.0, SyntaxKind::UrlLiteral).map(|t| t.text().to_owned())
     }
 
-    /// The range of the URL itself.
+    /// The range of the URL itself, without the keyword.
+    ///
+    /// `None` when the line ended before the value.
     pub fn value_range(&self) -> Option<TextRange> {
         token_range(&self.0, SyntaxKind::UrlLiteral)
     }
 }
 
 impl MarkdownField {
-    /// Which field this is.
+    /// The keyword that names the field, such as [`Keyword::Note`] or [`Keyword::Justification`].
+    ///
+    /// The parser begins every field with its keyword, so this is `None` only for a node built
+    /// some other way.
     pub fn keyword(&self) -> Option<Keyword> {
         keyword(&self.0)
     }
 
     /// The body with its common indentation removed, line terminators normalized to `\n`,
     /// and no trailing terminator.
+    ///
+    /// This is the value Section 2.2 derives from a `MarkdownBlock` token. `None` when no body
+    /// followed the colon, which the parser reports as `missing-body`.
     pub fn value(&self) -> Option<String> {
         self.body().map(|body| body.value)
     }
 
     /// The body's value together with the mapping back to its source positions.
+    ///
+    /// Tools that report on the Markdown, such as the `markdown-profile` check, use this to place
+    /// a diagnostic in the source. `None` when no body followed the colon.
     pub fn body(&self) -> Option<MarkdownBody> {
         token(&self.0, SyntaxKind::MarkdownBlock)
             .map(|t| MarkdownBody::new(t.text(), t.text_range().start()))
@@ -184,6 +289,11 @@ impl MarkdownField {
 }
 
 /// The value of a Markdown body and where each of its lines sits in the source.
+///
+/// The value differs from the source text. Indentation is removed and line terminators are
+/// normalized. [`source_offset`](Self::source_offset) and [`source_range`](Self::source_range)
+/// map positions in the value back to the source so that a diagnostic found in the value can be
+/// reported where the author wrote it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MarkdownBody {
     value: String,
@@ -230,7 +340,10 @@ impl MarkdownBody {
         &self.value
     }
 
-    /// The source offset of a byte offset within the value.
+    /// The source offset of the byte at `value_offset` in the value.
+    ///
+    /// Offsets within a line map exactly. An offset at a line's `\n` maps to the source position
+    /// after that line's content, which is where its terminator begins.
     pub fn source_offset(&self, value_offset: usize) -> TextSize {
         let (line_start, source) = self
             .lines
@@ -244,7 +357,10 @@ impl MarkdownBody {
                 .map_or(TextSize::from(u32::MAX), TextSize::from)
     }
 
-    /// The source range of a byte range within the value.
+    /// The source range of the bytes in `range` of the value.
+    ///
+    /// Each end maps as [`source_offset`](Self::source_offset) maps it, so a range that spans
+    /// lines covers the removed indentation and the original terminators between them.
     pub fn source_range(&self, range: std::ops::Range<usize>) -> TextRange {
         TextRange::new(
             self.source_offset(range.start),

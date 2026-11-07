@@ -1,3 +1,6 @@
+//! The index of a document, built once before validation so that every rule can resolve
+//! references and walk the constructs without searching the tree again.
+
 use std::collections::HashMap;
 
 use oval_syntax::TextRange;
@@ -6,16 +9,23 @@ use oval_syntax::ast::{
     PartyReference, Section, SectionItem,
 };
 
+/// The kind of construct an identifier declares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum EntityKind {
+    /// A `party` declaration, at the top level or inline.
     Party,
+    /// A `candidate` declaration, at the top level or inline in a campaign.
     Candidate,
+    /// A `ballot`, root or nested.
     Ballot,
+    /// A `contest`.
     Contest,
+    /// A `measure`.
     Measure,
 }
 
 impl EntityKind {
+    /// The lowercase noun for this kind, as diagnostic messages use it.
     pub(crate) fn noun(self) -> &'static str {
         match self {
             Self::Party => "party",
@@ -27,42 +37,69 @@ impl EntityKind {
     }
 }
 
+/// One declared identifier, in document order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Declaration {
+    /// The identifier without its `@`.
     pub(crate) name: String,
+    /// The kind of construct declared.
     pub(crate) kind: EntityKind,
+    /// The range of the identifier token, `@` included.
     pub(crate) range: TextRange,
 }
 
+/// The position a reference appears in, which decides what it may name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum ReferenceSite {
+    /// A `party` line on a candidate or campaign, which names a party.
     PartyLine,
+    /// A member of a campaign, which names a candidate.
     Member,
+    /// A `support` or `oppose` line, which names a candidate.
     Stance,
 }
 
+/// One use of an identifier, in document order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Reference {
+    /// The identifier without its `@`.
     pub(crate) name: String,
+    /// The kind of declaration the position accepts.
     pub(crate) expected: EntityKind,
+    /// The position the reference appears in.
     pub(crate) site: ReferenceSite,
+    /// The range of the identifier token, `@` included.
     pub(crate) range: TextRange,
 }
 
+/// Everything the validation rules look up about a document.
+///
+/// The index is built once by [`Index::build`] and read by every rule. Declarations and
+/// references keep document order, so diagnostics derived from them come out in source order.
 #[derive(Debug, Default)]
 pub(crate) struct Index {
+    /// Every declared identifier, in document order.
     pub(crate) declarations: Vec<Declaration>,
+    /// Every use of an identifier, in document order.
     pub(crate) references: Vec<Reference>,
+    /// The position in `declarations` of the first declaration of each name.
     pub(crate) by_name: HashMap<String, usize>,
+    /// The positions in `declarations` of every declaration whose name was already declared.
     pub(crate) duplicates: Vec<usize>,
+    /// Every contest, in ballot order.
     pub(crate) contests: Vec<Contest>,
+    /// Every measure, in ballot order.
     pub(crate) measures: Vec<Measure>,
+    /// Every ballot, root and nested, in ballot order.
     pub(crate) ballots: Vec<Ballot>,
+    /// Every section, in ballot order.
     pub(crate) sections: Vec<Section>,
+    /// Every `party` line that declares a party inline rather than naming one.
     pub(crate) inline_parties: Vec<PartyReference>,
 }
 
 impl Index {
+    /// Walks `document` once and records its declarations, references, and constructs.
     pub(crate) fn build(document: &Document) -> Self {
         let mut index = Self::default();
         index.collect(document);
@@ -76,6 +113,7 @@ impl Index {
         index
     }
 
+    /// The first declaration of `name`, or `None` when nothing declares it.
     pub(crate) fn resolve(&self, name: &str) -> Option<&Declaration> {
         self.by_name.get(name).map(|i| &self.declarations[*i])
     }

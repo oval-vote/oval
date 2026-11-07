@@ -1460,6 +1460,22 @@ fn a_bare_recommend_needs_a_block() {
 }
 
 #[test]
+fn a_string_in_place_of_a_stance_identifier_is_reported_once() {
+    let source = in_contest("recommend\n  support \"Ada\"\n");
+    let result = parse(&source);
+    assert_eq!(
+        result.errors(),
+        [SyntaxError::Parse(ParseError {
+            kind: ParseErrorKind::MissingIdentifier,
+            expected: vec![SyntaxKind::At],
+            found: Some(SyntaxKind::StringLiteral),
+            range: TextRange::empty(span(&source, "\"Ada\"").start()),
+        })]
+    );
+    assert_eq!(result.syntax().text().to_string(), source);
+}
+
+#[test]
 fn support_and_oppose_need_identifiers_and_nothing_else() {
     let source = in_contest("recommend\n  support\n  oppose @a \"x\"\n");
     let result = parse(&source);

@@ -1,12 +1,19 @@
+//! Line and column numbers for byte offsets, as the text diagnostics print them.
+
 use oval_syntax::TextSize;
 
+/// A table of line starts for one source string, for turning byte offsets into positions.
 pub(crate) struct LineIndex {
+    /// The byte offsets of the first character of each line, in order.
     line_starts: Vec<usize>,
+    /// The length of the source string in bytes.
     source_len: usize,
+    /// The source string itself, stored to allow for column calculations.
     source: String,
 }
 
 impl LineIndex {
+    /// Creates a new `LineIndex` for the given source string.
     pub(crate) fn new(source: &str) -> Self {
         let mut line_starts = vec![0];
         let bytes = source.as_bytes();
@@ -31,6 +38,7 @@ impl LineIndex {
         }
     }
 
+    /// Returns the line and column numbers corresponding to the given byte offset.
     pub(crate) fn line_column(&self, offset: TextSize) -> (usize, usize) {
         let offset = usize::from(offset).min(self.source_len);
         let line = self.line_starts.partition_point(|start| *start <= offset) - 1;

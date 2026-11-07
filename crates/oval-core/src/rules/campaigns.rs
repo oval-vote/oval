@@ -7,6 +7,7 @@ use super::report;
 use crate::index::Index;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the campaign rules. A reference carries no block, a candidate is in one campaign per contest, a campaign lists each member once, and `designation` and `party` describe a candidate rather than a campaign.
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
         let mut in_contest: HashSet<String> = HashSet::new();

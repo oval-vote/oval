@@ -2,6 +2,7 @@ use super::report;
 use crate::index::Index;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the identifiers. Each is declared once, every reference names a declaration, and the declaration is of the kind the reference's position accepts.
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for i in &index.duplicates {
         let declaration = &index.declarations[*i];

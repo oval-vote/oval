@@ -7,6 +7,7 @@ use super::report;
 use crate::index::{EntityKind, Index, ReferenceSite};
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks the declarations. Two parties do not share a name, and every top-level declaration is used.
 pub(crate) fn check(document: &Document, index: &Index, out: &mut Vec<Diagnostic>) {
     unused(document, index, out);
     duplicate_party_names(document, index, out);

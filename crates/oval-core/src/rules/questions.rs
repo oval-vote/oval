@@ -5,6 +5,7 @@ use super::report;
 use crate::index::Index;
 use crate::{Diagnostic, ValidationRule};
 
+/// Checks that every contest and measure has exactly one recommendation.
 pub(crate) fn check(index: &Index, out: &mut Vec<Diagnostic>) {
     for contest in &index.contests {
         let header = contest.header_line_range();
