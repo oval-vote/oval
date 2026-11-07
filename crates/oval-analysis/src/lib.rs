@@ -2,8 +2,8 @@
 //!
 //! This crate answers the questions an editor asks about a document once it is parsed. Which
 //! identifiers are declared and where each one is used ([`Symbols`]), what the document's
-//! structure is ([`outline`]), and which identifier sits under the cursor
-//! ([`Symbols::at`]). Every answer is positions and names, so a language server, a WebAssembly
+//! structure is ([`outline`]), which identifier sits under the cursor ([`Symbols::at`]), and what
+//! the grammar accepts at a position ([`completions`]). Every answer is positions and names, so a language server, a WebAssembly
 //! binding, or a test can turn it into its own representation.
 //!
 //! The functions take a parsed [`Document`](oval_syntax::ast::Document) and never fail. A document with errors still has a
@@ -41,8 +41,10 @@
 //! assert_eq!(items[0].children[0].title.as_deref(), Some("City Attorney"));
 //! ```
 
+mod completion;
 mod outline;
 mod symbols;
 
+pub use completion::{Completion, CompletionKind, completions};
 pub use outline::{OutlineItem, OutlineKind, outline};
 pub use symbols::{Declaration, Reference, Symbol, SymbolKind, Symbols};

@@ -1,8 +1,9 @@
 //! WebAssembly bindings for the Oval voting guide format.
 //!
 //! This crate is the source of the `@oval-vote/oval` npm package. It exposes [`check`],
-//! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`], and [`symbols`] and
-//! [`outline`] from [`oval_analysis`], to JavaScript through `wasm-bindgen`, with [`catalog`],
+//! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`], and [`symbols`],
+//! [`outline`], and [`completions`] from [`oval_analysis`], to JavaScript through `wasm-bindgen`,
+//! with [`catalog`],
 //! [`language_major`], and [`version`] beside them. Every function is synchronous and takes the
 //! document's source text as a string.
 //!
@@ -39,6 +40,7 @@ use wasm_bindgen::prelude::*;
 /// - `Range` is a span of byte offsets into the UTF-8 source.
 /// - `Symbols`, `Declaration`, and `Reference` are what [`symbols`] returns.
 /// - `OutlineItem` is the shape of each element [`outline`] returns, nested through `children`.
+/// - `Completion` is the shape of each element [`completions`] returns.
 pub const TYPES: &str = r#"
 export type DiagnosticIdentifier =
   | "illegal-tab"
@@ -149,6 +151,15 @@ export interface OutlineItem {
   range: Range;
   selection: Range;
   children: OutlineItem[];
+}
+
+export type CompletionKind = "keyword" | SymbolKind;
+
+export interface Completion {
+  label: string;
+  kind: CompletionKind;
+  detail?: string;
+  replace: Range;
 }
 "#;
 
@@ -336,6 +347,36 @@ pub fn symbols(source: &str) -> Result<JsValue, JsValue> {
 pub fn outline(source: &str) -> Result<JsValue, JsValue> {
     let document = document(source)?;
     serde_wasm_bindgen::to_value(&oval_analysis::outline(&document)).map_err(into_js)
+}
+
+/// Everything the grammar accepts at `offset` in `source`, for completion.
+///
+/// Returns an array of `Completion` objects. Each has a `label` to insert, which is a keyword or
+/// an identifier with its `@`; its `kind`; `detail`, the name an identifier declares, such as a
+/// candidate's name; and `replace`, the range of the partial word before `offset` that the label
+/// replaces. `offset` is a byte offset into the UTF-8 source. Keywords are the ones the parser
+/// accepts at that point and identifiers are the declarations of the kind the point names, so
+/// `support` offers candidates and `party` offers parties. The array is empty inside a string, a
+/// comment, or a Markdown body, and where the point names a new identifier.
+///
+/// ```js
+/// const { completions } = require("@oval-vote/oval");
+/// const found = completions(source, byteOffsetOfCursor);
+/// console.log(found.map((c) => c.label));
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000.
+#[wasm_bindgen(unchecked_return_type = "Completion[]")]
+pub fn completions(source: &str, offset: u32) -> Result<JsValue, JsValue> {
+    if source.contains('\0') {
+        return Err(rejected(InputRejection {
+            offset: oval_syntax::TextSize::from(0),
+        }));
+    }
+    let found = oval_analysis::completions(source, oval_syntax::TextSize::from(offset));
+    serde_wasm_bindgen::to_value(&found).map_err(into_js)
 }
 
 fn document(source: &str) -> Result<Document, JsValue> {

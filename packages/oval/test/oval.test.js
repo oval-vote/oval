@@ -100,6 +100,27 @@ test("the outline nests the ballot tree", () => {
     assert.ok(section.children.every((item) => item.kind === "contest" || item.kind === "measure"));
 });
 
+test("completions offer keywords and identifiers for a position", () => {
+    const source =
+        'oval 1\nguide "G"\nelection "E"\ndate 2026-11-03\n' +
+        'candidate @delgado "Rosa Delgado"\n' +
+        'ballot @city "City"\n  contest @attorney "City Attorney" single\n' +
+        "    campaign @delgado\n    recommend\n      support @de\n";
+    const atSupport = source.lastIndexOf("@de") + 3;
+    const found = oval.completions(source, atSupport);
+    assert.deepEqual(
+        found.map((c) => [c.label, c.kind, c.detail]),
+        [["@delgado", "candidate", "Rosa Delgado"]],
+    );
+    assert.deepEqual(found[0].replace, { start: atSupport - 3, end: atSupport });
+    const atKind = source.indexOf('"City Attorney" ') + '"City Attorney" '.length;
+    assert.deepEqual(
+        oval.completions(source, atKind).map((c) => c.label),
+        ["single", "multiple", "ranked", "retention"],
+    );
+    assert.deepEqual(oval.completions(source, source.indexOf("Rosa") + 2), []);
+});
+
 test("the typings name the diagnostic identifiers", () => {
     const typings = fs.readFileSync(path.join(__dirname, "../pkg/oval_wasm.d.ts"), "utf8");
     assert.ok(typings.includes("export type DiagnosticIdentifier ="));
@@ -107,6 +128,11 @@ test("the typings name the diagnostic identifiers", () => {
     assert.ok(typings.includes("export function catalog(): CatalogEntry[];"));
     assert.ok(typings.includes("export function symbols(source: string): Symbols;"));
     assert.ok(typings.includes("export function outline(source: string): OutlineItem[];"));
+    assert.ok(
+        typings.includes(
+            "export function completions(source: string, offset: number): Completion[];",
+        ),
+    );
 });
 
 test("diagnostics carry code, severity, range, and message", () => {
