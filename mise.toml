@@ -9,3 +9,43 @@ run = '.scripts/version.sh set "$usage_version"'
 [tasks."version:check"]
 description = "Check that every version agrees with Cargo.toml"
 run = ".scripts/version.sh check"
+
+[tasks.fmt]
+description = "Run all formatters"
+depends = ["fmt:*"]
+
+[tasks."fmt:rust"]
+description = "Run rustfmt on the Rust crates"
+run = "cargo fmt --all"
+
+[tasks."fmt:node"]
+description = "Run Prettier on the npm package"
+run = "npm run format"
+dir = "packages/oval"
+
+[tasks.ci]
+description = "Validate the repository: formatting, lints, documentation, and versions"
+depends = ["ci:*"]
+
+[tasks."ci:fmt-rust"]
+description = "Check formatting of the Rust crates"
+run = "cargo fmt --all --check"
+
+[tasks."ci:fmt-node"]
+description = "Check formatting of the npm package"
+run = "npm run format:check"
+dir = "packages/oval"
+
+[tasks."ci:clippy"]
+description = "Lint the Rust crates"
+env = { RUSTFLAGS = "-D warnings" }
+run = "cargo clippy --workspace --all-targets"
+
+[tasks."ci:doc"]
+description = "Build the Rust documentation"
+env = { RUSTDOCFLAGS = "-D warnings" }
+run = "cargo doc --workspace --no-deps"
+
+[tasks."ci:version"]
+description = "Check that every version agrees with Cargo.toml"
+depends = ["version:check"]

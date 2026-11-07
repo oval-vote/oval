@@ -1,12 +1,14 @@
 //! WebAssembly bindings for the Oval voting guide format.
 //!
 //! This crate is the source of the `@oval-vote/oval` npm package. It exposes [`check`],
-//! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`] to JavaScript through
-//! `wasm-bindgen`, with [`catalog`], [`language_major`], and [`version`] beside them. Every
-//! function is synchronous and takes the document's source text as a string.
+//! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`], and [`symbols`] and
+//! [`outline`] from [`oval_analysis`], to JavaScript through `wasm-bindgen`, with [`catalog`],
+//! [`language_major`], and [`version`] beside them. Every function is synchronous and takes the
+//! document's source text as a string.
 //!
 //! Results cross into JavaScript as plain values. Strings and numbers arrive as themselves;
-//! diagnostics, catalog entries, and the compiled model arrive as ordinary objects and arrays
+//! diagnostics, catalog entries, symbols, outlines, and the compiled model arrive as ordinary
+//! objects and arrays
 //! produced by `serde-wasm-bindgen`, not as class instances. Failures are thrown. A function that
 //! cannot read its input at all, because it contains U+0000, throws a string that says so; one
 //! that fails because the document has errors throws the array of diagnostics that [`check`]
@@ -16,8 +18,10 @@
 //! [`TYPES`] declares the TypeScript types of these values and is appended to the package's
 //! generated typings.
 
+use oval_analysis::Symbols;
 use oval_core::{CompileError, DiagnosticCode, InputRejection, Report, Severity};
 use oval_format::FormatError;
+use oval_syntax::ast::{AstNode, Document};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -32,6 +36,9 @@ use wasm_bindgen::prelude::*;
 /// - `CatalogEntry` is the shape of each element [`catalog`] returns.
 /// - `Compiled` is the canonical model, typed as a record because its shape is fixed by the
 ///   specification's `guide.schema.json` rather than by this package.
+/// - `Range` is a span of byte offsets into the UTF-8 source.
+/// - `Symbols`, `Declaration`, and `Reference` are what [`symbols`] returns.
+/// - `OutlineItem` is the shape of each element [`outline`] returns, nested through `children`.
 pub const TYPES: &str = r#"
 export type DiagnosticIdentifier =
   | "illegal-tab"
@@ -106,6 +113,43 @@ export interface CatalogEntry {
 }
 
 export type Compiled = Record<string, unknown>;
+
+export interface Range {
+  start: number;
+  end: number;
+}
+
+export type SymbolKind = "party" | "candidate" | "ballot" | "contest" | "measure";
+
+export interface Declaration {
+  name: string;
+  kind: SymbolKind;
+  range: Range;
+  nameRange: Range;
+}
+
+export interface Reference {
+  name: string;
+  range: Range;
+  nameRange: Range;
+  declaration?: number;
+}
+
+export interface Symbols {
+  declarations: Declaration[];
+  references: Reference[];
+}
+
+export type OutlineKind = "ballot" | "section" | "contest" | "measure";
+
+export interface OutlineItem {
+  kind: OutlineKind;
+  title?: string;
+  name?: string;
+  range: Range;
+  selection: Range;
+  children: OutlineItem[];
+}
 "#;
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -247,6 +291,56 @@ pub fn format(source: &str) -> Result<String, JsValue> {
             Err(diagnostics(&oval_core::check(source).map_err(rejected)?)?)
         }
     }
+}
+
+/// The declared identifiers of `source` and every use of one.
+///
+/// Returns a `Symbols` object with `declarations` and `references`, each in document order. A
+/// declaration has its `name` without the `@`, its `kind`, its `range`, and its `nameRange`, the
+/// span of the name alone, which a rename replaces. A reference has the same spans and
+/// `declaration`, the index in `declarations` of the one it names, absent when nothing declares
+/// the name. Ranges are byte offsets into the UTF-8 source. A document with errors still has
+/// symbols; the parts the parser could not read are left out.
+///
+/// ```js
+/// const { symbols } = require("@oval-vote/oval");
+/// const { declarations, references } = symbols(source);
+/// const uses = references.filter((r) => r.name === "delgado").map((r) => r.range);
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000.
+#[wasm_bindgen(unchecked_return_type = "Symbols")]
+pub fn symbols(source: &str) -> Result<JsValue, JsValue> {
+    let document = document(source)?;
+    serde_wasm_bindgen::to_value(&Symbols::new(&document)).map_err(into_js)
+}
+
+/// The structure of `source` as nested ballots, sections, contests, and measures.
+///
+/// Returns an array of `OutlineItem` objects for the root ballots, in document order, each with
+/// its `kind`, `title`, `name` (the identifier without `@`, absent for a section), `range` (the
+/// whole construct), `selection` (its header line), and `children`. Parties and candidates are
+/// not in the outline; [`symbols`] lists them.
+///
+/// ```js
+/// const { outline } = require("@oval-vote/oval");
+/// for (const ballot of outline(source)) console.log(ballot.title, ballot.children.length);
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000.
+#[wasm_bindgen(unchecked_return_type = "OutlineItem[]")]
+pub fn outline(source: &str) -> Result<JsValue, JsValue> {
+    let document = document(source)?;
+    serde_wasm_bindgen::to_value(&oval_analysis::outline(&document)).map_err(into_js)
+}
+
+fn document(source: &str) -> Result<Document, JsValue> {
+    let parsed = oval_syntax::parser::parse(source).map_err(rejected)?;
+    Document::cast(parsed.syntax()).ok_or_else(|| JsValue::from("the root is not a document"))
 }
 
 fn diagnostics(report: &Report) -> Result<JsValue, JsValue> {

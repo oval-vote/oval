@@ -18,6 +18,13 @@ oval.compile(source);
 oval.format(source);
 // The formatted source. Throws the diagnostics when the document has syntax errors.
 
+oval.symbols(source);
+// { declarations: [{ name: "delgado", kind: "candidate", range, nameRange }, ...],
+//   references: [{ name: "delgado", range, nameRange, declaration: 0 }, ...] }
+
+oval.outline(source);
+// The ballot tree: [{ kind: "ballot", title, name, range, selection, children: [...] }, ...]
+
 oval.catalog();
 // Every diagnostic the package can report, in the specification's order:
 // [{ identifier: "illegal-tab", severity: "error", title: "Illegal Tab",

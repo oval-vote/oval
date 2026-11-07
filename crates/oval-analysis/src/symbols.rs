@@ -33,6 +33,7 @@ impl From<EntityKind> for SymbolKind {
 
 /// A declared identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Declaration {
     /// The name without its `@`.
     pub name: String,
@@ -48,6 +49,7 @@ pub struct Declaration {
 
 /// A use of an identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Reference {
     /// The name without its `@`.
     pub name: String,
