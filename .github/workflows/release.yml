@@ -20,15 +20,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - run: mise run version:check
+        working-directory: .
       - run: |
           version="$(node -p "require('./package.json').version")"
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "package.json is $version but the tag is $GITHUB_REF_NAME" >&2
-            exit 1
-          fi
-          crate="$(cargo pkgid -p oval-syntax | sed 's/.*#//')"
-          if [ "v$crate" != "$GITHUB_REF_NAME" ]; then
-            echo "the workspace is $crate but the tag is $GITHUB_REF_NAME" >&2
+            echo "the version is $version but the tag is $GITHUB_REF_NAME" >&2
             exit 1
           fi
       - run: npm publish

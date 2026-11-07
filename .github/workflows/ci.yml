@@ -11,6 +11,13 @@ env:
   RUSTDOCFLAGS: -D warnings
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: mise run version:check
+
   fmt:
     runs-on: ubuntu-latest
     steps:

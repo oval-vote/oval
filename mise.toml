@@ -1,2 +1,11 @@
 [settings]
 idiomatic_version_file_enable_tools = ["rust", "node"]
+
+[tasks."set-version"]
+description = "Set the version in Cargo.toml, Cargo.lock, and the npm package"
+usage = 'arg "<version>" help="The new version, as MAJOR.MINOR.PATCH"'
+run = '.scripts/version.sh set "$usage_version"'
+
+[tasks."version:check"]
+description = "Check that every version agrees with Cargo.toml"
+run = ".scripts/version.sh check"
