@@ -18,9 +18,11 @@ exits 1 if any are errors, or if any are warnings and `--strict` is given. `comp
 that validates against the specification's `guide.schema.json`, or prints diagnostics to stderr
 and exits 1 if the document has errors.
 
-Install from a checkout:
+Install with Homebrew on macOS or Linux, or download a binary from the
+[releases](https://github.com/oval-vote/oval/releases), or build from a checkout:
 
 ```sh
+brew install oval-vote/tap/oval
 cargo install --path crates/oval-cli
 ```
 
@@ -91,9 +93,12 @@ app:
   `publish` job, which builds the package, runs its tests, checks the versions against the tag, and
   publishes to npm with provenance through
   [trusted publishing](https://docs.npmjs.com/trusted-publishers), so no token is stored anywhere.
-- **Unrelease** takes the latest version, reverts its release commit if there was one, and deletes
-  the GitHub release and tag. A version that reached npm cannot be removed; the workflow says so, and
-  the next release takes a new number.
+  The tag also builds the `oval` binary for macOS and Linux on Apple silicon, Intel, and arm64,
+  attaches the archives and their checksums to the release, and pushes the Homebrew formula to
+  [homebrew-tap](https://github.com/oval-vote/homebrew-tap).
+- **Unrelease** takes the latest version, reverts its release commit if there was one, deletes
+  the GitHub release and tag, and withdraws the formula from the tap. A version that reached npm
+  cannot be removed; the workflow says so, and the next release takes a new number.
 
 The app's ID and private key are the `OVAL_RELEASE_APP_ID` and `OVAL_RELEASE_APP_PRIVATE_KEY`
 organization secrets. Commits and tags made with its token trigger the CI and publish workflows,

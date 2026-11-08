@@ -27,6 +27,8 @@ jobs:
         with:
           app-id: ${{ secrets.OVAL_RELEASE_APP_ID }}
           private-key: ${{ secrets.OVAL_RELEASE_APP_PRIVATE_KEY }}
+          owner: oval-vote
+          repositories: oval,homebrew-tap
       - uses: actions/checkout@v7
         with:
           token: ${{ steps.app.outputs.token }}
@@ -68,6 +70,24 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           VERSION: ${{ inputs.version }}
         run: gh release delete "v$VERSION" --yes --cleanup-tag
+      - name: Revert the formula
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/oval-vote/homebrew-tap.git" tap
+          cd tap
+          if [ "$(git log -1 --format=%s)" != "oval $VERSION" ]; then
+            echo "the tap's latest commit is not the formula for $VERSION; leaving it alone"
+            exit 0
+          fi
+          id="$(gh api "users/${APP_SLUG}[bot]" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${id}+${APP_SLUG}[bot]@users.noreply.github.com"
+          git revert --no-edit HEAD
+          git commit --amend --no-edit -m "Withdraw oval $VERSION"
+          git push origin HEAD:main
       - name: Report the npm package
         env:
           VERSION: ${{ inputs.version }}
