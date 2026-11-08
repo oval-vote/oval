@@ -2,7 +2,8 @@
 //!
 //! This crate is the source of the `@oval-vote/oval` npm package. It exposes [`check`],
 //! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`], and [`symbols`],
-//! [`outline`], and [`completions`] from [`oval_analysis`], to JavaScript through `wasm-bindgen`,
+//! [`outline`], [`completions`], [`hover`], and [`fixes`] from [`oval_analysis`], to JavaScript
+//! through `wasm-bindgen`,
 //! with [`catalog`],
 //! [`language_major`], and [`version`] beside them. Every function is synchronous and takes the
 //! document's source text as a string.
@@ -41,6 +42,7 @@ use wasm_bindgen::prelude::*;
 /// - `Symbols`, `Declaration`, and `Reference` are what [`symbols`] returns.
 /// - `OutlineItem` is the shape of each element [`outline`] returns, nested through `children`.
 /// - `Completion` is the shape of each element [`completions`] returns.
+/// - `Hover` is what [`hover`] returns, and `Fix` and `Edit` are what [`fixes`] returns.
 pub const TYPES: &str = r#"
 export type DiagnosticIdentifier =
   | "illegal-tab"
@@ -160,6 +162,23 @@ export interface Completion {
   kind: CompletionKind;
   detail?: string;
   replace: Range;
+}
+
+export interface Hover {
+  range: Range;
+  contents: string;
+}
+
+export interface Edit {
+  range: Range;
+  text: string;
+}
+
+export interface Fix {
+  code: DiagnosticIdentifier;
+  range: Range;
+  title: string;
+  edits: Edit[];
 }
 "#;
 
@@ -370,13 +389,65 @@ pub fn outline(source: &str) -> Result<JsValue, JsValue> {
 /// Throws a string when `source` contains U+0000.
 #[wasm_bindgen(unchecked_return_type = "Completion[]")]
 pub fn completions(source: &str, offset: u32) -> Result<JsValue, JsValue> {
-    if source.contains('\0') {
-        return Err(rejected(InputRejection {
-            offset: oval_syntax::TextSize::from(0),
-        }));
-    }
+    reject_nul(source)?;
     let found = oval_analysis::completions(source, oval_syntax::TextSize::from(offset));
     serde_wasm_bindgen::to_value(&found).map_err(into_js)
+}
+
+/// Text for the identifier or keyword at `offset` in `source`, for a hover.
+///
+/// Returns a `Hover` with the `range` of the token and its `contents` as Markdown, or `undefined`
+/// when nothing at `offset` has text. For an identifier the text names what it declares, with its
+/// name or title and, for a candidate, its party; for a keyword, one sentence and a link to its
+/// section of the specification.
+///
+/// ```js
+/// const { hover } = require("@oval-vote/oval");
+/// const found = hover(source, byteOffsetOfCursor);
+/// if (found) console.log(found.contents);
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000.
+#[wasm_bindgen(unchecked_return_type = "Hover | undefined")]
+pub fn hover(source: &str, offset: u32) -> Result<JsValue, JsValue> {
+    reject_nul(source)?;
+    let found = oval_analysis::hover(source, oval_syntax::TextSize::from(offset));
+    serde_wasm_bindgen::to_value(&found).map_err(into_js)
+}
+
+/// Repairs for the diagnostics of `source` that have a mechanical one.
+///
+/// Returns an array of `Fix` objects in source order, each with the `code` and `range` of the
+/// diagnostic it repairs, a `title` to show, and the `edits` to apply together, where each edit
+/// replaces a `range` with `text`. An editor pairs a fix with a diagnostic by code and range.
+/// Insecure URLs, references with a near miss among the declarations, missing guide fields,
+/// missing recommendations, and unused top-level declarations have fixes; other diagnostics do
+/// not.
+///
+/// ```js
+/// const { fixes } = require("@oval-vote/oval");
+/// for (const fix of fixes(source)) console.log(fix.code, fix.title);
+/// ```
+///
+/// # Errors
+///
+/// Throws a string when `source` contains U+0000.
+#[wasm_bindgen(unchecked_return_type = "Fix[]")]
+pub fn fixes(source: &str) -> Result<JsValue, JsValue> {
+    reject_nul(source)?;
+    serde_wasm_bindgen::to_value(&oval_analysis::fixes(source)).map_err(into_js)
+}
+
+fn reject_nul(source: &str) -> Result<(), JsValue> {
+    match source.find('\0') {
+        Some(offset) => Err(rejected(InputRejection {
+            offset: oval_syntax::TextSize::try_from(offset)
+                .map_err(|_| JsValue::from("too long"))?,
+        })),
+        None => Ok(()),
+    }
 }
 
 fn document(source: &str) -> Result<Document, JsValue> {

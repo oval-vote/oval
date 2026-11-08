@@ -2,8 +2,9 @@
 //!
 //! This crate answers the questions an editor asks about a document once it is parsed. Which
 //! identifiers are declared and where each one is used ([`Symbols`]), what the document's
-//! structure is ([`outline`]), which identifier sits under the cursor ([`Symbols::at`]), and what
-//! the grammar accepts at a position ([`completions`]). Every answer is positions and names, so a language server, a WebAssembly
+//! structure is ([`outline`]), which identifier sits under the cursor ([`Symbols::at`]), what the
+//! grammar accepts at a position ([`completions`]), what to say about the token there ([`hover`]),
+//! and how to repair the diagnostics that have a mechanical fix ([`fixes`]). Every answer is positions and names, so a language server, a WebAssembly
 //! binding, or a test can turn it into its own representation.
 //!
 //! The functions take a parsed [`Document`](oval_syntax::ast::Document) and never fail. A document with errors still has a
@@ -42,9 +43,14 @@
 //! ```
 
 mod completion;
+mod fix;
+mod hover;
+mod names;
 mod outline;
 mod symbols;
 
 pub use completion::{Completion, CompletionKind, completions};
+pub use fix::{Edit, Fix, fixes};
+pub use hover::{Hover, hover};
 pub use outline::{OutlineItem, OutlineKind, outline};
 pub use symbols::{Declaration, Reference, Symbol, SymbolKind, Symbols};

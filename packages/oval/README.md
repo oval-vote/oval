@@ -28,8 +28,14 @@ oval.outline(source);
 oval.completions(source, byteOffset);
 // What the grammar accepts there: [{ label: "@delgado", kind: "candidate", detail: "Rosa Delgado", replace }, ...]
 
+oval.hover(source, byteOffset);
+// { range, contents: "**candidate** `@delgado`\n\nRosa Delgado\n\n..." } or undefined
+
+oval.fixes(source);
+// Repairs for diagnostics that have one: [{ code: "insecure-url", range, title: "Use https", edits }, ...]
+
 oval.catalog();
-// Every diagnostic the package can report, in the specification's order:
+// Every diagnostic the package can report:
 // [{ identifier: "illegal-tab", severity: "error", title: "Illegal Tab",
 //    url: "https://spec.oval.vote/draft/#sec-Illegal-Tab" }, ...]
 

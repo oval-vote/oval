@@ -121,6 +121,40 @@ test("completions offer keywords and identifiers for a position", () => {
     assert.deepEqual(oval.completions(source, source.indexOf("Rosa") + 2), []);
 });
 
+test("hover describes identifiers and keywords", () => {
+    const source =
+        'oval 1\nguide "G"\nelection "E"\ndate 2026-11-03\n' +
+        'candidate @delgado "Rosa Delgado"\n' +
+        'ballot @city "City"\n  contest @attorney "City Attorney" single\n' +
+        "    campaign @delgado\n    recommend\n      support @delgado\n";
+    const identifier = oval.hover(source, source.lastIndexOf("@delgado") + 2);
+    assert.ok(identifier.contents.startsWith("**candidate** `@delgado`\n\nRosa Delgado"));
+    assert.equal(source.slice(identifier.range.start, identifier.range.end), "@delgado");
+    const keyword = oval.hover(source, source.indexOf("contest") + 1);
+    assert.ok(keyword.contents.includes("#sec-Contest"));
+    assert.equal(oval.hover(source, source.indexOf('"City"') + 2), undefined);
+});
+
+test("fixes repair insecure urls and near-miss references", () => {
+    const source =
+        'oval 1\nguide "G"\nelection "E"\ndate 2026-11-03\n' +
+        'candidate @delgado "Rosa Delgado"\n' +
+        'ballot @city "City"\n  contest @attorney "City Attorney" single\n' +
+        "    campaign @delgado\n      website http://delgado.example\n" +
+        "    recommend\n      support @delgato\n";
+    const found = oval.fixes(source);
+    assert.deepEqual(
+        found.map((fix) => [fix.code, fix.title]),
+        [
+            ["insecure-url", "Use https"],
+            ["undeclared-reference", "Change to `@delgado`"],
+        ],
+    );
+    const [url] = found;
+    assert.equal(source.slice(url.edits[0].range.start, url.edits[0].range.end), "http://");
+    assert.equal(url.edits[0].text, "https://");
+});
+
 test("the typings name the diagnostic identifiers", () => {
     const typings = fs.readFileSync(path.join(__dirname, "../pkg/oval_wasm.d.ts"), "utf8");
     assert.ok(typings.includes("export type DiagnosticIdentifier ="));
@@ -133,6 +167,12 @@ test("the typings name the diagnostic identifiers", () => {
             "export function completions(source: string, offset: number): Completion[];",
         ),
     );
+    assert.ok(
+        typings.includes(
+            "export function hover(source: string, offset: number): Hover | undefined;",
+        ),
+    );
+    assert.ok(typings.includes("export function fixes(source: string): Fix[];"));
 });
 
 test("diagnostics carry code, severity, range, and message", () => {
