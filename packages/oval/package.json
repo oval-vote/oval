@@ -1,6 +1,6 @@
 {
   "name": "@oval-vote/oval",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Parse, validate, compile, and format Oval voting guides",
   "license": "MIT",
   "type": "commonjs",
