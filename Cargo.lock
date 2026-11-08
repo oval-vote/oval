@@ -210,7 +210,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "oval-analysis"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "oval-core",
  "oval-syntax",
@@ -219,7 +219,7 @@ dependencies = [
 
 [[package]]
 name = "oval-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "oval-core",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "oval-core"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "oval-syntax",
  "pulldown-cmark",
@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "oval-format"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "oval-core",
  "oval-syntax",
@@ -249,14 +249,14 @@ dependencies = [
 
 [[package]]
 name = "oval-syntax"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "rowan",
 ]
 
 [[package]]
 name = "oval-wasm"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "oval-analysis",
  "oval-core",
