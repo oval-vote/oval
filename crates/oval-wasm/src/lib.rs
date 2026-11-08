@@ -36,8 +36,9 @@ use wasm_bindgen::prelude::*;
 /// - `Severity` is `"error"` or `"warning"`.
 /// - `Diagnostic` is the shape of each element [`check`] returns.
 /// - `CatalogEntry` is the shape of each element [`catalog`] returns.
-/// - `Compiled` is the canonical model, typed as a record because its shape is fixed by the
-///   specification's `guide.schema.json` rather than by this package.
+/// - `Compiled` is the canonical model, which is `Guide` from `@oval-vote/oval-schema`, the
+///   specification's schema as types; the npm package depends on that package at the version whose
+///   shape this implementation produces.
 /// - `Range` is a span of byte offsets into the UTF-8 source.
 /// - `Symbols`, `Declaration`, and `Reference` are what [`symbols`] returns.
 /// - `OutlineItem` is the shape of each element [`outline`] returns, nested through `children`.
@@ -116,7 +117,7 @@ export interface CatalogEntry {
   url: string;
 }
 
-export type Compiled = Record<string, unknown>;
+export type Compiled = import("@oval-vote/oval-schema").Guide;
 
 export interface Range {
   start: number;
@@ -266,9 +267,9 @@ pub fn check(source: &str) -> Result<JsValue, JsValue> {
 
 /// Compiles `source` to the canonical model, or throws its diagnostics.
 ///
-/// Returns the object the specification's `guide.schema.json` describes, Section 5, which is the
-/// guide with every reference resolved and the derived fields filled in, as a plain JavaScript
-/// object. It is the same value `oval compile` prints as JSON.
+/// Returns the object the specification's schema describes, Section 5, typed as `Guide` from
+/// `@oval-vote/oval-schema`: the guide with every reference resolved and the derived fields filled
+/// in, as a plain JavaScript object. It is the same value `oval compile` prints as JSON.
 ///
 /// ```js
 /// const { compile } = require("@oval-vote/oval");

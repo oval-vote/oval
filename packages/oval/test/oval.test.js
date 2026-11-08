@@ -155,6 +155,17 @@ test("fixes repair insecure urls and near-miss references", () => {
     assert.equal(url.edits[0].text, "https://");
 });
 
+test("compiled output validates against the specification's schema", () => {
+    const Ajv = require("ajv/dist/2020");
+    const addFormats = require("ajv-formats");
+    const schema = require("@oval-vote/oval-schema/oval.schema.json");
+    const ajv = new Ajv({ allErrors: true });
+    addFormats(ajv);
+    const validate = ajv.compile(schema);
+    const compiled = oval.compile(fixture);
+    assert.ok(validate(compiled), JSON.stringify(validate.errors, null, 2));
+});
+
 test("the typings name the diagnostic identifiers", () => {
     const typings = fs.readFileSync(path.join(__dirname, "../pkg/oval_wasm.d.ts"), "utf8");
     assert.ok(typings.includes("export type DiagnosticIdentifier ="));
@@ -173,6 +184,7 @@ test("the typings name the diagnostic identifiers", () => {
         ),
     );
     assert.ok(typings.includes("export function fixes(source: string): Fix[];"));
+    assert.ok(typings.includes('export type Compiled = import("@oval-vote/oval-schema").Guide;'));
 });
 
 test("diagnostics carry code, severity, range, and message", () => {

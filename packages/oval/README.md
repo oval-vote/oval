@@ -12,7 +12,7 @@ oval.check(source);
 // [{ code: "unused-declaration", severity: "warning", range: { start: 120, end: 124 }, message: "..." }]
 
 oval.compile(source);
-// The canonical JSON model described by the specification's guide.schema.json.
+// The canonical JSON model, typed as Guide from @oval-vote/oval-schema.
 // Throws the diagnostics when the document has errors.
 
 oval.format(source);
