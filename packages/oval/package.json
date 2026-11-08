@@ -24,10 +24,15 @@
     "access": "public"
   },
   "devDependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "prettier": "3.9.10",
     "wasm-pack": "0.15.1"
   },
   "allowScripts": {
     "wasm-pack@0.15.1": true
+  },
+  "dependencies": {
+    "@oval-vote/oval-schema": "0.0.1-draft.2"
   }
 }
