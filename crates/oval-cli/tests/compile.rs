@@ -7,6 +7,14 @@ fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../oval-syntax/tests/fixtures/franklin.oval")
 }
 
+fn golden() -> String {
+    std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../oval-core/tests/fixtures/franklin.compiled.json"),
+    )
+    .expect("read the compiled golden")
+}
+
 fn oval(args: &[&std::ffi::OsStr]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_oval"))
         .args(args)
@@ -20,23 +28,20 @@ fn the_fixture_compiles_to_json_on_stdout() {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(String::from_utf8_lossy(&output.stderr), "");
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout is JSON");
-    assert_eq!(json["oval"], 1);
-    assert_eq!(json["counts"]["contests"], 44);
-    assert_eq!(json["counts"]["measures"], 28);
-    assert_eq!(json["ballots"][0]["kind"], "ballot");
-    assert_eq!(json["questions"].as_array().map(Vec::len), Some(72));
+    let expected: serde_json::Value = serde_json::from_str(&golden()).expect("golden is JSON");
+    assert_eq!(json, expected);
+    assert!(!output.stdout.starts_with(b"{\n"));
 }
 
 #[test]
-fn pretty_output_is_indented() {
+fn pretty_output_matches_the_golden_byte_for_byte() {
     let output = oval(&[
         "compile".as_ref(),
         "--pretty".as_ref(),
         fixture().as_os_str(),
     ]);
     assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.starts_with("{\n  \"oval\": 1,\n"));
+    assert_eq!(String::from_utf8_lossy(&output.stdout), golden());
 }
 
 #[test]

@@ -9,18 +9,18 @@ const fixture = fs.readFileSync(
     path.join(__dirname, "../../../crates/oval-syntax/tests/fixtures/franklin.oval"),
     "utf8",
 );
+const coreFixtures = path.join(__dirname, "../../../crates/oval-core/tests/fixtures");
+const golden = JSON.parse(
+    fs.readFileSync(path.join(coreFixtures, "franklin.compiled.json"), "utf8"),
+);
+const shapes = fs.readFileSync(path.join(coreFixtures, "shapes.oval"), "utf8");
 
 test("a clean document has no diagnostics", () => {
     assert.deepEqual(oval.check(fixture), []);
 });
 
 test("compile returns the canonical document", () => {
-    const compiled = oval.compile(fixture);
-    assert.equal(compiled.oval, 1);
-    assert.equal(compiled.counts.contests, 44);
-    assert.equal(compiled.counts.measures, 28);
-    assert.equal(compiled.ballots[0].kind, "ballot");
-    assert.equal(compiled.questions.length, 72);
+    assert.deepEqual(oval.compile(fixture), golden);
 });
 
 test("format leaves a formatted document unchanged", () => {
@@ -182,8 +182,18 @@ test("compiled output validates against the specification's schema", () => {
     const ajv = new Ajv({ allErrors: true });
     addFormats(ajv);
     const validate = ajv.compile(schema);
-    const compiled = oval.compile(fixture);
-    assert.ok(validate(compiled), JSON.stringify(validate.errors, null, 2));
+    for (const source of [fixture, shapes]) {
+        const compiled = oval.compile(source);
+        assert.ok(validate(compiled), JSON.stringify(validate.errors, null, 2));
+    }
+});
+
+test("the Rust tests validate against the same schema this package pins", () => {
+    const pinned = fs.readFileSync(require.resolve("@oval-vote/oval-schema/oval.schema.json"));
+    const vendored = fs.readFileSync(
+        path.join(__dirname, "../../../crates/oval-core/tests/schema/oval.schema.json"),
+    );
+    assert.ok(pinned.equals(vendored), "update crates/oval-core/tests/schema/oval.schema.json");
 });
 
 test("the typings name the diagnostic identifiers", () => {

@@ -1,6 +1,6 @@
 //! The canonical model of a compiled document, Section 5 of the specification.
 //!
-//! [`Compiled`] and the types under it mirror `guide.schema.json`, the JSON Schema that fixes the
+//! [`Compiled`] and the types under it mirror `oval.schema.json`, the JSON Schema that fixes the
 //! canonical output. There is one struct or enum per object the schema defines, with the schema's
 //! field names, and `serde` attributes that produce exactly the schema's JSON. [`crate::compile()`]
 //! builds the model from a valid document; [`Compiled::to_json`] and [`Compiled::to_json_pretty`]
@@ -23,7 +23,7 @@ use serde::{Serialize, Serializer};
 
 /// The canonical output of compiling one document.
 ///
-/// The shape is fixed by the specification's `guide.schema.json`. The [`Serialize`] implementation
+/// The shape is fixed by the specification's `oval.schema.json`. The [`Serialize`] implementation
 /// produces the schema's JSON, and [`to_json`](Self::to_json) and
 /// [`to_json_pretty`](Self::to_json_pretty) produce it as a string. Root ballots are written with
 /// `kind: "ballot"` like sub-ballots, so one type describes a ballot anywhere in the tree.
@@ -122,7 +122,8 @@ pub struct Ballot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     /// Derived. Identifiers of the enclosing ballots, outermost first, not including this one.
-    /// Empty for a root.
+    /// Empty for a root. A question's [`Location::path`] differs by ending with the ballot that
+    /// holds it.
     pub path: Vec<String>,
     /// Sections, contests, measures, and sub-ballots in ballot order.
     pub items: Vec<BallotEntry>,
@@ -177,7 +178,8 @@ pub struct Location {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
     /// Identifiers of every enclosing ballot, outermost first, ending with
-    /// [`ballot`](Self::ballot).
+    /// [`ballot`](Self::ballot). Unlike [`Ballot::path`], it includes the innermost ballot, so it
+    /// is never empty.
     pub path: Vec<String>,
 }
 
@@ -447,7 +449,7 @@ fn serialize_roots<S: Serializer>(ballots: &[Ballot], serializer: S) -> Result<S
 impl Compiled {
     /// Serializes the model to its canonical JSON, compact.
     ///
-    /// The result validates against the specification's `guide.schema.json`. `oval compile` prints
+    /// The result validates against the specification's `oval.schema.json`. `oval compile` prints
     /// this form.
     ///
     /// # Errors

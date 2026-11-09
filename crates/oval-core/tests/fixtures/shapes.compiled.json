@@ -1,0 +1,603 @@
+{
+  "oval": 1,
+  "guide": {
+    "name": "Meridian County Voter Guide",
+    "election": "June 2, 2026 Consolidated Primary",
+    "date": "2026-06-02"
+  },
+  "parties": [
+    {
+      "id": "dem",
+      "name": "Democratic",
+      "abbreviation": "D",
+      "candidates": [
+        "lena-ortiz",
+        "ruth-calder",
+        "amos-feld",
+        "ines-varga"
+      ]
+    },
+    {
+      "id": "rep",
+      "name": "Republican",
+      "abbreviation": "R",
+      "candidates": [
+        "tom-hale",
+        "nadia-brook",
+        "carl-moss",
+        "mia-chen"
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "id": "lena-ortiz",
+      "name": "Lena Ortiz",
+      "designation": "County Assessor",
+      "party": "dem",
+      "contests": [
+        "assessor"
+      ]
+    },
+    {
+      "id": "ruth-calder",
+      "name": "Ruth Calder",
+      "party": "dem",
+      "contests": [
+        "governor"
+      ]
+    },
+    {
+      "id": "amos-feld",
+      "name": "Amos Feld",
+      "party": "dem",
+      "contests": [
+        "governor"
+      ]
+    },
+    {
+      "id": "ines-varga",
+      "name": "Ines Varga",
+      "party": "dem",
+      "contests": [
+        "governor"
+      ]
+    },
+    {
+      "id": "tom-hale",
+      "name": "Tom Hale",
+      "party": "rep",
+      "contests": [
+        "governor"
+      ]
+    },
+    {
+      "id": "nadia-brook",
+      "name": "Nadia Brook",
+      "party": "rep",
+      "contests": [
+        "governor"
+      ]
+    },
+    {
+      "id": "carl-moss",
+      "name": "Carl Moss",
+      "party": "rep",
+      "contests": [
+        "governor"
+      ]
+    },
+    {
+      "id": "paul-reyes",
+      "name": "Paul Reyes",
+      "contests": [
+        "assessor"
+      ]
+    },
+    {
+      "id": "mia-chen",
+      "name": "Mia Chen",
+      "party": "rep",
+      "contests": [
+        "assessor"
+      ]
+    },
+    {
+      "id": "otto-lind",
+      "name": "Otto Lind",
+      "contests": [
+        "assessor"
+      ]
+    },
+    {
+      "id": "june-park",
+      "name": "June Park",
+      "contests": [
+        "ward-2-council"
+      ]
+    },
+    {
+      "id": "eli-stone",
+      "name": "Eli Stone",
+      "contests": [
+        "ward-2-council"
+      ]
+    },
+    {
+      "id": "rosa-diaz",
+      "name": "Rosa Diaz",
+      "contests": [
+        "ward-2-council"
+      ]
+    },
+    {
+      "id": "kofi-amari",
+      "name": "Kofi Amari",
+      "contests": [
+        "judge-amari"
+      ]
+    }
+  ],
+  "ballots": [
+    {
+      "kind": "ballot",
+      "id": "state",
+      "title": "State of Meridian",
+      "path": [],
+      "items": [
+        {
+          "kind": "section",
+          "title": "Executive Offices",
+          "items": [
+            {
+              "kind": "contest",
+              "id": "governor",
+              "title": "Governor and Lieutenant Governor",
+              "method": {
+                "kind": "single"
+              },
+              "location": {
+                "ballot": "state",
+                "section": "Executive Offices",
+                "path": [
+                  "state"
+                ]
+              },
+              "campaigns": [
+                {
+                  "index": 0,
+                  "label": "Ruth Calder / Amos Feld / Ines Varga",
+                  "head": "ruth-calder",
+                  "party": "dem",
+                  "members": [
+                    {
+                      "candidate": "ruth-calder",
+                      "role": "Governor"
+                    },
+                    {
+                      "candidate": "amos-feld",
+                      "role": "Lieutenant Governor"
+                    },
+                    {
+                      "candidate": "ines-varga",
+                      "role": "Secretary of State"
+                    }
+                  ],
+                  "incumbent": true,
+                  "withdrawn": false,
+                  "stance": {
+                    "position": "none"
+                  }
+                },
+                {
+                  "index": 1,
+                  "label": "Tom Hale / Nadia Brook / Carl Moss",
+                  "head": "tom-hale",
+                  "party": "rep",
+                  "members": [
+                    {
+                      "candidate": "tom-hale",
+                      "role": "Governor"
+                    },
+                    {
+                      "candidate": "nadia-brook",
+                      "role": "Lieutenant Governor"
+                    },
+                    {
+                      "candidate": "carl-moss",
+                      "role": "Secretary of State"
+                    }
+                  ],
+                  "incumbent": false,
+                  "withdrawn": false,
+                  "stance": {
+                    "position": "none"
+                  }
+                }
+              ],
+              "recommendation": {
+                "no_position": true,
+                "support": [],
+                "oppose": [],
+                "support_campaigns": [],
+                "oppose_campaigns": [],
+                "justification": "Our board did not reach a majority for either ticket."
+              }
+            }
+          ]
+        },
+        {
+          "kind": "ballot",
+          "id": "county",
+          "title": "Meridian County",
+          "eligibility": "Registered voters of Meridian County",
+          "path": [
+            "state"
+          ],
+          "items": [
+            {
+              "kind": "contest",
+              "id": "assessor",
+              "title": "County Assessor",
+              "method": {
+                "kind": "ranked",
+                "max": 3
+              },
+              "location": {
+                "ballot": "county",
+                "path": [
+                  "state",
+                  "county"
+                ]
+              },
+              "campaigns": [
+                {
+                  "index": 0,
+                  "label": "Lena Ortiz",
+                  "head": "lena-ortiz",
+                  "party": "dem",
+                  "members": [
+                    {
+                      "candidate": "lena-ortiz"
+                    }
+                  ],
+                  "incumbent": true,
+                  "withdrawn": false,
+                  "stance": {
+                    "position": "support",
+                    "tier": 0
+                  }
+                },
+                {
+                  "index": 1,
+                  "label": "Paul Reyes",
+                  "head": "paul-reyes",
+                  "members": [
+                    {
+                      "candidate": "paul-reyes"
+                    }
+                  ],
+                  "incumbent": false,
+                  "withdrawn": false,
+                  "stance": {
+                    "position": "support",
+                    "tier": 1
+                  }
+                },
+                {
+                  "index": 2,
+                  "label": "Mia Chen",
+                  "head": "mia-chen",
+                  "party": "rep",
+                  "members": [
+                    {
+                      "candidate": "mia-chen"
+                    }
+                  ],
+                  "incumbent": false,
+                  "withdrawn": false,
+                  "stance": {
+                    "position": "support",
+                    "tier": 1
+                  }
+                },
+                {
+                  "index": 3,
+                  "label": "Otto Lind",
+                  "head": "otto-lind",
+                  "members": [
+                    {
+                      "candidate": "otto-lind"
+                    }
+                  ],
+                  "incumbent": false,
+                  "withdrawn": true,
+                  "stance": {
+                    "position": "none"
+                  }
+                }
+              ],
+              "recommendation": {
+                "no_position": false,
+                "support": [
+                  [
+                    "lena-ortiz"
+                  ],
+                  [
+                    "paul-reyes",
+                    "mia-chen"
+                  ]
+                ],
+                "oppose": [],
+                "support_campaigns": [
+                  [
+                    0
+                  ],
+                  [
+                    1,
+                    2
+                  ]
+                ],
+                "oppose_campaigns": []
+              }
+            },
+            {
+              "kind": "ballot",
+              "id": "harbor",
+              "title": "City of Harbor",
+              "eligibility": "Registered voters of the City of Harbor",
+              "path": [
+                "state",
+                "county"
+              ],
+              "items": [
+                {
+                  "kind": "section",
+                  "title": "City Measures",
+                  "items": [
+                    {
+                      "kind": "measure",
+                      "id": "measure-h",
+                      "title": "Measure H",
+                      "subtitle": "Harbor Seawall Bond",
+                      "if_yes": "The city may issue up to $40 million in bonds to rebuild the seawall.",
+                      "if_no": "The city may not issue the bonds.",
+                      "location": {
+                        "ballot": "harbor",
+                        "section": "City Measures",
+                        "path": [
+                          "state",
+                          "county",
+                          "harbor"
+                        ]
+                      },
+                      "recommendation": {
+                        "position": "yes"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "ballot",
+                  "id": "harbor-ward-2",
+                  "title": "Harbor Ward 2",
+                  "eligibility": "Registered voters of Ward 2",
+                  "path": [
+                    "state",
+                    "county",
+                    "harbor"
+                  ],
+                  "items": [
+                    {
+                      "kind": "contest",
+                      "id": "ward-2-council",
+                      "title": "City Council, Ward 2",
+                      "method": {
+                        "kind": "multiple",
+                        "seats": 2
+                      },
+                      "location": {
+                        "ballot": "harbor-ward-2",
+                        "path": [
+                          "state",
+                          "county",
+                          "harbor",
+                          "harbor-ward-2"
+                        ]
+                      },
+                      "campaigns": [
+                        {
+                          "index": 0,
+                          "label": "June Park",
+                          "head": "june-park",
+                          "members": [
+                            {
+                              "candidate": "june-park"
+                            }
+                          ],
+                          "incumbent": false,
+                          "withdrawn": false,
+                          "stance": {
+                            "position": "support",
+                            "tier": 0
+                          }
+                        },
+                        {
+                          "index": 1,
+                          "label": "Eli Stone",
+                          "head": "eli-stone",
+                          "members": [
+                            {
+                              "candidate": "eli-stone"
+                            }
+                          ],
+                          "incumbent": false,
+                          "withdrawn": false,
+                          "stance": {
+                            "position": "oppose"
+                          }
+                        },
+                        {
+                          "index": 2,
+                          "label": "Rosa Diaz",
+                          "head": "rosa-diaz",
+                          "members": [
+                            {
+                              "candidate": "rosa-diaz"
+                            }
+                          ],
+                          "incumbent": false,
+                          "withdrawn": false,
+                          "stance": {
+                            "position": "none"
+                          }
+                        }
+                      ],
+                      "recommendation": {
+                        "no_position": false,
+                        "support": [
+                          [
+                            "june-park"
+                          ]
+                        ],
+                        "oppose": [
+                          "eli-stone"
+                        ],
+                        "support_campaigns": [
+                          [
+                            0
+                          ]
+                        ],
+                        "oppose_campaigns": [
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "kind": "contest",
+                      "id": "judge-amari",
+                      "title": "Retain Judge Kofi Amari",
+                      "method": {
+                        "kind": "retention"
+                      },
+                      "location": {
+                        "ballot": "harbor-ward-2",
+                        "path": [
+                          "state",
+                          "county",
+                          "harbor",
+                          "harbor-ward-2"
+                        ]
+                      },
+                      "campaigns": [
+                        {
+                          "index": 0,
+                          "label": "Kofi Amari",
+                          "head": "kofi-amari",
+                          "members": [
+                            {
+                              "candidate": "kofi-amari"
+                            }
+                          ],
+                          "incumbent": false,
+                          "withdrawn": false,
+                          "stance": {
+                            "position": "none"
+                          }
+                        }
+                      ],
+                      "recommendation": {
+                        "no_position": true,
+                        "support": [],
+                        "oppose": [],
+                        "support_campaigns": [],
+                        "oppose_campaigns": []
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "kind": "contest",
+      "id": "governor",
+      "title": "Governor and Lieutenant Governor",
+      "location": {
+        "ballot": "state",
+        "section": "Executive Offices",
+        "path": [
+          "state"
+        ]
+      }
+    },
+    {
+      "kind": "contest",
+      "id": "assessor",
+      "title": "County Assessor",
+      "location": {
+        "ballot": "county",
+        "path": [
+          "state",
+          "county"
+        ]
+      }
+    },
+    {
+      "kind": "measure",
+      "id": "measure-h",
+      "title": "Measure H",
+      "location": {
+        "ballot": "harbor",
+        "section": "City Measures",
+        "path": [
+          "state",
+          "county",
+          "harbor"
+        ]
+      }
+    },
+    {
+      "kind": "contest",
+      "id": "ward-2-council",
+      "title": "City Council, Ward 2",
+      "location": {
+        "ballot": "harbor-ward-2",
+        "path": [
+          "state",
+          "county",
+          "harbor",
+          "harbor-ward-2"
+        ]
+      }
+    },
+    {
+      "kind": "contest",
+      "id": "judge-amari",
+      "title": "Retain Judge Kofi Amari",
+      "location": {
+        "ballot": "harbor-ward-2",
+        "path": [
+          "state",
+          "county",
+          "harbor",
+          "harbor-ward-2"
+        ]
+      }
+    }
+  ],
+  "counts": {
+    "ballots": 4,
+    "sections": 2,
+    "contests": 4,
+    "measures": 1,
+    "campaigns": 10,
+    "candidates": 14,
+    "parties": 2
+  }
+}
