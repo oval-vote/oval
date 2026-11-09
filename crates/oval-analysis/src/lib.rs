@@ -54,3 +54,11 @@ pub use fix::{Edit, Fix, fixes};
 pub use hover::{Hover, hover};
 pub use outline::{OutlineItem, OutlineKind, outline};
 pub use symbols::{Declaration, Reference, Symbol, SymbolKind, Symbols};
+
+fn clamp_to_char_boundary(source: &str, offset: oval_syntax::TextSize) -> usize {
+    let offset = usize::from(offset).min(source.len());
+    (0..=offset)
+        .rev()
+        .find(|at| source.is_char_boundary(*at))
+        .unwrap_or(0)
+}

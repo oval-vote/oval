@@ -99,16 +99,60 @@ fn a_misspelled_reference_is_changed_to_the_nearest_declaration() {
 }
 
 #[test]
-fn a_missing_guide_field_is_added_after_the_marker() {
-    let source = "oval 1\nguide \"G\"\ndate 2026-11-03\n";
-    let fix = fixes(source)
-        .into_iter()
-        .find(|fix| fix.code == "missing-guide-field")
-        .expect("fix");
-    assert_eq!(fix.title, "Add `election \"\"`");
-    assert_eq!(
-        apply(source, &fix),
-        "oval 1\nelection \"\"\nguide \"G\"\ndate 2026-11-03\n"
+fn a_missing_guide_field_is_added_after_the_marker_with_its_value_as_a_placeholder() {
+    let cases = [
+        ("election", "election \"\"", "", Some("empty-string")),
+        ("guide", "guide \"\"", "", Some("empty-string")),
+        ("date", "date YYYY-MM-DD", "YYYY-MM-DD", None),
+    ];
+    let complete = ["guide \"G\"", "election \"E\"", "date 2026-11-03"];
+    for (name, line, placeholder, warning) in cases {
+        let rest: Vec<&str> = complete
+            .into_iter()
+            .filter(|field| !field.starts_with(name))
+            .collect();
+        let source = format!("oval 1\n{}\n", rest.join("\n"));
+        let fix = fixes(&source)
+            .into_iter()
+            .find(|fix| fix.code == "missing-guide-field")
+            .expect(name);
+        assert_eq!(fix.title, format!("Add `{name}`"));
+        let [edit] = fix.edits.as_slice() else {
+            panic!("one edit for {name}");
+        };
+        assert_eq!(edit.text, format!("\n{line}"));
+        let [range] = edit.placeholders.as_slice() else {
+            panic!("one placeholder for {name}");
+        };
+        assert_eq!(&edit.text[*range], placeholder);
+        let applied = apply(&source, &fix);
+        assert!(
+            applied.starts_with(&format!("oval 1\n{line}\n")),
+            "{applied}"
+        );
+        let report = oval_core::check(&applied).expect("readable");
+        let codes: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| diagnostic.code.identifier())
+            .collect();
+        assert!(!codes.contains(&"missing-guide-field"), "{codes:?}");
+        if let Some(warning) = warning {
+            assert!(
+                codes.contains(&warning),
+                "{name} left empty draws {warning}: {codes:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn ordinary_edits_have_no_placeholders() {
+    assert!(
+        fixes(GUIDE)
+            .iter()
+            .flat_map(|fix| &fix.edits)
+            .all(|edit| edit.placeholders.is_empty())
     );
 }
 
@@ -143,5 +187,78 @@ fn diagnostics_without_a_repair_have_no_fix() {
         fixes
             .iter()
             .all(|fix| fix.code != "invalid-date" && fix.code != "empty-document")
+    );
+}
+
+#[test]
+fn hovering_past_the_end_or_inside_a_character_does_not_panic() {
+    let end = TextSize::try_from(GUIDE.len()).expect("fits");
+    assert_eq!(hover(GUIDE, end + TextSize::from(1)), hover(GUIDE, end));
+    assert_eq!(hover(GUIDE, TextSize::from(u32::MAX)), hover(GUIDE, end));
+    let source = "oval 1\ncandidate @jose \"José\"\n";
+    let accent = source.find('é').expect("accent");
+    let inside = TextSize::try_from(accent + 1).expect("fits");
+    let before = TextSize::try_from(accent).expect("fits");
+    assert_eq!(hover(source, inside), hover(source, before));
+}
+
+fn with_terminator(source: &str, terminator: &str) -> String {
+    source.replace('\n', terminator)
+}
+
+#[test]
+fn inserted_lines_use_the_documents_own_line_terminator() {
+    let source = "oval 1\nguide \"G\"\ndate 2026-11-03\nballot @b \"B\"\n  section \"S\"\n    measure @m \"M\"\n";
+    let expected = [
+        (
+            "missing-guide-field",
+            "oval 1\nelection \"\"\nguide \"G\"\ndate 2026-11-03\nballot @b \"B\"\n  section \"S\"\n    measure @m \"M\"\n",
+        ),
+        (
+            "missing-recommendation",
+            "oval 1\nguide \"G\"\ndate 2026-11-03\nballot @b \"B\"\n  section \"S\"\n    measure @m \"M\"\n      recommend no-position\n",
+        ),
+    ];
+    for terminator in ["\n", "\r\n", "\r"] {
+        let document = with_terminator(source, terminator);
+        for (code, fixed) in expected {
+            let fix = fixes(&document)
+                .into_iter()
+                .find(|fix| fix.code == code)
+                .expect(code);
+            let applied = apply(&document, &fix);
+            assert_eq!(
+                applied,
+                with_terminator(fixed, terminator),
+                "{code} with {terminator:?}"
+            );
+            let report = oval_core::check(&applied).expect("readable");
+            assert!(
+                report
+                    .diagnostics()
+                    .iter()
+                    .all(|diagnostic| diagnostic.code.identifier() != code),
+                "{code} remains after its fix with {terminator:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_candidate_whose_inline_party_is_named_elsewhere_is_not_removed() {
+    let source = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\ncandidate @x \"X\"\n  party @rep \"Republican\"\ncandidate @y \"Y\"\n  party @rep\nballot @b \"B\"\n  contest @c \"C\" single\n    campaign @y\n    recommend\n      support @y\n";
+    let report = oval_core::check(source).expect("readable");
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code.identifier() == "unused-declaration"),
+        "the candidate is unused"
+    );
+    assert!(
+        fixes(source)
+            .iter()
+            .all(|fix| fix.code != "unused-declaration"),
+        "removing @x would leave @rep undeclared"
     );
 }

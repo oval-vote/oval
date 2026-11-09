@@ -34,7 +34,7 @@ test("the package names the language major it reads and its own version", () => 
 
 test("the catalog lists every diagnostic with its entry on the specification site", () => {
     const catalog = oval.catalog();
-    assert.equal(catalog.length, 54);
+    assert.equal(catalog.length, 55);
     assert.deepEqual(catalog[0], {
         identifier: "illegal-tab",
         severity: "error",
@@ -47,6 +47,7 @@ test("the catalog lists every diagnostic with its entry on the specification sit
         .filter((entry) => entry.severity === "warning")
         .map((e) => e.identifier);
     assert.ok(warnings.includes("unused-declaration") && warnings.includes("insecure-url"));
+    assert.equal(warnings.at(-1), "empty-string");
 });
 
 test("symbols list declarations and references with their ranges", () => {
@@ -135,6 +136,14 @@ test("hover describes identifiers and keywords", () => {
     assert.equal(oval.hover(source, source.indexOf('"City"') + 2), undefined);
 });
 
+test("hover accepts offsets past the end and inside a character", () => {
+    const source = 'oval 1\ncandidate @jose "José"\n';
+    const accent = Buffer.byteLength(source.slice(0, source.indexOf("é")));
+    assert.equal(oval.hover(source, -1), undefined);
+    assert.equal(oval.hover(source, Buffer.byteLength(source) + 5), undefined);
+    assert.equal(oval.hover(source, accent + 1), undefined);
+});
+
 test("fixes repair insecure urls and near-miss references", () => {
     const source =
         'oval 1\nguide "G"\nelection "E"\ndate 2026-11-03\n' +
@@ -153,6 +162,17 @@ test("fixes repair insecure urls and near-miss references", () => {
     const [url] = found;
     assert.equal(source.slice(url.edits[0].range.start, url.edits[0].range.end), "http://");
     assert.equal(url.edits[0].text, "https://");
+    assert.equal(url.edits[0].placeholders, undefined);
+});
+
+test("a missing guide field is added with its value as a placeholder", () => {
+    const source =
+        'oval 1\nguide "G"\ndate 2026-11-03\nballot @b "B"\n  measure @m "M"\n    recommend yes\n';
+    const [fix] = oval.fixes(source);
+    assert.equal(fix.title, "Add `election`");
+    const [edit] = fix.edits;
+    assert.equal(edit.text, '\nelection ""');
+    assert.deepEqual(edit.placeholders, [{ start: 11, end: 11 }]);
 });
 
 test("compiled output validates against the specification's schema", () => {

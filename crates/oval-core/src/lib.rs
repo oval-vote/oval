@@ -1025,6 +1025,42 @@ ballot @b \"B\"
     }
 
     #[test]
+    fn strings_with_nothing_but_spaces_and_tabs_are_empty_wherever_they_appear() {
+        let source = "\
+oval 1
+guide \"\"
+election \"E\"
+date 2026-11-03
+party @dem \" \"
+candidate @a \"A\"
+  designation \"\t\"
+ballot @b \"B\"
+  contest @c \"C\" single
+    campaign
+      @a as \"\"
+    recommend no-position
+  measure @m \"M\"
+    supporters \"Ashford Teachers\", \"\"
+    subtitle \"\\\"\"
+    recommend yes
+";
+        let report = check(source);
+        let empty: Vec<&str> = report
+            .diagnostics()
+            .iter()
+            .filter(|d| is_one_of(d.code, &[ValidationRule::EmptyString]))
+            .inspect(|d| assert_eq!(d.severity, Severity::Warning, "{}", d.message))
+            .map(|d| &source[d.range])
+            .collect();
+        assert_eq!(empty, ["\"\"", "\" \"", "\"\t\"", "\"\"", "\"\""]);
+        assert_eq!(
+            warnings("oval 1\nguide \"\n", &[ValidationRule::EmptyString]),
+            [] as [String; 0],
+            "an unterminated string is a lexical error, not an empty one"
+        );
+    }
+
+    #[test]
     fn v14_through_v18_are_silent_on_the_fixture() {
         for rule in [
             ValidationRule::UnusedDeclaration,
@@ -1032,6 +1068,7 @@ ballot @b \"B\"
             ValidationRule::DuplicateBallotTitle,
             ValidationRule::NonHeadReference,
             ValidationRule::UnpairedOutcome,
+            ValidationRule::EmptyString,
         ] {
             assert_eq!(warnings(FIXTURE, &[rule]), [] as [String; 0], "{rule:?}");
         }

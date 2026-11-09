@@ -10,6 +10,7 @@ mod markdown;
 mod measures;
 mod questions;
 mod recommendations;
+mod strings;
 mod structure;
 mod urls;
 pub(crate) mod version;
@@ -35,6 +36,7 @@ pub(crate) fn check(document: &Document, index: &Index) -> Vec<Diagnostic> {
     measures::check(index, &mut diagnostics);
     markdown::check(document, &mut diagnostics);
     urls::check(document, &mut diagnostics);
+    strings::check(document, &mut diagnostics);
     diagnostics
 }
 

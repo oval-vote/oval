@@ -43,7 +43,9 @@ oval.languageMajor(); // 1, the major version of the language this package reads
 oval.version(); // the package's own version
 ```
 
-Ranges are byte offsets into the UTF-8 source. Diagnostic codes are the identifiers of the
+Ranges are byte offsets into the UTF-8 source. An edit's `placeholders`, when present, are ranges
+within its `text` that the author should replace, such as the value of a guide field that a fix
+adds; an editor can offer them as snippet tab stops. Diagnostic codes are the identifiers of the
 specification's entries, and the typings declare them as a string union, so a `switch` over a
 code is checked by TypeScript.
 
