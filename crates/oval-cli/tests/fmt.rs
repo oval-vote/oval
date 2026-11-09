@@ -1,24 +1,8 @@
 //! Runs the `oval fmt` command against real files.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
-fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../oval-syntax/tests/fixtures/franklin.oval")
-}
-
-fn write_temp(name: &str, contents: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("oval-fmt-{}-{name}", std::process::id()));
-    std::fs::write(&path, contents).expect("temp file");
-    path
-}
-
-fn oval(args: &[&std::ffi::OsStr]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_oval"))
-        .args(args)
-        .output()
-        .expect("run oval")
-}
+use common::{fixture, oval, temp_path, write_temp};
 
 #[test]
 fn check_passes_on_a_formatted_file() {
@@ -85,4 +69,22 @@ fn a_valid_file_without_a_final_newline_stays_valid_after_formatting() {
             .ends_with("    subtitle \"S\" # c\n    recommend yes\n")
     );
     std::fs::remove_file(path).ok();
+}
+
+#[test]
+fn a_missing_file_mid_batch_does_not_stop_the_others_being_formatted() {
+    let first = write_temp("batch-first.oval", "guide   \"G\"\n");
+    let missing = temp_path("batch-missing.oval");
+    let last = write_temp("batch-last.oval", "guide   \"G\"\n");
+    let output = oval(&[
+        "fmt".as_ref(),
+        first.as_os_str(),
+        missing.as_os_str(),
+        last.as_os_str(),
+    ]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(std::fs::read_to_string(&first).unwrap(), "guide \"G\"\n");
+    assert_eq!(std::fs::read_to_string(&last).unwrap(), "guide \"G\"\n");
+    std::fs::remove_file(first).ok();
+    std::fs::remove_file(last).ok();
 }
