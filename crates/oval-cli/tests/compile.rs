@@ -1,18 +1,8 @@
 //! Runs the `oval compile` command against real files.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
-fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../oval-syntax/tests/fixtures/franklin.oval")
-}
-
-fn oval(args: &[&std::ffi::OsStr]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_oval"))
-        .args(args)
-        .output()
-        .expect("run oval")
-}
+use common::{fixture, oval};
 
 #[test]
 fn the_fixture_compiles_to_json_on_stdout() {
@@ -78,4 +68,35 @@ fn json_diagnostics_go_to_stderr_when_compiling_fails() {
         ]
     );
     std::fs::remove_file(path).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn closing_stdout_early_ends_the_run_quietly() {
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_oval"))
+        .args([
+            "compile".as_ref(),
+            "--pretty".as_ref(),
+            fixture().as_os_str(),
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run oval");
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("wait for oval");
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_full_disk_is_exit_code_two() {
+    let full = std::fs::File::create("/dev/full").expect("open /dev/full");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_oval"))
+        .args(["check".as_ref(), "--json".as_ref(), fixture().as_os_str()])
+        .stdout(full)
+        .output()
+        .expect("run oval");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
 }

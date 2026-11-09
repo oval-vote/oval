@@ -1,24 +1,8 @@
 //! Runs the `oval check` command against real files.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod common;
 
-fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../oval-syntax/tests/fixtures/franklin.oval")
-}
-
-fn write_temp(name: &str, contents: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!("oval-cli-{}-{name}", std::process::id()));
-    std::fs::write(&path, contents).expect("temp file");
-    path
-}
-
-fn oval(args: &[&std::ffi::OsStr]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_oval"))
-        .args(args)
-        .output()
-        .expect("run oval")
-}
+use common::{fixture, oval, temp_path, write_temp, write_temp_bytes};
 
 #[test]
 fn a_clean_file_prints_nothing_and_succeeds() {
@@ -106,7 +90,8 @@ fn json_output_carries_positions_ranges_and_identifiers() {
             "message": "2026-02-30 is not a calendar date",
             "start": { "line": 4, "column": 6 },
             "end": { "line": 4, "column": 16 },
-            "range": { "start": 35, "end": 45 }
+            "range": { "start": 35, "end": 45 },
+            "url": "https://spec.oval.vote/draft/#sec-Invalid-Date"
         }])
     );
     std::fs::remove_file(path).ok();
@@ -114,4 +99,80 @@ fn json_output_carries_positions_ranges_and_identifiers() {
     let output = oval(&["check".as_ref(), "--json".as_ref(), fixture().as_os_str()]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(String::from_utf8_lossy(&output.stdout), "[]\n");
+}
+
+const INVALID_DATE: &str = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-02-30\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n";
+
+#[test]
+fn a_missing_file_mid_batch_is_reported_and_the_rest_are_still_checked() {
+    let first = write_temp("batch-first.oval", INVALID_DATE);
+    let missing = temp_path("batch-missing.oval");
+    let last = write_temp("batch-last.oval", INVALID_DATE);
+    let files = [first.as_os_str(), missing.as_os_str(), last.as_os_str()];
+
+    let output = oval(&[&["check".as_ref(), "--json".as_ref()], &files[..]].concat());
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is a JSON array");
+    let paths: Vec<&str> = json
+        .as_array()
+        .expect("array")
+        .iter()
+        .map(|entry| entry["path"].as_str().expect("path"))
+        .collect();
+    assert_eq!(
+        paths,
+        [first.display().to_string(), last.display().to_string()]
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr)
+            .lines()
+            .collect::<Vec<_>>()
+            .len(),
+        1
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .starts_with(&format!("oval: cannot read {}: ", missing.display()))
+    );
+
+    let output = oval(&[&["check".as_ref()], &files[..]].concat());
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(&format!("{}:4:6: error[invalid-date]", first.display())));
+    assert!(stdout.contains(&format!("{}:4:6: error[invalid-date]", last.display())));
+
+    std::fs::remove_file(first).ok();
+    std::fs::remove_file(last).ok();
+}
+
+#[test]
+fn a_file_with_a_nul_byte_is_reported_and_the_rest_are_still_checked() {
+    let rejected = write_temp("nul.oval", "oval 1\n\0\n");
+    let last = write_temp("after-nul.oval", INVALID_DATE);
+    let output = oval(&["check".as_ref(), rejected.as_os_str(), last.as_os_str()]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .starts_with(&format!("oval: {}: ", rejected.display()))
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains(&format!("{}:4:6: error[invalid-date]", last.display()))
+    );
+    std::fs::remove_file(rejected).ok();
+    std::fs::remove_file(last).ok();
+}
+
+#[test]
+fn invalid_utf8_is_reported_at_its_first_bad_byte() {
+    let path = write_temp_bytes("latin1.oval", b"oval 1\nguide \"G\xe9\"\n");
+    let output = oval(&["check".as_ref(), path.as_os_str()]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!("oval: {}:2:9: not valid UTF-8\n", path.display())
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "");
+    std::fs::remove_file(path).ok();
 }
