@@ -67,3 +67,22 @@ fn files_with_syntax_errors_are_reported_and_left_alone() {
     );
     std::fs::remove_file(path).ok();
 }
+
+#[test]
+fn a_valid_file_without_a_final_newline_stays_valid_after_formatting() {
+    let path = write_temp(
+        "unterminated.oval",
+        "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n    subtitle \"S\" # c",
+    );
+    assert!(oval(&["check".as_ref(), path.as_os_str()]).status.success());
+    let output = oval(&["fmt".as_ref(), path.as_os_str()]);
+    assert!(output.status.success(), "{output:?}");
+    let output = oval(&["check".as_ref(), path.as_os_str()]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        std::fs::read_to_string(&path)
+            .unwrap()
+            .ends_with("    subtitle \"S\" # c\n    recommend yes\n")
+    );
+    std::fs::remove_file(path).ok();
+}

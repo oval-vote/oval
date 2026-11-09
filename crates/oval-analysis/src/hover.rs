@@ -25,8 +25,10 @@ pub struct Hover {
 /// For an identifier, the text names what it declares, with the name or title the declaration
 /// gives it and, for a candidate, its party. For a keyword, the text is one sentence on what the
 /// keyword introduces and a link to its section of the specification. `None` when neither is at
-/// `offset`, and for an identifier that nothing declares.
+/// `offset`, and for an identifier that nothing declares. An offset past the end of `source` or
+/// inside a character is moved back to the nearest character boundary.
 pub fn hover(source: &str, offset: TextSize) -> Option<Hover> {
+    let offset = TextSize::try_from(crate::clamp_to_char_boundary(source, offset)).ok()?;
     let parsed = parse(source).ok()?;
     let document = Document::cast(parsed.syntax())?;
     let index = Index::build(&document);

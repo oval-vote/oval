@@ -240,9 +240,7 @@ impl Formatter {
             SyntaxKind::BlankLine if !self.pending.is_empty() => self.pending.push(Pending::Blank),
             SyntaxKind::BlankLine => self.blank(),
             SyntaxKind::Newline => {
-                if !token.text().is_empty() {
-                    self.out.push('\n');
-                }
+                self.out.push('\n');
                 self.at_line_start = true;
             }
             SyntaxKind::MarkdownBlock => {
@@ -578,6 +576,30 @@ mod tests {
         check(
             "ballot @b \"B\"\n  contest @c \"C\" single\n    # the advice\n    recommend\n      support @x\n\n    # the field\n    subtitle \"S\"\n\n    # the only campaign\n    campaign @x \"X\"\n    # end of contest\n",
             "ballot @b \"B\"\n  contest @c \"C\" single\n    # the field\n    subtitle \"S\"\n\n    # the only campaign\n    campaign @x \"X\"\n    # the advice\n    recommend\n      support @x\n# end of contest\n",
+        );
+    }
+
+    #[test]
+    fn an_entry_moved_from_a_last_line_without_a_terminator_keeps_its_own_line() {
+        check(
+            "ballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n    subtitle \"S\"",
+            "ballot @b \"B\"\n  measure @m \"M\"\n    subtitle \"S\"\n    recommend yes\n",
+        );
+        check(
+            "ballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n    subtitle \"S\" # c",
+            "ballot @b \"B\"\n  measure @m \"M\"\n    subtitle \"S\" # c\n    recommend yes\n",
+        );
+        check(
+            "ballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n    note:\n      Body.",
+            "ballot @b \"B\"\n  measure @m \"M\"\n    note:\n      Body.\n    recommend yes\n",
+        );
+        check(
+            "ballot @b \"B\"\n  contest @c \"C\" single\n    campaign @x \"X\"\n    recommend\n      support @x\n    subtitle \"S\"",
+            "ballot @b \"B\"\n  contest @c \"C\" single\n    subtitle \"S\"\n    campaign @x \"X\"\n    recommend\n      support @x\n",
+        );
+        check(
+            "ballot @b \"B\"\n  contest @c \"C\" single\n    campaign\n      website https://t.example\n      @p \"P\"\n    recommend\n      oppose @p\n      support @q",
+            "ballot @b \"B\"\n  contest @c \"C\" single\n    campaign\n      @p \"P\"\n      website https://t.example\n    recommend\n      support @q\n      oppose @p\n",
         );
     }
 

@@ -15,7 +15,8 @@
 //! cannot read its input at all, because it contains U+0000, throws a string that says so; one
 //! that fails because the document has errors throws the array of diagnostics that [`check`]
 //! would return. Should a value fail to convert to JavaScript, the function throws that
-//! conversion error.
+//! conversion error. A panic, which is always a bug, prints its message to the console before the
+//! call fails.
 //!
 //! [`TYPES`] declares the TypeScript types of these values and is appended to the package's
 //! generated typings.
@@ -99,7 +100,8 @@ export type DiagnosticIdentifier =
   | "support-over-count"
   | "non-head-reference"
   | "unpaired-outcome"
-  | "insecure-url";
+  | "insecure-url"
+  | "empty-string";
 
 export type Severity = "error" | "warning";
 
@@ -173,6 +175,7 @@ export interface Hover {
 export interface Edit {
   range: Range;
   text: string;
+  placeholders?: Range[];
 }
 
 export interface Fix {
@@ -193,6 +196,17 @@ struct CatalogEntry {
     severity: Severity,
     title: &'static str,
     url: String,
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console, js_name = error)]
+    fn console_error(message: &str);
+}
+
+#[wasm_bindgen(start)]
+fn start() {
+    std::panic::set_hook(Box::new(|info| console_error(&info.to_string())));
 }
 
 /// The major version of the Oval language this package reads, `1`.

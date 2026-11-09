@@ -4,7 +4,7 @@ use oval_syntax::ast::{AstNode, Document};
 use oval_syntax::{TextRange, TextSize};
 use serde::Serialize;
 
-use crate::symbols::serialize_range;
+use crate::symbols::{serialize_range, serialize_ranges};
 
 /// One replacement in the source.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -14,6 +14,23 @@ pub struct Edit {
     pub range: TextRange,
     /// The text to put there.
     pub text: String,
+    /// Ranges within `text` that the author should replace, in the order an editor visits them.
+    /// Empty when the text is final.
+    #[serde(
+        serialize_with = "serialize_ranges",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub placeholders: Vec<TextRange>,
+}
+
+impl Edit {
+    fn new(range: TextRange, text: String) -> Self {
+        Self {
+            range,
+            text,
+            placeholders: Vec::new(),
+        }
+    }
 }
 
 /// A repair for one diagnostic.
@@ -34,9 +51,12 @@ pub struct Fix {
 ///
 /// Five diagnostics qualify. An `insecure-url` becomes `https`. An `undeclared-reference` whose
 /// name is close to a declared one of the kind the position accepts is changed to that name. A
-/// `missing-guide-field` is added after the version marker. A `missing-recommendation` becomes
+/// `missing-guide-field` is added after the version marker, with its value left as a placeholder
+/// for the author to fill in. A `missing-recommendation` becomes
 /// `recommend no-position` at the end of the contest or measure. An `unused-declaration` at the
-/// top level is removed. Fixes are in source order, and a diagnostic with no repair has no fix.
+/// top level is removed, unless it declares a party inline that something else names. Inserted
+/// lines end with the document's own line terminator. Fixes are in source order, and a diagnostic
+/// with no repair has no fix.
 pub fn fixes(source: &str) -> Vec<Fix> {
     let Ok(report) = oval_core::check(source) else {
         return Vec::new();
@@ -62,9 +82,9 @@ fn fix(source: &str, document: &Document, index: &Index, diagnostic: &Diagnostic
     let (title, edits) = match rule {
         ValidationRule::InsecureUrl => insecure_url(source, range)?,
         ValidationRule::UndeclaredReference => undeclared_reference(index, range)?,
-        ValidationRule::MissingGuideField => missing_guide_field(document, diagnostic)?,
+        ValidationRule::MissingGuideField => missing_guide_field(source, document, diagnostic)?,
         ValidationRule::MissingRecommendation => missing_recommendation(source, index, range)?,
-        ValidationRule::UnusedDeclaration => unused_declaration(document, range)?,
+        ValidationRule::UnusedDeclaration => unused_declaration(document, index, range)?,
         _ => return None,
     };
     Some(Fix {
@@ -82,10 +102,7 @@ fn insecure_url(source: &str, range: TextRange) -> Option<(String, Vec<Edit>)> {
     }
     Some((
         "Use https".to_owned(),
-        vec![Edit {
-            range: scheme,
-            text: "https://".to_owned(),
-        }],
+        vec![Edit::new(scheme, "https://".to_owned())],
     ))
 }
 
@@ -101,14 +118,12 @@ fn undeclared_reference(index: &Index, range: TextRange) -> Option<(String, Vec<
         .map(|(_, name)| name.clone())?;
     Some((
         format!("Change to `@{nearest}`"),
-        vec![Edit {
-            range: reference.name_range,
-            text: nearest,
-        }],
+        vec![Edit::new(reference.name_range, nearest)],
     ))
 }
 
 fn missing_guide_field(
+    source: &str,
     document: &Document,
     diagnostic: &Diagnostic,
 ) -> Option<(String, Vec<Edit>)> {
@@ -117,20 +132,26 @@ fn missing_guide_field(
         .split('`')
         .nth(1)
         .filter(|name| ["guide", "election", "date"].contains(name))?;
-    let line = match name {
-        "date" => "date 2026-01-01".to_owned(),
-        _ => format!("{name} \"\""),
+    let (line, placeholder) = match name {
+        "date" => ("date YYYY-MM-DD".to_owned(), 5..15),
+        _ => (format!("{name} \"\""), name.len() + 2..name.len() + 2),
     };
-    let text = if document.version().is_some() {
-        format!("\n{line}")
+    let terminator = terminator(source);
+    let (text, before_line) = if document.version().is_some() {
+        (format!("{terminator}{line}"), terminator.len())
     } else {
-        format!("{line}\n")
+        (format!("{line}{terminator}"), 0)
     };
+    let placeholder = TextRange::new(
+        TextSize::try_from(before_line + placeholder.start).ok()?,
+        TextSize::try_from(before_line + placeholder.end).ok()?,
+    );
     Some((
-        format!("Add `{line}`"),
+        format!("Add `{name}`"),
         vec![Edit {
             range: TextRange::empty(diagnostic.range.start()),
             text,
+            placeholders: vec![placeholder],
         }],
     ))
 }
@@ -153,22 +174,25 @@ fn missing_recommendation(
         .find(|(header, _)| *header == range)?;
     let indent = line_indent(source, header.start()) + 2;
     let end = construct.end();
-    let needs_newline = usize::from(end) > 0 && !source[..usize::from(end)].ends_with('\n');
+    let terminator = terminator(source);
+    let needs_terminator =
+        usize::from(end) > 0 && !source[..usize::from(end)].ends_with(['\n', '\r']);
     let text = format!(
-        "{}{}recommend no-position\n",
-        if needs_newline { "\n" } else { "" },
+        "{}{}recommend no-position{terminator}",
+        if needs_terminator { terminator } else { "" },
         " ".repeat(indent)
     );
     Some((
         "Add `recommend no-position`".to_owned(),
-        vec![Edit {
-            range: TextRange::empty(end),
-            text,
-        }],
+        vec![Edit::new(TextRange::empty(end), text)],
     ))
 }
 
-fn unused_declaration(document: &Document, range: TextRange) -> Option<(String, Vec<Edit>)> {
+fn unused_declaration(
+    document: &Document,
+    index: &Index,
+    range: TextRange,
+) -> Option<(String, Vec<Edit>)> {
     let (name, construct) = document
         .parties()
         .map(|p| (p.id(), p.header_line_range(), p.range()))
@@ -179,22 +203,36 @@ fn unused_declaration(document: &Document, range: TextRange) -> Option<(String, 
         )
         .find(|(_, header, _)| *header == range)
         .map(|(id, _, construct)| (id.map(|id| id.name()), construct))?;
+    let declares_something_used_elsewhere = index
+        .references
+        .iter()
+        .filter(|reference| !construct.contains_range(reference.range))
+        .filter_map(|reference| index.resolve(&reference.name))
+        .any(|declaration| construct.contains_range(declaration.range));
+    if declares_something_used_elsewhere {
+        return None;
+    }
     Some((
         format!("Remove `@{}`", name.unwrap_or_default()),
-        vec![Edit {
-            range: construct,
-            text: String::new(),
-        }],
+        vec![Edit::new(construct, String::new())],
     ))
 }
 
 fn line_indent(source: &str, at: TextSize) -> usize {
     let at = usize::from(at);
-    let line_start = source[..at].rfind('\n').map_or(0, |i| i + 1);
+    let line_start = source[..at].rfind(['\n', '\r']).map_or(0, |i| i + 1);
     source[line_start..at]
         .chars()
         .take_while(|c| *c == ' ')
         .count()
+}
+
+fn terminator(source: &str) -> &'static str {
+    match source.find(['\n', '\r']) {
+        Some(at) if source[at..].starts_with("\r\n") => "\r\n",
+        Some(at) if source[at..].starts_with('\r') => "\r",
+        _ => "\n",
+    }
 }
 
 fn distance(a: &str, b: &str) -> usize {

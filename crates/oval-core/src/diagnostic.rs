@@ -120,6 +120,8 @@ pub enum ValidationRule {
     /// A URL, or a link destination inside a Markdown body, uses the `http` scheme rather than
     /// `https`. This rule is a warning.
     InsecureUrl,
+    /// A string contains nothing, or only spaces and tabs. This rule is a warning.
+    EmptyString,
 }
 
 impl ValidationRule {
@@ -160,6 +162,7 @@ impl ValidationRule {
         Self::NonHeadReference,
         Self::UnpairedOutcome,
         Self::InsecureUrl,
+        Self::EmptyString,
     ];
 
     /// The identifier the specification gives this rule, such as `invalid-date`.
@@ -201,6 +204,7 @@ impl ValidationRule {
             Self::NonHeadReference => "non-head-reference",
             Self::UnpairedOutcome => "unpaired-outcome",
             Self::InsecureUrl => "insecure-url",
+            Self::EmptyString => "empty-string",
         }
     }
 
@@ -241,6 +245,7 @@ impl ValidationRule {
             Self::NonHeadReference => "Non-Head Reference",
             Self::UnpairedOutcome => "Unpaired Outcome",
             Self::InsecureUrl => "Insecure URL",
+            Self::EmptyString => "Empty String",
         }
     }
 
@@ -282,7 +287,8 @@ impl ValidationRule {
             | Self::SupportOverCount
             | Self::NonHeadReference
             | Self::UnpairedOutcome
-            | Self::InsecureUrl => Severity::Warning,
+            | Self::InsecureUrl
+            | Self::EmptyString => Severity::Warning,
         }
     }
 }
@@ -324,11 +330,11 @@ impl DiagnosticCode {
     /// let all = DiagnosticCode::all();
     /// let identifiers: Vec<&str> = all.iter().map(|code| code.identifier()).collect();
     /// assert_eq!(identifiers.first(), Some(&"illegal-tab"));
-    /// assert_eq!(identifiers.last(), Some(&"insecure-url"));
+    /// assert_eq!(identifiers.last(), Some(&"empty-string"));
     /// assert!(identifiers.contains(&"missing-guide-field"));
     ///
     /// let warnings = all.iter().filter(|code| code.severity() == Severity::Warning).count();
-    /// assert_eq!(warnings, 7);
+    /// assert_eq!(warnings, 8);
     /// ```
     pub fn all() -> Vec<Self> {
         LexicalErrorKind::ALL
@@ -479,7 +485,7 @@ mod tests {
     #[test]
     fn every_code_has_a_unique_kebab_case_identifier() {
         let all = DiagnosticCode::all();
-        assert_eq!(all.len(), 7 + 13 + 34);
+        assert_eq!(all.len(), 7 + 13 + 35);
         let identifiers: HashSet<&str> = all.iter().map(|code| code.identifier()).collect();
         assert_eq!(identifiers.len(), all.len());
         for code in &all {
@@ -523,6 +529,7 @@ mod tests {
                 "non-head-reference",
                 "unpaired-outcome",
                 "insecure-url",
+                "empty-string",
             ]
         );
     }

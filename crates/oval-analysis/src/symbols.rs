@@ -205,3 +205,12 @@ pub(crate) fn serialize_range<S: serde::Serializer>(
     }
     .serialize(serializer)
 }
+
+pub(crate) fn serialize_ranges<S: serde::Serializer>(
+    ranges: &[TextRange],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    #[derive(Serialize)]
+    struct Range(#[serde(serialize_with = "serialize_range")] TextRange);
+    serializer.collect_seq(ranges.iter().copied().map(Range))
+}

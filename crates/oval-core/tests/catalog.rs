@@ -125,6 +125,7 @@ fn cases() -> Vec<Case> {
         case("support-over-count", ballot("  contest @council \"City Council\" multiple 2\n    campaign @aokafor \"Ada Okafor\"\n    campaign @bsantos \"Beatriz Santos\"\n    campaign @cfox \"Carl Fox\"\n    recommend\n      support @aokafor @bsantos\n      support @cfox\n"), |s| span_within(s, "support @cfox", "@cfox")),
         case("non-head-reference", contest("    campaign\n      @hana \"Hana\" as \"President\"\n      @hiro \"Hiro\" as \"Vice President\"\n    recommend\n      support @hiro\n"), |s| span_within(s, "support @hiro", "@hiro")),
         case("insecure-url", document("party @dem \"Democratic\"\n  website http://democrats.example\ncandidate @c \"C\"\n  party @dem\nballot @city \"City\"\n  contest @m \"M\" single\n    campaign @c\n    recommend no-position\n"), |s| span(s, "http://democrats.example")),
+        case("empty-string", ballot("  measure @prop-a \"Proposition A\"\n    subtitle \"\"\n    recommend yes\n"), |s| span(s, "\"\"")),
         case("unpaired-outcome", ballot("  measure @prop-a \"Proposition A\"\n    if_yes:\n      The tax continues.\n    recommend yes\n"), |s| span(s, "if_yes:\n      The tax continues.\n")),
     ]
 }

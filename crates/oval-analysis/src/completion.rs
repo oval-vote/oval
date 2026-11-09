@@ -65,11 +65,7 @@ pub struct Completion {
 /// The result is empty inside a string, a comment, or a Markdown body, where the grammar accepts
 /// anything, and where the position names a new identifier rather than an existing one.
 pub fn completions(source: &str, offset: TextSize) -> Vec<Completion> {
-    let offset = usize::from(offset).min(source.len());
-    let offset = (0..=offset)
-        .rev()
-        .find(|at| source.is_char_boundary(*at))
-        .unwrap_or(0);
+    let offset = crate::clamp_to_char_boundary(source, offset);
     let replace = replace_range(source, offset);
     let start = usize::from(replace.start());
     let line_end = source[offset..]
