@@ -1,0 +1,78 @@
+oval 1
+
+guide "Meridian County Voter Guide"
+election "June 2, 2026 Consolidated Primary"
+date 2026-06-02
+
+party @dem "Democratic"
+  abbreviation "D"
+party @rep "Republican"
+  abbreviation "R"
+
+candidate @lena-ortiz "Lena Ortiz"
+  designation "County Assessor"
+  party @dem
+
+ballot @state "State of Meridian"
+
+  section "Executive Offices"
+
+    contest @governor "Governor and Lieutenant Governor" single
+      campaign incumbent
+        @ruth-calder "Ruth Calder" as "Governor"
+          party @dem
+        @amos-feld "Amos Feld" as "Lieutenant Governor"
+          party @dem
+        @ines-varga "Ines Varga" as "Secretary of State"
+          party @dem
+      campaign
+        @tom-hale "Tom Hale" as "Governor"
+          party @rep
+        @nadia-brook "Nadia Brook" as "Lieutenant Governor"
+          party @rep
+        @carl-moss "Carl Moss" as "Secretary of State"
+          party @rep
+      recommend no-position
+        justification:
+          Our board did not reach a majority for either ticket.
+
+  ballot @county "Meridian County"
+    eligibility "Registered voters of Meridian County"
+
+    contest @assessor "County Assessor" ranked max 3
+      campaign incumbent @lena-ortiz
+      campaign @paul-reyes "Paul Reyes"
+      campaign @mia-chen "Mia Chen"
+        party @rep
+      campaign withdrawn @otto-lind "Otto Lind"
+      recommend
+        support @lena-ortiz
+        support @paul-reyes @mia-chen
+
+    ballot @harbor "City of Harbor"
+      eligibility "Registered voters of the City of Harbor"
+
+      section "City Measures"
+
+        measure @measure-h "Measure H"
+          subtitle "Harbor Seawall Bond"
+          if_yes:
+            The city may issue up to $40 million in bonds to rebuild the seawall.
+          if_no:
+            The city may not issue the bonds.
+          recommend yes
+
+      ballot @harbor-ward-2 "Harbor Ward 2"
+        eligibility "Registered voters of Ward 2"
+
+        contest @ward-2-council "City Council, Ward 2" multiple 2
+          campaign @june-park "June Park"
+          campaign @eli-stone "Eli Stone"
+          campaign @rosa-diaz "Rosa Diaz"
+          recommend
+            support @june-park
+            oppose @eli-stone
+
+        contest @judge-amari "Retain Judge Kofi Amari" retention
+          campaign @kofi-amari "Kofi Amari"
+          recommend no-position

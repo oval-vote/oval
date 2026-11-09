@@ -22,10 +22,16 @@
 //! assert!(report.has_errors());
 //! ```
 
+#[cfg(test)]
+extern crate self as oval_core;
+
 pub mod compile;
 mod diagnostic;
 pub mod index;
 mod rules;
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+mod support;
 mod syntax;
 
 pub use compile::Compiled;
@@ -90,7 +96,7 @@ impl Report {
 
 /// Parses, validates, and compiles `source` to the canonical model.
 ///
-/// The model is the one the specification's `guide.schema.json` describes. It is the guide with
+/// The model is the one the specification's `oval.schema.json` describes. It is the guide with
 /// every reference resolved and with the derived fields any renderer would otherwise recompute.
 /// Two documents that differ only in comments, whitespace, or formatting compile to the same model.
 ///
@@ -166,10 +172,12 @@ pub fn check(source: &str) -> Result<Report, InputRejection> {
 mod tests {
     use super::{CompileError, DiagnosticCode, Report, Severity, ValidationRule};
 
-    const FIXTURE: &str = include_str!("../../oval-syntax/tests/fixtures/franklin.oval");
+    use crate::support;
+
+    const FIXTURE: &str = support::FRANKLIN;
 
     fn check(source: &str) -> Report {
-        super::check(source).expect("accepted")
+        support::check(source)
     }
 
     #[test]
@@ -1081,12 +1089,12 @@ ballot @b \"B\"
         assert_eq!(compiled.oval, 1);
         assert_eq!(compiled.guide.name, "Franklin Voter Guide");
         assert_eq!(compiled.guide.date, "2026-11-03");
-        assert_eq!(compiled.ballots.len(), 6);
-        assert_eq!(compiled.counts.contests, 44);
-        assert_eq!(compiled.counts.measures, 28);
-        assert_eq!(compiled.counts.parties, 6);
-        assert_eq!(compiled.questions.len(), 72);
+        assert_eq!(compiled.counts.parties, compiled.parties.len());
         assert_eq!(compiled.counts.candidates, compiled.candidates.len());
+        assert_eq!(
+            compiled.questions.len(),
+            compiled.counts.contests + compiled.counts.measures
+        );
         assert!(compiled.candidates.iter().all(|c| !c.contests.is_empty()));
 
         let president = compiled

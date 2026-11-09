@@ -1,10 +1,13 @@
 //! One document per diagnostic identifier, each producing that diagnostic at the range the
 //! specification gives it.
 
+mod support;
+
 use std::collections::BTreeSet;
 
-use oval_core::{DiagnosticCode, check};
+use oval_core::DiagnosticCode;
 use oval_syntax::TextRange;
+use support::check;
 
 const HEAD: &str = "oval 1\nguide \"Ashford Voter Guide\"\nelection \"November 3, 2026 General Election\"\ndate 2026-11-03\n";
 
@@ -140,7 +143,7 @@ fn every_identifier_has_a_case_and_every_case_reports_its_identifier_once() {
         .collect();
     assert_eq!(covered, all);
     for case in cases {
-        let report = check(&case.source).expect("accepted");
+        let report = check(&case.source);
         let found: Vec<TextRange> = report
             .diagnostics()
             .iter()
@@ -168,7 +171,7 @@ fn body_positions_map_back_to_the_source_whatever_the_terminator() {
         let source = ballot(&format!(
             "  measure @p \"P\"\n    note:{terminator}      First.{terminator}{terminator}      Then `code`.{terminator}    recommend yes\n"
         ));
-        let report = check(&source).expect("accepted");
+        let report = check(&source);
         let found: Vec<TextRange> = report
             .diagnostics()
             .iter()
@@ -185,7 +188,7 @@ fn the_markdown_profile_names_each_construct_it_rejects() {
     let clean = ballot(&format!(
         "  measure @p \"P\"\n    note:\n{body}    recommend yes\n"
     ));
-    let report = check(&clean).expect("accepted");
+    let report = check(&clean);
     assert!(
         report
             .diagnostics()
@@ -222,7 +225,7 @@ fn the_markdown_profile_names_each_construct_it_rejects() {
         let source = ballot(&format!(
             "  measure @p \"P\"\n    note:\n      {construct}\n    recommend yes\n"
         ));
-        let report = check(&source).expect("accepted");
+        let report = check(&source);
         let messages: Vec<&str> = report
             .diagnostics()
             .iter()
@@ -235,7 +238,7 @@ fn the_markdown_profile_names_each_construct_it_rejects() {
     let source = ballot(
         "  measure @p \"P\"\n    note:\n      [site](http://a.example)\n    recommend yes\n",
     );
-    let report = check(&source).expect("accepted");
+    let report = check(&source);
     let insecure: Vec<TextRange> = report
         .diagnostics()
         .iter()

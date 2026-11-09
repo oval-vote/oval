@@ -1,0 +1,821 @@
+{
+  "description": "The canonical output of compiling an Oval document: the data model with every reference resolved, plus derived fields for renderers. Keys mirror the language's keywords.",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.oval.vote/draft/schema/oval.schema.json",
+  "title": "Oval compiled guide",
+  "type": "object",
+  "required": [
+    "oval",
+    "guide",
+    "parties",
+    "candidates",
+    "ballots",
+    "questions",
+    "counts"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "oval": {
+      "description": "The major version of the Oval language the document declares in its version marker.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "guide": {
+      "description": "The document-level fields.",
+      "$ref": "#/$defs/guide"
+    },
+    "parties": {
+      "description": "Every party declared at the top level or inline, in document order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/party"
+      }
+    },
+    "candidates": {
+      "description": "Every candidate declared at the top level or inline, in document order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    },
+    "ballots": {
+      "description": "Root ballots, in presentation order.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/ballot"
+      }
+    },
+    "questions": {
+      "description": "Derived. Every contest and measure in ballot order, with where it sits in the tree.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/question_entry"
+      }
+    },
+    "counts": {
+      "description": "Derived. Totals across the whole document.",
+      "$ref": "#/$defs/counts"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "description": "An entity identifier without its leading @.",
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+    },
+    "markdown": {
+      "description": "A Markdown body with its common indentation removed, line terminators normalized to \\n, and no trailing terminator.",
+      "type": "string"
+    },
+    "guide": {
+      "description": "The document-level fields: what the guide is and which election it covers.",
+      "type": "object",
+      "required": [
+        "name",
+        "election",
+        "date"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The guide's title, from `guide`.",
+          "type": "string"
+        },
+        "election": {
+          "description": "The election as named on the ballot, from `election`.",
+          "type": "string"
+        },
+        "date": {
+          "description": "Election day as `YYYY-MM-DD`, from `date`.",
+          "type": "string",
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "note": {
+          "description": "The guide's introductory note, from `note`.",
+          "$ref": "#/$defs/markdown"
+        }
+      }
+    },
+    "party": {
+      "description": "A political party.",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "candidates"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The party's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "description": "The party's name as printed on the ballot.",
+          "type": "string"
+        },
+        "abbreviation": {
+          "description": "The short form printed beside candidates, from `abbreviation`.",
+          "type": "string"
+        },
+        "website": {
+          "description": "The party's website, from `website`.",
+          "type": "string",
+          "format": "uri"
+        },
+        "note": {
+          "description": "The author's note on the party, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "candidates": {
+          "description": "Derived. Identifiers of every candidate whose party this is, in document order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "candidate": {
+      "description": "A person who appears in one or more campaigns.",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "contests"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The candidate's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "description": "The candidate's name as printed on the ballot.",
+          "type": "string"
+        },
+        "designation": {
+          "description": "The occupation or title printed beside the name, from `designation`.",
+          "type": "string"
+        },
+        "party": {
+          "description": "Identifier of the candidate's party, from `party`.",
+          "$ref": "#/$defs/identifier"
+        },
+        "note": {
+          "description": "The author's note on the candidate, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "contests": {
+          "description": "Derived. Identifiers of every contest in which the candidate is a campaign member, in ballot order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "ballot": {
+      "description": "A ballot: a root ballot or a sub-ballot for a narrower electorate.",
+      "type": "object",
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "path",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Always `ballot`.",
+          "const": "ballot"
+        },
+        "id": {
+          "description": "The ballot's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "description": "The jurisdiction or grouping the ballot covers.",
+          "type": "string"
+        },
+        "eligibility": {
+          "description": "Who receives this ballot, from `eligibility`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The author's note on the ballot, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "path": {
+          "description": "Derived. Identifiers of the enclosing ballots, outermost first, not including this one. Empty for a root.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "items": {
+          "description": "Sections, contests, measures, and sub-ballots in ballot order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ballot_item"
+          }
+        }
+      }
+    },
+    "ballot_item": {
+      "description": "One entry of a ballot: a section, contest, measure, or sub-ballot.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/section"
+        },
+        {
+          "$ref": "#/$defs/contest"
+        },
+        {
+          "$ref": "#/$defs/measure"
+        },
+        {
+          "$ref": "#/$defs/ballot"
+        }
+      ]
+    },
+    "section": {
+      "description": "A titled group of contests and measures within a ballot.",
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "items"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Always `section`.",
+          "const": "section"
+        },
+        "title": {
+          "description": "The section's title as printed on the ballot.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The author's note on the section, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "items": {
+          "description": "Contests and measures in ballot order.",
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/contest"
+              },
+              {
+                "$ref": "#/$defs/measure"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "location": {
+      "description": "Derived. Where a question sits in the ballot tree.",
+      "type": "object",
+      "required": [
+        "ballot",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ballot": {
+          "description": "Identifier of the innermost enclosing ballot.",
+          "$ref": "#/$defs/identifier"
+        },
+        "section": {
+          "description": "Title of the enclosing section, when there is one.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Identifiers of every enclosing ballot, outermost first, ending with `ballot`.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "method": {
+      "description": "The voting method, from the contest header.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "description": "One of `single`, `multiple`, `ranked`, or `retention`.",
+              "const": "single"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "seats"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "multiple"
+            },
+            "seats": {
+              "description": "How many candidates are elected, from `multiple`.",
+              "type": "integer",
+              "minimum": 2
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "ranked"
+            },
+            "max": {
+              "description": "How many candidates a voter may rank, from `max`, when the contest limits it.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "retention"
+            }
+          }
+        }
+      ]
+    },
+    "contest": {
+      "description": "A race between campaigns for an office.",
+      "type": "object",
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "method",
+        "location",
+        "campaigns",
+        "recommendation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Always `contest`.",
+          "const": "contest"
+        },
+        "id": {
+          "description": "The contest's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "description": "The contest as named on the ballot.",
+          "type": "string"
+        },
+        "subtitle": {
+          "description": "A line printed under the title, from `subtitle`.",
+          "type": "string"
+        },
+        "method": {
+          "description": "The voting method, from the contest header.",
+          "$ref": "#/$defs/method"
+        },
+        "tabulation": {
+          "description": "How votes are counted, from `tabulation`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The author's note on the contest, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "location": {
+          "description": "Derived. Where the contest sits in the ballot tree.",
+          "$ref": "#/$defs/location"
+        },
+        "campaigns": {
+          "description": "In ballot order. A campaign is referred to by its index in this array.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/campaign"
+          }
+        },
+        "recommendation": {
+          "description": "The author's recommendation on the contest.",
+          "$ref": "#/$defs/contest_recommendation"
+        }
+      }
+    },
+    "campaign": {
+      "description": "One or more candidates running together for a contest.",
+      "type": "object",
+      "required": [
+        "index",
+        "label",
+        "head",
+        "members",
+        "incumbent",
+        "withdrawn",
+        "stance"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "description": "Derived. Position in the contest's campaigns array.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "label": {
+          "description": "Derived. The members' names joined with \" / \", head of ticket first.",
+          "type": "string"
+        },
+        "head": {
+          "description": "Derived. Identifier of the first member: the head of the ticket, and the name the recommendation uses for this campaign.",
+          "$ref": "#/$defs/identifier"
+        },
+        "party": {
+          "description": "Derived. The party shared by every member, when all members have the same one.",
+          "$ref": "#/$defs/identifier"
+        },
+        "members": {
+          "description": "The campaign's candidates, head of ticket first.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/member"
+          }
+        },
+        "incumbent": {
+          "description": "Whether the campaign currently occupies the office, from the `incumbent` flag.",
+          "type": "boolean"
+        },
+        "withdrawn": {
+          "description": "Whether the campaign has ended but remains on the ballot, from the `withdrawn` flag.",
+          "type": "boolean"
+        },
+        "website": {
+          "description": "The campaign's website, from `website`.",
+          "type": "string",
+          "format": "uri"
+        },
+        "note": {
+          "description": "The author's note on the campaign, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "stance": {
+          "description": "Derived. What the contest's recommendation says about this campaign.",
+          "$ref": "#/$defs/stance"
+        }
+      }
+    },
+    "member": {
+      "description": "A candidate's place on a campaign.",
+      "type": "object",
+      "required": [
+        "candidate"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "description": "The candidate's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "role": {
+          "description": "The member's role on the ticket, from `as`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "The author's note on this member, from the member's `note`.",
+          "$ref": "#/$defs/markdown"
+        }
+      }
+    },
+    "stance": {
+      "description": "Derived. What the contest's recommendation says about this campaign.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "position",
+            "tier"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "description": "One of `support`, `oppose`, or `none`.",
+              "const": "support"
+            },
+            "tier": {
+              "description": "Zero-based index of the support tier the campaign appears in.",
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "position"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "const": "oppose"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "position"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "position": {
+              "const": "none"
+            }
+          }
+        }
+      ]
+    },
+    "contest_recommendation": {
+      "description": "The author's recommendation on a contest.",
+      "type": "object",
+      "required": [
+        "no_position",
+        "support",
+        "oppose",
+        "support_campaigns",
+        "oppose_campaigns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "no_position": {
+          "description": "Whether the author takes no position, from `recommend no-position`.",
+          "type": "boolean"
+        },
+        "support": {
+          "description": "Tiers as written: candidate identifiers, most preferred tier first. Empty when no_position.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        },
+        "oppose": {
+          "description": "Candidate identifiers as written. Empty when no_position.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "support_campaigns": {
+          "description": "Derived. The same tiers resolved to campaign indices.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "oppose_campaigns": {
+          "description": "Derived. The opposed campaigns as indices.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "justification": {
+          "description": "The author's reasoning, from `justification`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "note": {
+          "description": "The author's note on the recommendation, from `note`.",
+          "$ref": "#/$defs/markdown"
+        }
+      }
+    },
+    "measure": {
+      "description": "A ballot measure: a question answered yes or no.",
+      "type": "object",
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "location",
+        "recommendation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "description": "The question as printed on the ballot, from `description`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "kind": {
+          "description": "Always `measure`.",
+          "const": "measure"
+        },
+        "id": {
+          "description": "The measure's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "description": "The measure as named on the ballot.",
+          "type": "string"
+        },
+        "subtitle": {
+          "description": "A line printed under the title, from `subtitle`.",
+          "type": "string"
+        },
+        "if_yes": {
+          "description": "What a yes vote does, from `if_yes`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "if_no": {
+          "description": "What a no vote does, from `if_no`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "placement": {
+          "description": "How the measure reached the ballot, from `placement`.",
+          "type": "string"
+        },
+        "tabulation": {
+          "description": "What it takes to pass, from `tabulation`.",
+          "type": "string"
+        },
+        "fiscal_impact": {
+          "description": "The measure's fiscal impact, from `fiscal_impact`.",
+          "type": "string"
+        },
+        "supporters": {
+          "description": "Organizations supporting the measure, from `supporters`. Omitted when not researched; empty when researched and none known.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "opponents": {
+          "description": "Organizations opposing the measure, from `opponents`. Omitted when not researched; empty when researched and none known.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "note": {
+          "description": "The author's note on the measure, from `note`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "location": {
+          "description": "Derived. Where the measure sits in the ballot tree.",
+          "$ref": "#/$defs/location"
+        },
+        "recommendation": {
+          "description": "The author's recommendation on the measure.",
+          "$ref": "#/$defs/measure_recommendation"
+        }
+      }
+    },
+    "measure_recommendation": {
+      "description": "The author's recommendation on a measure.",
+      "type": "object",
+      "required": [
+        "position"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "description": "The recommended vote, from `recommend`.",
+          "enum": [
+            "yes",
+            "no",
+            "no-position"
+          ]
+        },
+        "justification": {
+          "description": "The author's reasoning, from `justification`.",
+          "$ref": "#/$defs/markdown"
+        },
+        "note": {
+          "description": "The author's note on the recommendation, from `note`.",
+          "$ref": "#/$defs/markdown"
+        }
+      }
+    },
+    "question_entry": {
+      "description": "Derived. One contest or measure in the document's flat index of questions.",
+      "type": "object",
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "location"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "Whether the question is a `contest` or a `measure`.",
+          "enum": [
+            "contest",
+            "measure"
+          ]
+        },
+        "id": {
+          "description": "The question's identifier.",
+          "$ref": "#/$defs/identifier"
+        },
+        "title": {
+          "description": "The question's title.",
+          "type": "string"
+        },
+        "location": {
+          "description": "Where the question sits in the ballot tree.",
+          "$ref": "#/$defs/location"
+        }
+      }
+    },
+    "counts": {
+      "description": "Derived. Totals across the whole document.",
+      "type": "object",
+      "required": [
+        "ballots",
+        "sections",
+        "contests",
+        "measures",
+        "campaigns",
+        "candidates",
+        "parties"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ballots": {
+          "description": "Every ballot, roots and sub-ballots alike.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "sections": {
+          "description": "Every section.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "contests": {
+          "description": "Every contest.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "measures": {
+          "description": "Every measure.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "campaigns": {
+          "description": "Every campaign.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidates": {
+          "description": "Every candidate.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "parties": {
+          "description": "Every party.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}
