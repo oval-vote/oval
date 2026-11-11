@@ -7,6 +7,15 @@ pub struct Token {
     pub len: u32,
 }
 
+impl Token {
+
+    /// Whether or not the token is ignored.
+    pub fn is_ignored(self) -> bool {
+        self.kind.is_ignored()
+    }
+
+}
+
 /// The kinds of tokens in an Oval document
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
@@ -47,7 +56,9 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    pub(crate) fn is_ignored(self) -> bool {
+
+    /// Whether or not the token is ignored.
+    pub fn is_ignored(self) -> bool {
         match self {
             Self::Whitespace | Self::Comment | Self::BlankLine | Self::ByteOrderMark => true,
             Self::Word
