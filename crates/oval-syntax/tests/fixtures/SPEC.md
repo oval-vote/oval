@@ -325,6 +325,28 @@ and no other token is recognized. The body is Markdown; the Markdown profile bel
 constructs it may use, and should be enforced during document validation. The lexer does not inspect
 the body.
 
+```oval example
+note:
+  Read *both* arguments.
+
+  # Not a comment
+  @ and " are text too.
+
+date 2026-11-03
+```
+
+```tokens
+Word «note»
+Punctuator «:»
+Newline «↵»
+MarkdownBlock «␣␣Read *both* arguments.↵↵␣␣# Not a comment↵␣␣@ and " are text too.↵»
+BlankLine «↵»
+Word «date»
+Whitespace «␣»
+Date «2026-11-03»
+Newline «↵»
+```
+
 The token's _value_ is derived from its text: the common leading indentation of its non-blank lines
 is removed from every line, lines containing only spaces become empty, every line terminator becomes
 U+000A, and the final terminator is dropped. Parsers expose the value; the token itself keeps the
