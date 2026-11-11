@@ -11,8 +11,13 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// So far, only a few tokens are recognized. A byte order mark (U+FEFF) at the very start of `text`
 /// becomes a [`TokenKind::ByteOrderMark`] token, each run of spaces becomes a
 /// [`TokenKind::Whitespace`] token, and each `#` up to the end of its line becomes a
-/// [`TokenKind::Comment`] token. Every other character becomes its own [`TokenKind::Error`] token,
-/// which is how the specification treats a character that cannot begin any token.
+/// [`TokenKind::Comment`] token. Each line terminator, which is a line feed (U+000A), a carriage
+/// return (U+000D) followed by a line feed, or a carriage return alone, becomes one
+/// [`TokenKind::Newline`] token when its line has other tokens, and one [`TokenKind::BlankLine`]
+/// token when the line contains only whitespace, a comment, or a byte order mark. Every other
+/// character becomes its own
+/// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
+/// any token.
 ///
 /// # Errors
 ///
@@ -29,6 +34,7 @@ pub fn lex(text: &str) -> Result<Vec<Token>, InputRejection> {
         source: text,
         pos: 0,
         tokens: Vec::new(),
+        line_has_tokens: false,
     };
     lexer.run();
     Ok(lexer.tokens)
@@ -64,6 +70,7 @@ struct Lexer<'a> {
     source: &'a str,
     pos: usize,
     tokens: Vec<Token>,
+    line_has_tokens: bool,
 }
 
 impl Lexer<'_> {
@@ -74,20 +81,40 @@ impl Lexer<'_> {
         }
         while let Some(c) = self.peek() {
             match c {
-                ' ' => {
-                    let len = self.eat_while(|c| c == ' ');
-                    self.push(TokenKind::Whitespace, len);
-                }
-                '#' => {
-                    let len = self.eat_while(|c| c != '\n' && c != '\r');
-                    self.push(TokenKind::Comment, len);
-                }
+                ' ' => self.whitespace(),
+                '#' => self.comment(),
+                '\n' | '\r' => self.line_terminator(c),
                 _ => {
                     self.bump(c);
                     self.push(TokenKind::Error, c.len_utf8());
                 }
             }
         }
+    }
+
+    fn whitespace(&mut self) {
+        let len = self.eat_while(|c| c == ' ');
+        self.push(TokenKind::Whitespace, len);
+    }
+
+    fn comment(&mut self) {
+        let len = self.eat_while(|c| c != '\n' && c != '\r');
+        self.push(TokenKind::Comment, len);
+    }
+
+    fn line_terminator(&mut self, c: char) {
+        let start = self.pos;
+        self.bump(c);
+        if c == '\r' && self.peek() == Some('\n') {
+            self.bump('\n');
+        }
+        let kind = if self.line_has_tokens {
+            TokenKind::Newline
+        } else {
+            TokenKind::BlankLine
+        };
+        self.push(kind, self.pos - start);
+        self.line_has_tokens = false;
     }
 
     fn peek(&self) -> Option<char> {
@@ -110,6 +137,9 @@ impl Lexer<'_> {
     }
 
     fn push(&mut self, kind: TokenKind, len: usize) {
+        if !kind.is_ignored() {
+            self.line_has_tokens = true;
+        }
         let len = u32::try_from(len).expect("a token is at most u32::MAX bytes"); // Should be unreachable, validated ahead of time.
         self.tokens.push(Token { kind, len });
     }
@@ -203,6 +233,15 @@ mod tests {
         assert_eq!(
             lex_bytes(b"a\0"),
             Err(InputRejection::NulCharacter { offset: 1 })
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_is_reported_before_nul() {
+        // Decoding comes first, so a later invalid byte wins over an earlier U+0000.
+        assert_eq!(
+            lex_bytes(b"\0\xff"),
+            Err(InputRejection::InvalidUtf8 { offset: 1 })
         );
     }
 
@@ -334,6 +373,141 @@ mod tests {
     #[test]
     fn a_comment_may_contain_anything_but_a_line_terminator() {
         assert_eq!(lex("#\t@\"é#"), Ok(vec![token(TokenKind::Comment, 7)]));
+    }
+
+    #[test]
+    fn a_line_feed_after_tokens_is_a_newline() {
+        assert_eq!(
+            lex("-\n"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 1)
+            ])
+        );
+    }
+
+    #[test]
+    fn a_line_feed_on_an_empty_line_is_a_blank_line() {
+        assert_eq!(lex("\n"), Ok(vec![token(TokenKind::BlankLine, 1)]));
+    }
+
+    #[test]
+    fn a_line_of_whitespace_and_a_comment_is_a_blank_line() {
+        assert_eq!(
+            lex("  # x\n"),
+            Ok(vec![
+                token(TokenKind::Whitespace, 2),
+                token(TokenKind::Comment, 3),
+                token(TokenKind::BlankLine, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_line_with_only_a_byte_order_mark_is_a_blank_line() {
+        assert_eq!(
+            lex("\u{FEFF}\n"),
+            Ok(vec![
+                token(TokenKind::ByteOrderMark, 3),
+                token(TokenKind::BlankLine, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_comment_after_tokens_keeps_the_newline() {
+        assert_eq!(
+            lex("- # x\n"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Whitespace, 1),
+                token(TokenKind::Comment, 3),
+                token(TokenKind::Newline, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn each_line_is_judged_on_its_own_tokens() {
+        assert_eq!(
+            lex("-\n\n-\n"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 1),
+                token(TokenKind::BlankLine, 1),
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn every_line_terminator_ends_a_line() {
+        for (terminator, len) in [("\n", 1), ("\r\n", 2), ("\r", 1)] {
+            assert_eq!(
+                lex(&format!("-{terminator}{terminator}")),
+                Ok(vec![
+                    token(TokenKind::Error, 1),
+                    token(TokenKind::Newline, len),
+                    token(TokenKind::BlankLine, len),
+                ]),
+                "terminator: {terminator:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_carriage_return_and_line_feed_are_one_terminator() {
+        assert_eq!(lex("\r\n"), Ok(vec![token(TokenKind::BlankLine, 2)]));
+    }
+
+    #[test]
+    fn a_line_feed_before_a_carriage_return_is_two_terminators() {
+        assert_eq!(
+            lex("\n\r"),
+            Ok(vec![
+                token(TokenKind::BlankLine, 1),
+                token(TokenKind::BlankLine, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_carriage_return_before_a_crlf_is_two_terminators() {
+        assert_eq!(
+            lex("-\r\r\n"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 1),
+                token(TokenKind::BlankLine, 2),
+            ])
+        );
+    }
+
+    #[test]
+    fn terminators_may_be_mixed_in_one_document() {
+        assert_eq!(
+            lex("-\r\n-\r-\n"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 2),
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 1),
+                token(TokenKind::Error, 1),
+                token(TokenKind::Newline, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_comment_line_ending_in_crlf_is_a_blank_line() {
+        assert_eq!(
+            lex("# x\r\n"),
+            Ok(vec![
+                token(TokenKind::Comment, 3),
+                token(TokenKind::BlankLine, 2),
+            ])
+        );
     }
 
     #[test]

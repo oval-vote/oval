@@ -45,3 +45,62 @@ pub enum TokenKind {
     /// An error
     Error,
 }
+
+impl TokenKind {
+    pub(crate) fn is_ignored(self) -> bool {
+        match self {
+            Self::Whitespace | Self::Comment | Self::BlankLine | Self::ByteOrderMark => true,
+            Self::Word
+            | Self::String
+            | Self::Integer
+            | Self::Date
+            | Self::AtSign
+            | Self::Url
+            | Self::Colon
+            | Self::Comma
+            | Self::MarkdownBlock
+            | Self::Newline
+            | Self::Indent
+            | Self::Dedent
+            | Self::Error => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn whitespace_comments_blank_lines_and_byte_order_marks_are_ignored() {
+        for kind in [
+            TokenKind::Whitespace,
+            TokenKind::Comment,
+            TokenKind::BlankLine,
+            TokenKind::ByteOrderMark,
+        ] {
+            assert!(kind.is_ignored(), "{kind:?} should be ignored");
+        }
+    }
+
+    #[test]
+    fn every_other_kind_is_not_ignored() {
+        for kind in [
+            TokenKind::Word,
+            TokenKind::String,
+            TokenKind::Integer,
+            TokenKind::Date,
+            TokenKind::AtSign,
+            TokenKind::Url,
+            TokenKind::Colon,
+            TokenKind::Comma,
+            TokenKind::MarkdownBlock,
+            TokenKind::Newline,
+            TokenKind::Indent,
+            TokenKind::Dedent,
+            TokenKind::Error,
+        ] {
+            assert!(!kind.is_ignored(), "{kind:?} should not be ignored");
+        }
+    }
+}
