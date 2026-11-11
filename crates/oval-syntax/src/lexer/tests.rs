@@ -1724,3 +1724,89 @@ fn a_body_keeps_its_carriage_returns() {
         &[],
     );
 }
+
+#[test]
+fn a_blank_line_inside_a_body_is_part_of_it() {
+    check_lexer(
+        "note:\n  one\n\n  two\n",
+        &[
+            (Word, "note"),
+            (Colon, ":"),
+            (Newline, "\n"),
+            (MarkdownBlock, "  one\n\n  two\n"),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_body_may_hold_several_blank_lines_of_any_width() {
+    check_lexer(
+        "note:\n  one\n\n \n      \n  two\n",
+        &[
+            (Word, "note"),
+            (Colon, ":"),
+            (Newline, "\n"),
+            (MarkdownBlock, "  one\n\n \n      \n  two\n"),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn blank_lines_after_a_body_are_blank_lines() {
+    check_lexer(
+        "note:\n  text\n\n  \nnext\n",
+        &[
+            (Word, "note"),
+            (Colon, ":"),
+            (Newline, "\n"),
+            (MarkdownBlock, "  text\n"),
+            (BlankLine, "\n"),
+            (Whitespace, "  "),
+            (BlankLine, "\n"),
+            (Word, "next"),
+            (Newline, "\n"),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn blank_lines_at_the_end_of_input_are_not_part_of_a_body() {
+    check_lexer(
+        "note:\n  text\n\n   ",
+        &[
+            (Word, "note"),
+            (Colon, ":"),
+            (Newline, "\n"),
+            (MarkdownBlock, "  text\n"),
+            (BlankLine, "\n"),
+            (Whitespace, "   "),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_body_ends_before_the_blank_lines_ahead_of_a_shallower_line() {
+    check_lexer(
+        "a\n  note:\n    one\n\n    two\n\n  b\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "note"),
+            (Colon, ":"),
+            (Newline, "\n"),
+            (MarkdownBlock, "    one\n\n    two\n"),
+            (BlankLine, "\n"),
+            (Whitespace, "  "),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}

@@ -2,7 +2,6 @@ use super::{Lexer, is_line_terminator};
 use crate::TokenKind;
 
 impl Lexer<'_> {
-
     pub(super) fn markdown_block(&mut self, start: usize) -> bool {
         let Some(opener) = self.body_opener else {
             return false;
@@ -16,12 +15,16 @@ impl Lexer<'_> {
             return false;
         }
         let mut end = first.end;
-        while end < self.source.len() {
-            let line = self.measure_line(end);
-            if line.is_blank || line.indentation <= opener {
+        let mut next = first.end;
+        while next < self.source.len() {
+            let line = self.measure_line(next);
+            if !line.is_blank && line.indentation <= opener {
                 break;
             }
-            end = line.end;
+            next = line.end;
+            if !line.is_blank {
+                end = line.end;
+            }
         }
         self.pos = end;
         self.push(TokenKind::MarkdownBlock, start);

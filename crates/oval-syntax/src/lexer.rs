@@ -39,9 +39,10 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 ///
 /// A line whose last token, ignoring whitespace and comments, is a `:` opens a Markdown body. If
 /// the next line that is not blank is indented more deeply than that line, it and the lines after
-/// it that are also indented more deeply become a single [`TokenKind::MarkdownBlock`] token, which
-/// covers their raw text through the last line's terminator. Nothing inside a body is lexed, so a
-/// `#` there is not a comment and a tab is not an error. A blank line ends the body.
+/// it that are blank or also indented more deeply become a single [`TokenKind::MarkdownBlock`]
+/// token, which covers their raw text through the terminator of the last line that is not blank.
+/// Blank lines before and after a body are [`TokenKind::BlankLine`] tokens. Nothing inside a body
+/// is lexed, so a `#` there is not a comment and a tab is not an error.
 ///
 /// Every line with tokens, other than the lines of a Markdown body, ends in a
 /// [`TokenKind::Newline`]. When the last line has no line terminator, its `Newline` is zero-length.
