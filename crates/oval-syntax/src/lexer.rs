@@ -9,9 +9,10 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// add up to `text.len()`.
 ///
 /// So far, only a few tokens are recognized. A byte order mark (U+FEFF) at the very start of `text`
-/// becomes a [`TokenKind::ByteOrderMark`] token, and each run of spaces becomes a
-/// [`TokenKind::Whitespace`] token. Every other character becomes its own [`TokenKind::Error`]
-/// token, which is how the specification treats a character that cannot begin any token.
+/// becomes a [`TokenKind::ByteOrderMark`] token, each run of spaces becomes a
+/// [`TokenKind::Whitespace`] token, and each `#` up to the end of its line becomes a
+/// [`TokenKind::Comment`] token. Every other character becomes its own [`TokenKind::Error`] token,
+/// which is how the specification treats a character that cannot begin any token.
 ///
 /// # Errors
 ///
@@ -72,12 +73,19 @@ impl Lexer<'_> {
             self.push(TokenKind::ByteOrderMark, BYTE_ORDER_MARK.len_utf8());
         }
         while let Some(c) = self.peek() {
-            if c == ' ' {
-                let len = self.eat_while(|c| c == ' ');
-                self.push(TokenKind::Whitespace, len);
-            } else {
-                self.bump(c);
-                self.push(TokenKind::Error, c.len_utf8());
+            match c {
+                ' ' => {
+                    let len = self.eat_while(|c| c == ' ');
+                    self.push(TokenKind::Whitespace, len);
+                }
+                '#' => {
+                    let len = self.eat_while(|c| c != '\n' && c != '\r');
+                    self.push(TokenKind::Comment, len);
+                }
+                _ => {
+                    self.bump(c);
+                    self.push(TokenKind::Error, c.len_utf8());
+                }
             }
         }
     }
@@ -102,8 +110,7 @@ impl Lexer<'_> {
     }
 
     fn push(&mut self, kind: TokenKind, len: usize) {
-        // Cannot fail: `lex` rejects any text longer than u32::MAX bytes.
-        let len = u32::try_from(len).expect("a token is at most u32::MAX bytes");
+        let len = u32::try_from(len).expect("a token is at most u32::MAX bytes"); // Should be unreachable, validated ahead of time.
         self.tokens.push(Token { kind, len });
     }
 }
@@ -289,6 +296,44 @@ mod tests {
                 token(TokenKind::Whitespace, 1),
             ])
         );
+    }
+
+    #[test]
+    fn a_comment_runs_to_the_end_of_the_line() {
+        assert_eq!(lex("# a note"), Ok(vec![token(TokenKind::Comment, 8)]));
+    }
+
+    #[test]
+    fn a_comment_stops_before_a_line_terminator() {
+        for text in ["# a\nb", "# a\rb", "# a\r\nb"] {
+            assert_eq!(
+                lex(text).unwrap()[0],
+                token(TokenKind::Comment, 3),
+                "input: {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_lone_hash_is_a_comment() {
+        assert_eq!(lex("#"), Ok(vec![token(TokenKind::Comment, 1)]));
+    }
+
+    #[test]
+    fn a_comment_may_follow_other_tokens() {
+        assert_eq!(
+            lex("- # x"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Whitespace, 1),
+                token(TokenKind::Comment, 3),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_comment_may_contain_anything_but_a_line_terminator() {
+        assert_eq!(lex("#\t@\"é#"), Ok(vec![token(TokenKind::Comment, 7)]));
     }
 
     #[test]
