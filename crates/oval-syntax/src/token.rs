@@ -19,7 +19,7 @@ pub enum TokenKind {
     /// A date token
     Date,
     /// An at sign
-    At,
+    AtSign,
     /// A URL
     Url,
     /// A colon
@@ -32,6 +32,8 @@ pub enum TokenKind {
     Whitespace,
     /// A comment
     Comment,
+    /// A byte order mark (U+FEFF) at the very start of a document, which is ignored.
+    ByteOrderMark,
     /// A blank line
     BlankLine,
     /// A new line
