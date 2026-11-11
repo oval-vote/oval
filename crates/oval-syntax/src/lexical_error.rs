@@ -11,6 +11,9 @@ pub enum LexicalErrorKind {
     InvalidEscape,
     /// A run of tabs outside a string, a comment, or a Markdown body
     IllegalTab,
+    /// A run of letters, digits, `-`, `_`, and `.` that begins with a digit but is neither an
+    /// integer nor a date
+    MalformedNumber,
 }
 
 impl LexicalErrorKind {
@@ -21,6 +24,7 @@ impl LexicalErrorKind {
             Self::UnterminatedString => "unterminated-string",
             Self::InvalidEscape => "invalid-escape",
             Self::IllegalTab => "illegal-tab",
+            Self::MalformedNumber => "malformed-number",
         }
     }
 }
@@ -63,6 +67,7 @@ mod tests {
             (LexicalErrorKind::UnterminatedString, "unterminated-string"),
             (LexicalErrorKind::InvalidEscape, "invalid-escape"),
             (LexicalErrorKind::IllegalTab, "illegal-tab"),
+            (LexicalErrorKind::MalformedNumber, "malformed-number"),
         ] {
             assert_eq!(kind.spec_id(), identifier, "{kind:?}");
         }

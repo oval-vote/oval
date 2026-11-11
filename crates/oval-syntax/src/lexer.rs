@@ -19,7 +19,10 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// [`TokenKind::Word`] token. Each `"` up to its closing `"` becomes a [`TokenKind::String`]
 /// token, where `\"` and `\\` do not close it; a string with no closing `"` before the end of its
 /// line becomes a single [`TokenKind::Error`] token instead. Each run of tabs outside a string or a
-/// comment becomes a single [`TokenKind::Error`] token. Every other character becomes its own
+/// comment becomes a single [`TokenKind::Error`] token. Each run of ASCII letters, digits, `-`, `_`,
+/// and `.` that begins with a digit becomes a [`TokenKind::Integer`] token if it is all digits, a
+/// [`TokenKind::Date`] token if it has the shape `YYYY-MM-DD`, and a single [`TokenKind::Error`]
+/// token otherwise. Every other character becomes its own
 /// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
 /// any token.
 ///
@@ -109,6 +112,7 @@ impl Lexer<'_> {
                 ':' => self.colon(start),
                 ',' => self.comma(start),
                 '"' => self.string(start),
+                c if c.is_ascii_digit() => self.number(start),
                 c if c.is_ascii_alphabetic() => self.word(start),
                 _ => {
                     self.bump(c);
@@ -197,6 +201,18 @@ impl Lexer<'_> {
         }
     }
 
+    fn number(&mut self, start: usize) {
+        self.eat_while(|c| is_word_char(c) || c == '.');
+        let text = &self.source[start..self.pos];
+        if text.bytes().all(|b| b.is_ascii_digit()) {
+            self.push(TokenKind::Integer, start);
+        } else if is_date_shaped(text) {
+            self.push(TokenKind::Date, start);
+        } else {
+            self.push_error(LexicalErrorKind::MalformedNumber, start);
+        }
+    }
+
     fn word(&mut self, start: usize) {
         self.eat_while(is_word_char);
         self.push(TokenKind::Word, start);
@@ -259,12 +275,27 @@ fn is_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '-' | '_')
 }
 
+fn is_date_shaped(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() == 10
+        && bytes.iter().enumerate().all(|(i, &b)| {
+            if i == 4 || i == 7 {
+                b == b'-'
+            } else {
+                b.is_ascii_digit()
+            }
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use LexicalErrorKind::{IllegalTab, InvalidEscape, UnexpectedCharacter, UnterminatedString};
+    use LexicalErrorKind::{
+        IllegalTab, InvalidEscape, MalformedNumber, UnexpectedCharacter, UnterminatedString,
+    };
     use TokenKind::{
-        AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Error, Newline, Whitespace, Word,
+        AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Date, Error, Integer, Newline,
+        Whitespace, Word,
     };
 
     fn check_lexer(text: &str, tokens: &[(TokenKind, &str)], errors: &[LexicalError]) {
@@ -743,10 +774,110 @@ mod tests {
 
     #[test]
     fn a_word_cannot_start_with_a_digit() {
+        // A run that starts with a digit is a number, so this is one malformed number.
+        check_lexer("9abc", &[(Error, "9abc")], &[error(MalformedNumber, 0, 4)]);
+    }
+
+    #[test]
+    fn digits_are_an_integer() {
+        for text in ["0", "1", "42", "2026"] {
+            check_lexer(text, &[(Integer, text)], &[]);
+        }
+    }
+
+    #[test]
+    fn leading_zeros_are_part_of_an_integer() {
+        check_lexer("007", &[(Integer, "007")], &[]);
+    }
+
+    #[test]
+    fn a_date_has_the_shape_yyyy_mm_dd() {
+        check_lexer("2026-11-03", &[(Date, "2026-11-03")], &[]);
+    }
+
+    #[test]
+    fn a_date_is_checked_for_its_shape_only() {
+        // February 30 does not exist, but that is a validation error, not a lexical one.
+        check_lexer("2026-02-30", &[(Date, "2026-02-30")], &[]);
+    }
+
+    #[test]
+    fn a_run_that_is_neither_an_integer_nor_a_date_is_one_malformed_number() {
+        // The specification's examples of malformed numbers.
+        for text in ["12abc", "3_000", "2026-11-5", "1.1", "1.x"] {
+            let len = u32::try_from(text.len()).unwrap();
+            check_lexer(text, &[(Error, text)], &[error(MalformedNumber, 0, len)]);
+        }
+    }
+
+    #[test]
+    fn a_date_with_the_wrong_shape_is_a_malformed_number() {
+        for text in [
+            "2026-11-3",
+            "26-11-03",
+            "2026-1103",
+            "2026-11-033",
+            "2026-11-03x",
+        ] {
+            let len = u32::try_from(text.len()).unwrap();
+            check_lexer(text, &[(Error, text)], &[error(MalformedNumber, 0, len)]);
+        }
+    }
+
+    #[test]
+    fn a_number_stops_at_whitespace_and_punctuators() {
         check_lexer(
-            "9abc",
-            &[(Error, "9"), (Word, "abc")],
-            &[error(UnexpectedCharacter, 0, 1)],
+            "1 2,3:4@5",
+            &[
+                (Integer, "1"),
+                (Whitespace, " "),
+                (Integer, "2"),
+                (Comma, ","),
+                (Integer, "3"),
+                (Colon, ":"),
+                (Integer, "4"),
+                (AtSign, "@"),
+                (Integer, "5"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_number_stops_before_a_character_outside_ascii() {
+        check_lexer(
+            "1é",
+            &[(Integer, "1"), (Error, "é")],
+            &[error(UnexpectedCharacter, 1, 2)],
+        );
+    }
+
+    #[test]
+    fn the_version_marker_is_a_word_and_an_integer() {
+        check_lexer(
+            "oval 1\n",
+            &[
+                (Word, "oval"),
+                (Whitespace, " "),
+                (Integer, "1"),
+                (Newline, "\n"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_date_field() {
+        // The specification's example for the malformed-number error.
+        check_lexer(
+            "date 2026-11-03\n",
+            &[
+                (Word, "date"),
+                (Whitespace, " "),
+                (Date, "2026-11-03"),
+                (Newline, "\n"),
+            ],
+            &[],
         );
     }
 
