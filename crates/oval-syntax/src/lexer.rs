@@ -18,7 +18,8 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// each ASCII letter followed by any ASCII letters, digits, `-`, and `_` becomes a
 /// [`TokenKind::Word`] token. Each `"` up to its closing `"` becomes a [`TokenKind::String`]
 /// token, where `\"` and `\\` do not close it; a string with no closing `"` before the end of its
-/// line becomes a single [`TokenKind::Error`] token instead. Every other character becomes its own
+/// line becomes a single [`TokenKind::Error`] token instead. Each run of tabs outside a string or a
+/// comment becomes a single [`TokenKind::Error`] token. Every other character becomes its own
 /// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
 /// any token.
 ///
@@ -101,6 +102,7 @@ impl Lexer<'_> {
             let start = self.pos;
             match c {
                 ' ' => self.whitespace(start),
+                '\t' => self.illegal_tab(start),
                 '#' => self.comment(start),
                 '\n' | '\r' => self.line_terminator(c, start),
                 '@' => self.at_sign(start),
@@ -119,6 +121,11 @@ impl Lexer<'_> {
     fn whitespace(&mut self, start: usize) {
         self.eat_while(|c| c == ' ');
         self.push(TokenKind::Whitespace, start);
+    }
+
+    fn illegal_tab(&mut self, start: usize) {
+        self.eat_while(|c| c == '\t');
+        self.push_error(LexicalErrorKind::IllegalTab, start);
     }
 
     fn comment(&mut self, start: usize) {
@@ -255,7 +262,7 @@ fn is_word_char(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use LexicalErrorKind::{InvalidEscape, UnexpectedCharacter, UnterminatedString};
+    use LexicalErrorKind::{IllegalTab, InvalidEscape, UnexpectedCharacter, UnterminatedString};
     use TokenKind::{
         AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Error, Newline, Whitespace, Word,
     };
@@ -445,7 +452,59 @@ mod tests {
         check_lexer(
             " \t ",
             &[(Whitespace, " "), (Error, "\t"), (Whitespace, " ")],
-            &[error(UnexpectedCharacter, 1, 1)],
+            &[error(IllegalTab, 1, 1)],
+        );
+    }
+
+    #[test]
+    fn a_run_of_tabs_is_one_error() {
+        check_lexer(
+            "\t\t\ta",
+            &[(Error, "\t\t\t"), (Word, "a")],
+            &[error(IllegalTab, 0, 3)],
+        );
+    }
+
+    #[test]
+    fn tabs_separated_by_a_space_are_two_errors() {
+        check_lexer(
+            "\t \t",
+            &[(Error, "\t"), (Whitespace, " "), (Error, "\t")],
+            &[error(IllegalTab, 0, 1), error(IllegalTab, 2, 1)],
+        );
+    }
+
+    #[test]
+    fn a_tab_between_tokens_is_an_error() {
+        // The specification's example for the illegal-tab error.
+        check_lexer(
+            "subtitle\t\"Vote for one\"",
+            &[
+                (Word, "subtitle"),
+                (Error, "\t"),
+                (TokenKind::String, "\"Vote for one\""),
+            ],
+            &[error(IllegalTab, 8, 1)],
+        );
+    }
+
+    #[test]
+    fn a_tab_inside_a_string_is_part_of_it() {
+        check_lexer("\"a\tb\"", &[(TokenKind::String, "\"a\tb\"")], &[]);
+    }
+
+    #[test]
+    fn a_tab_inside_a_comment_is_part_of_it() {
+        check_lexer("# a\tb", &[(Comment, "# a\tb")], &[]);
+    }
+
+    #[test]
+    fn a_line_with_only_a_tab_ends_in_a_newline() {
+        // An error is a token, so the line is not blank.
+        check_lexer(
+            "\t\n",
+            &[(Error, "\t"), (Newline, "\n")],
+            &[error(IllegalTab, 0, 1)],
         );
     }
 

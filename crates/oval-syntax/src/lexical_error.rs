@@ -9,6 +9,8 @@ pub enum LexicalErrorKind {
     UnterminatedString,
     /// A backslash in a string followed by anything other than `"` or `\`
     InvalidEscape,
+    /// A run of tabs outside a string, a comment, or a Markdown body
+    IllegalTab,
 }
 
 impl LexicalErrorKind {
@@ -18,6 +20,7 @@ impl LexicalErrorKind {
             Self::UnexpectedCharacter => "unexpected-character",
             Self::UnterminatedString => "unterminated-string",
             Self::InvalidEscape => "invalid-escape",
+            Self::IllegalTab => "illegal-tab",
         }
     }
 }
@@ -59,6 +62,7 @@ mod tests {
             ),
             (LexicalErrorKind::UnterminatedString, "unterminated-string"),
             (LexicalErrorKind::InvalidEscape, "invalid-escape"),
+            (LexicalErrorKind::IllegalTab, "illegal-tab"),
         ] {
             assert_eq!(kind.spec_id(), identifier, "{kind:?}");
         }
