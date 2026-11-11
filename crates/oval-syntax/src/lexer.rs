@@ -17,8 +17,11 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// token when the line contains only whitespace, a comment, or a byte order mark. Each `@`, `:`,
 /// and `,` becomes a [`TokenKind::AtSign`], [`TokenKind::Colon`], or [`TokenKind::Comma`] token, and
 /// each ASCII letter followed by any ASCII letters, digits, `-`, and `_` becomes a
-/// [`TokenKind::Word`] token. Every other character becomes its own [`TokenKind::Error`] token,
-/// which is how the specification treats a character that cannot begin any token.
+/// [`TokenKind::Word`] token. Each `"` up to its closing `"` becomes a [`TokenKind::String`]
+/// token, where `\"` and `\\` do not close it; a string with no closing `"` before the end of its
+/// line becomes a single [`TokenKind::Error`] token instead. Every other character becomes its own
+/// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
+/// any token.
 ///
 /// # Errors
 ///
@@ -88,6 +91,7 @@ impl Lexer<'_> {
                 '@' => self.at_sign(),
                 ':' => self.colon(),
                 ',' => self.comma(),
+                '"' => self.string(),
                 c if c.is_ascii_alphabetic() => self.word(),
                 _ => {
                     self.bump(c);
@@ -132,6 +136,29 @@ impl Lexer<'_> {
 
     fn comma(&mut self) {
         self.single(TokenKind::Comma, ',');
+    }
+
+    fn string(&mut self) {
+        let start = self.pos;
+        self.bump('"');
+        let kind = loop {
+            match self.peek() {
+                None | Some('\n' | '\r') => break TokenKind::Error,
+                Some('"') => {
+                    self.bump('"');
+                    break TokenKind::String;
+                }
+                Some('\\') => {
+                    self.bump('\\');
+                    match self.peek() {
+                        None | Some('\n' | '\r') => break TokenKind::Error,
+                        Some(c) => self.bump(c),
+                    }
+                }
+                Some(c) => self.bump(c),
+            }
+        };
+        self.push(kind, self.pos - start);
     }
 
     fn word(&mut self) {
@@ -681,6 +708,119 @@ mod tests {
     }
 
     #[test]
+    fn a_string_includes_both_quotes() {
+        assert_eq!(
+            lex(r#""Vote for one""#),
+            Ok(vec![token(TokenKind::String, 14)])
+        );
+    }
+
+    #[test]
+    fn an_empty_string_is_two_quotes() {
+        assert_eq!(lex(r#""""#), Ok(vec![token(TokenKind::String, 2)]));
+    }
+
+    #[test]
+    fn an_escaped_quote_does_not_close_a_string() {
+        assert_eq!(
+            lex(r#""a \"b\" c""#),
+            Ok(vec![token(TokenKind::String, 11)])
+        );
+    }
+
+    #[test]
+    fn an_escaped_backslash_is_part_of_a_string() {
+        assert_eq!(lex(r#""a \\ b""#), Ok(vec![token(TokenKind::String, 8)]));
+    }
+
+    #[test]
+    fn an_escaped_backslash_before_the_closing_quote_does_not_escape_it() {
+        assert_eq!(
+            lex(r#""a\\" x"#),
+            Ok(vec![
+                token(TokenKind::String, 5),
+                token(TokenKind::Whitespace, 1),
+                token(TokenKind::Word, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn an_invalid_escape_is_still_a_string() {
+        // The specification's example for the invalid-escape error: the token is still a String.
+        assert_eq!(
+            lex(r#""Measure \#3""#),
+            Ok(vec![token(TokenKind::String, 13)])
+        );
+    }
+
+    #[test]
+    fn a_string_may_contain_comment_and_punctuator_characters() {
+        assert_eq!(
+            lex(r##""# @ : , é""##),
+            Ok(vec![token(TokenKind::String, 12)])
+        );
+    }
+
+    #[test]
+    fn an_unterminated_string_is_an_error_up_to_the_line_terminator() {
+        // The specification's example for the unterminated-string error.
+        assert_eq!(
+            lex("\"November 3\ndate"),
+            Ok(vec![
+                token(TokenKind::Error, 11),
+                token(TokenKind::Newline, 1),
+                token(TokenKind::Word, 4),
+            ])
+        );
+    }
+
+    #[test]
+    fn an_unterminated_string_stops_before_a_carriage_return() {
+        assert_eq!(
+            lex("\"a\r\n"),
+            Ok(vec![
+                token(TokenKind::Error, 2),
+                token(TokenKind::Newline, 2)
+            ])
+        );
+    }
+
+    #[test]
+    fn an_unterminated_string_may_end_at_the_end_of_input() {
+        assert_eq!(lex("\"abc"), Ok(vec![token(TokenKind::Error, 4)]));
+    }
+
+    #[test]
+    fn a_backslash_before_a_line_terminator_is_part_of_an_unterminated_string() {
+        assert_eq!(
+            lex("\"x\\\n"),
+            Ok(vec![
+                token(TokenKind::Error, 3),
+                token(TokenKind::Newline, 1)
+            ])
+        );
+    }
+
+    #[test]
+    fn a_backslash_at_the_end_of_input_is_part_of_an_unterminated_string() {
+        assert_eq!(lex("\"x\\"), Ok(vec![token(TokenKind::Error, 3)]));
+    }
+
+    #[test]
+    fn a_field_with_a_string_value() {
+        // The specification's example for the illegal-tab error, without the tab.
+        assert_eq!(
+            lex(r#"subtitle "Vote for one""#),
+            Ok(vec![
+                token(TokenKind::Word, 8),
+                token(TokenKind::Whitespace, 1),
+                token(TokenKind::String, 14),
+            ])
+        );
+    }
+
+    #[test]
     fn token_lengths_cover_the_input() {
         for text in [
             "",
@@ -691,6 +831,7 @@ mod tests {
             "\u{FEFF}oval 1",
             "  a   b \t  ",
             "contest @mayor \"Mayor\" single\n  campaign @bsantos\n",
+            "a \"b \\\" c\" \"unterminated\n\"x\\",
         ] {
             let total: usize = lex(text)
                 .unwrap()
