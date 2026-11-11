@@ -1,5 +1,5 @@
 use super::{BYTE_ORDER_MARK, Lexer};
-use crate::TokenKind;
+use crate::{LexicalErrorKind, TokenKind};
 
 impl Lexer<'_> {
     // Whether `c`, at the current position, begins a token the parser ignores. Layout is decided by
@@ -20,6 +20,11 @@ impl Lexer<'_> {
             while indentation < self.current_indentation() {
                 self.indent_stack.pop();
                 self.push(TokenKind::Dedent, start);
+            }
+            // A line between two levels is reported, and then treated as being at the level it
+            // stopped at. Its leading spaces stay a `Whitespace` token.
+            if indentation != self.current_indentation() {
+                self.report(LexicalErrorKind::InconsistentDedent, self.line_start, start);
             }
         }
     }

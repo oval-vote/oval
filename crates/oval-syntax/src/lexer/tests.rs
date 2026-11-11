@@ -1,7 +1,7 @@
 use super::*;
 use LexicalErrorKind::{
-    IllegalTab, InvalidEscape, MalformedNumber, MalformedUrl, UnexpectedCharacter,
-    UnterminatedString,
+    IllegalTab, InconsistentDedent, InvalidEscape, MalformedNumber, MalformedUrl,
+    UnexpectedCharacter, UnterminatedString,
 };
 use TokenKind::{
     AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Date, Dedent, Error, Indent, Integer,
@@ -1321,5 +1321,113 @@ fn layout_works_with_carriage_returns() {
             (Newline, ""),
         ],
         &[],
+    );
+}
+
+#[test]
+fn a_line_between_two_levels_is_an_inconsistent_dedent() {
+    // The specification's example for the inconsistent-dedent error: three spaces match no
+    // enclosing level, so the line closes one block and is treated as being at the section's level.
+    check_lexer(
+        "a\n  b\n    c\n   d\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, "    "),
+            (Indent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+            (Whitespace, "   "),
+            (Dedent, ""),
+            (Word, "d"),
+            (Newline, "\n"),
+            (Dedent, ""),
+        ],
+        &[error(InconsistentDedent, 12, 3)],
+    );
+}
+
+#[test]
+fn a_line_after_an_inconsistent_dedent_continues_at_the_recovered_level() {
+    check_lexer(
+        "a\n  b\n    c\n   d\n  e\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, "    "),
+            (Indent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+            (Whitespace, "   "),
+            (Dedent, ""),
+            (Word, "d"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Word, "e"),
+            (Newline, "\n"),
+            (Dedent, ""),
+        ],
+        &[error(InconsistentDedent, 12, 3)],
+    );
+}
+
+#[test]
+fn an_inconsistent_dedent_may_return_to_the_outermost_level() {
+    // One space is between levels 0 and 2, so the line closes the block and is treated as being
+    // at level 0.
+    check_lexer(
+        "a\n  b\n c\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, " "),
+            (Dedent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+        ],
+        &[error(InconsistentDedent, 6, 1)],
+    );
+}
+
+#[test]
+fn a_deeper_line_after_an_inconsistent_dedent_opens_a_block() {
+    // After recovering to level 2, a line at 3 is deeper and opens a new block.
+    check_lexer(
+        "a\n  b\n    c\n   d\n   e\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, "    "),
+            (Indent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+            (Whitespace, "   "),
+            (Dedent, ""),
+            (Word, "d"),
+            (Newline, "\n"),
+            (Whitespace, "   "),
+            (Indent, ""),
+            (Word, "e"),
+            (Newline, "\n"),
+            (Dedent, ""),
+            (Dedent, ""),
+        ],
+        &[error(InconsistentDedent, 12, 3)],
     );
 }

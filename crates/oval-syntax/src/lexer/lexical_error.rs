@@ -16,6 +16,8 @@ pub enum LexicalErrorKind {
     MalformedNumber,
     /// `http://` or `https://` with nothing after it
     MalformedUrl,
+    /// A line indented less than its enclosing block but at no enclosing level
+    InconsistentDedent,
 }
 
 impl LexicalErrorKind {
@@ -28,6 +30,7 @@ impl LexicalErrorKind {
             Self::IllegalTab => "illegal-tab",
             Self::MalformedNumber => "malformed-number",
             Self::MalformedUrl => "malformed-url",
+            Self::InconsistentDedent => "inconsistent-dedent",
         }
     }
 }
@@ -72,6 +75,7 @@ mod tests {
             (LexicalErrorKind::IllegalTab, "illegal-tab"),
             (LexicalErrorKind::MalformedNumber, "malformed-number"),
             (LexicalErrorKind::MalformedUrl, "malformed-url"),
+            (LexicalErrorKind::InconsistentDedent, "inconsistent-dedent"),
         ] {
             assert_eq!(kind.spec_id(), identifier, "{kind:?}");
         }

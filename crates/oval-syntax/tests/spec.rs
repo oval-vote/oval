@@ -14,7 +14,7 @@ const NOT_YET_LEXED: &[&str] = &["MarkdownBlock"];
 
 // Errors the lexer does not report yet. Examples that expect any of them are skipped. Remove an
 // identifier from this list in the step that starts reporting it.
-const NOT_YET_REPORTED: &[&str] = &["inconsistent-dedent"];
+const NOT_YET_REPORTED: &[&str] = &[];
 
 struct Block<'a> {
     info: &'a str,
