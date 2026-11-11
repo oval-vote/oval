@@ -84,6 +84,9 @@ impl Lexer<'_> {
                 ' ' => self.whitespace(),
                 '#' => self.comment(),
                 '\n' | '\r' => self.line_terminator(c),
+                '@' => self.at_sign(),
+                ':' => self.colon(),
+                ',' => self.comma(),
                 _ => {
                     self.bump(c);
                     self.push(TokenKind::Error, c.len_utf8());
@@ -115,6 +118,23 @@ impl Lexer<'_> {
         };
         self.push(kind, self.pos - start);
         self.line_has_tokens = false;
+    }
+
+    fn at_sign(&mut self) {
+        self.single(TokenKind::AtSign, '@');
+    }
+
+    fn colon(&mut self) {
+        self.single(TokenKind::Colon, ':');
+    }
+
+    fn comma(&mut self) {
+        self.single(TokenKind::Comma, ',');
+    }
+
+    fn single(&mut self, kind: TokenKind, c: char) {
+        self.bump(c);
+        self.push(kind, c.len_utf8());
     }
 
     fn peek(&self) -> Option<char> {
@@ -508,6 +528,49 @@ mod tests {
                 token(TokenKind::BlankLine, 2),
             ])
         );
+    }
+
+    #[test]
+    fn an_at_sign_is_its_own_token() {
+        assert_eq!(lex("@"), Ok(vec![token(TokenKind::AtSign, 1)]));
+    }
+
+    #[test]
+    fn a_colon_is_its_own_token() {
+        assert_eq!(lex(":"), Ok(vec![token(TokenKind::Colon, 1)]));
+    }
+
+    #[test]
+    fn a_comma_is_its_own_token() {
+        assert_eq!(lex(","), Ok(vec![token(TokenKind::Comma, 1)]));
+    }
+
+    #[test]
+    fn adjacent_punctuators_are_separate_tokens() {
+        assert_eq!(
+            lex("@:,"),
+            Ok(vec![
+                token(TokenKind::AtSign, 1),
+                token(TokenKind::Colon, 1),
+                token(TokenKind::Comma, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_line_with_a_punctuator_ends_in_a_newline() {
+        for text in ["@\n", ":\n", ",\n"] {
+            assert_eq!(
+                lex(text).unwrap()[1],
+                token(TokenKind::Newline, 1),
+                "input: {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn punctuators_inside_a_comment_are_part_of_it() {
+        assert_eq!(lex("# @:,"), Ok(vec![token(TokenKind::Comment, 5)]));
     }
 
     #[test]
