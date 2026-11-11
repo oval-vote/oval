@@ -38,8 +38,8 @@ pub enum TokenKind {
     Newline,
     /// An indent
     Indent,
-    /// A detent
-    Detent,
+    /// A dedent
+    Dedent,
     /// An error
     Error,
 }
