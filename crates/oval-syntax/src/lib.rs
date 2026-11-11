@@ -1,7 +1,7 @@
 //! Lexer, parser, and lossless syntax tree for the Oval voting guide format.
 
+mod lexer;
 mod token;
-mod token_kind;
 
-pub use token::Token;
-pub use token_kind::TokenKind;
+pub use lexer::lex;
+pub use token::{Token, TokenKind};
