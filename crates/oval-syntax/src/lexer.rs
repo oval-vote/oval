@@ -14,10 +14,11 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// [`TokenKind::Comment`] token. Each line terminator, which is a line feed (U+000A), a carriage
 /// return (U+000D) followed by a line feed, or a carriage return alone, becomes one
 /// [`TokenKind::Newline`] token when its line has other tokens, and one [`TokenKind::BlankLine`]
-/// token when the line contains only whitespace, a comment, or a byte order mark. Every other
-/// character becomes its own
-/// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
-/// any token.
+/// token when the line contains only whitespace, a comment, or a byte order mark. Each `@`, `:`,
+/// and `,` becomes a [`TokenKind::AtSign`], [`TokenKind::Colon`], or [`TokenKind::Comma`] token, and
+/// each ASCII letter followed by any ASCII letters, digits, `-`, and `_` becomes a
+/// [`TokenKind::Word`] token. Every other character becomes its own [`TokenKind::Error`] token,
+/// which is how the specification treats a character that cannot begin any token.
 ///
 /// # Errors
 ///
@@ -87,6 +88,7 @@ impl Lexer<'_> {
                 '@' => self.at_sign(),
                 ':' => self.colon(),
                 ',' => self.comma(),
+                c if c.is_ascii_alphabetic() => self.word(),
                 _ => {
                     self.bump(c);
                     self.push(TokenKind::Error, c.len_utf8());
@@ -130,6 +132,11 @@ impl Lexer<'_> {
 
     fn comma(&mut self) {
         self.single(TokenKind::Comma, ',');
+    }
+
+    fn word(&mut self) {
+        let len = self.eat_while(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        self.push(TokenKind::Word, len);
     }
 
     fn single(&mut self, kind: TokenKind, c: char) {
@@ -574,6 +581,106 @@ mod tests {
     }
 
     #[test]
+    fn a_keyword_is_a_word() {
+        assert_eq!(lex("contest"), Ok(vec![token(TokenKind::Word, 7)]));
+    }
+
+    #[test]
+    fn a_hyphenated_keyword_is_one_word() {
+        assert_eq!(lex("no-position"), Ok(vec![token(TokenKind::Word, 11)]));
+    }
+
+    #[test]
+    fn a_word_continues_through_letters_digits_hyphens_and_underscores() {
+        for text in ["if_yes", "x1", "A-b_C", "z-9_"] {
+            assert_eq!(
+                lex(text),
+                Ok(vec![token(
+                    TokenKind::Word,
+                    u32::try_from(text.len()).unwrap()
+                )]),
+                "input: {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_identifier_is_an_at_sign_and_a_word() {
+        assert_eq!(
+            lex("@dana-lombardi"),
+            Ok(vec![
+                token(TokenKind::AtSign, 1),
+                token(TokenKind::Word, 13)
+            ])
+        );
+    }
+
+    #[test]
+    fn a_word_cannot_start_with_a_hyphen() {
+        // The specification's example for the unexpected-character error.
+        assert_eq!(
+            lex("@-lombardi"),
+            Ok(vec![
+                token(TokenKind::AtSign, 1),
+                token(TokenKind::Error, 1),
+                token(TokenKind::Word, 8),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_word_cannot_start_with_an_underscore() {
+        assert_eq!(
+            lex("_x"),
+            Ok(vec![token(TokenKind::Error, 1), token(TokenKind::Word, 1)])
+        );
+    }
+
+    #[test]
+    fn letters_in_a_word_are_ascii_only() {
+        assert_eq!(
+            lex("café"),
+            Ok(vec![token(TokenKind::Word, 3), token(TokenKind::Error, 2)])
+        );
+    }
+
+    #[test]
+    fn a_word_cannot_start_with_a_digit() {
+        // Until numbers are lexed, each leading digit is an unexpected character.
+        assert_eq!(
+            lex("9abc"),
+            Ok(vec![token(TokenKind::Error, 1), token(TokenKind::Word, 3)])
+        );
+    }
+
+    #[test]
+    fn words_are_separated_by_whitespace_and_punctuators() {
+        assert_eq!(
+            lex("a b,c:d"),
+            Ok(vec![
+                token(TokenKind::Word, 1),
+                token(TokenKind::Whitespace, 1),
+                token(TokenKind::Word, 1),
+                token(TokenKind::Comma, 1),
+                token(TokenKind::Word, 1),
+                token(TokenKind::Colon, 1),
+                token(TokenKind::Word, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_line_with_a_word_ends_in_a_newline() {
+        assert_eq!(
+            lex("guide\n"),
+            Ok(vec![
+                token(TokenKind::Word, 5),
+                token(TokenKind::Newline, 1)
+            ])
+        );
+    }
+
+    #[test]
     fn token_lengths_cover_the_input() {
         for text in [
             "",
@@ -583,6 +690,7 @@ mod tests {
             "日本語",
             "\u{FEFF}oval 1",
             "  a   b \t  ",
+            "contest @mayor \"Mayor\" single\n  campaign @bsantos\n",
         ] {
             let total: usize = lex(text)
                 .unwrap()
