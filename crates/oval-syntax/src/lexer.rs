@@ -6,11 +6,12 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// Splits `text` into tokens.
 ///
 /// Every byte of `text` belongs to exactly one token, so the lengths of the returned tokens always
-/// add up to `text.len()`. Nothing is recognized yet: each character becomes its own
-/// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
-/// any token. The one exception is a byte order mark (U+FEFF) at the very start of `text`, which
-/// becomes a [`TokenKind::ByteOrderMark`] token; anywhere else, U+FEFF is an error like any other
-/// unexpected character.
+/// add up to `text.len()`.
+///
+/// So far, only a few tokens are recognized. A byte order mark (U+FEFF) at the very start of `text`
+/// becomes a [`TokenKind::ByteOrderMark`] token, and each run of spaces becomes a
+/// [`TokenKind::Whitespace`] token. Every other character becomes its own [`TokenKind::Error`]
+/// token, which is how the specification treats a character that cannot begin any token.
 ///
 /// # Errors
 ///
@@ -71,8 +72,13 @@ impl Lexer<'_> {
             self.push(TokenKind::ByteOrderMark, BYTE_ORDER_MARK.len_utf8());
         }
         while let Some(c) = self.peek() {
-            self.bump(c);
-            self.push(TokenKind::Error, c.len_utf8());
+            if c == ' ' {
+                let len = self.eat_while(|c| c == ' ');
+                self.push(TokenKind::Whitespace, len);
+            } else {
+                self.bump(c);
+                self.push(TokenKind::Error, c.len_utf8());
+            }
         }
     }
 
@@ -82,6 +88,17 @@ impl Lexer<'_> {
 
     fn bump(&mut self, c: char) {
         self.pos += c.len_utf8();
+    }
+
+    fn eat_while(&mut self, predicate: impl Fn(char) -> bool) -> usize {
+        let start = self.pos;
+        while let Some(c) = self.peek() {
+            if !predicate(c) {
+                break;
+            }
+            self.bump(c);
+        }
+        self.pos - start
     }
 
     fn push(&mut self, kind: TokenKind, len: usize) {
@@ -246,6 +263,35 @@ mod tests {
     }
 
     #[test]
+    fn a_run_of_spaces_is_one_whitespace_token() {
+        assert_eq!(lex("   "), Ok(vec![token(TokenKind::Whitespace, 3)]));
+    }
+
+    #[test]
+    fn whitespace_sits_between_other_tokens() {
+        assert_eq!(
+            lex("-  -"),
+            Ok(vec![
+                token(TokenKind::Error, 1),
+                token(TokenKind::Whitespace, 2),
+                token(TokenKind::Error, 1),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_tab_is_not_whitespace() {
+        assert_eq!(
+            lex(" \t "),
+            Ok(vec![
+                token(TokenKind::Whitespace, 1),
+                token(TokenKind::Error, 1),
+                token(TokenKind::Whitespace, 1),
+            ])
+        );
+    }
+
+    #[test]
     fn token_lengths_cover_the_input() {
         for text in [
             "",
@@ -254,6 +300,7 @@ mod tests {
             "  # comment\r\n",
             "日本語",
             "\u{FEFF}oval 1",
+            "  a   b \t  ",
         ] {
             let total: usize = lex(text)
                 .unwrap()
