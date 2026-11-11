@@ -1,10 +1,12 @@
-use crate::{Token, TokenKind};
-
 mod input_rejection;
 mod layout;
+mod lex_result;
 mod lexical_error;
 
+use crate::{Token, TokenKind};
+
 pub use input_rejection::InputRejection;
+pub use lex_result::LexResult;
 pub use lexical_error::{LexicalError, LexicalErrorKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
@@ -93,15 +95,6 @@ pub fn lex_bytes(bytes: &[u8]) -> Result<LexResult, InputRejection> {
         }
     };
     lex(text)
-}
-
-/// The result of a lexing operation
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LexResult {
-    /// The tokens
-    pub tokens: Vec<Token>,
-    /// The lexical errors, if any
-    pub errors: Vec<LexicalError>,
 }
 
 fn to_offset(n: usize) -> Result<u32, InputRejection> {
