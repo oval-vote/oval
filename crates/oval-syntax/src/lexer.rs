@@ -3,6 +3,35 @@ use crate::{Token, TokenKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
+/// The kinds of lexical errors
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LexicalErrorKind {
+    /// An unexpected character
+    UnexpectedCharacter,
+    /// A string with no closing quote before the end of its line
+    UnterminatedString,
+}
+
+/// A lexical error
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LexicalError {
+    /// The kind of error
+    pub kind: LexicalErrorKind,
+    /// The offset, in bytes, in the document where the error occurred
+    pub offset: u32,
+    /// How many bytes the error spans
+    pub len: u32,
+}
+
+/// The result of a lexing operation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexResult {
+    /// The tokens
+    pub tokens: Vec<Token>,
+    /// The lexical errors, if any
+    pub errors: Vec<LexicalError>,
+}
+
 /// Splits `text` into tokens.
 ///
 /// Every byte of `text` belongs to exactly one token, so the lengths of the returned tokens always
@@ -23,11 +52,14 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
 /// any token.
 ///
+/// Lexing never stops at an error. Each [`TokenKind::Error`] token has a [`LexicalError`] in
+/// [`LexResult::errors`] spanning exactly its bytes, and lexing continues after it.
+///
 /// # Errors
 ///
 /// Returns an [`InputRejection`] if `text` contains U+0000, which the specification rejects as a
 /// whole, or is longer than [`u32::MAX`] bytes. No tokens are produced.
-pub fn lex(text: &str) -> Result<Vec<Token>, InputRejection> {
+pub fn lex(text: &str) -> Result<LexResult, InputRejection> {
     to_offset(text.len())?;
     if let Some(offset) = text.find('\0') {
         return Err(InputRejection::NulCharacter {
@@ -38,10 +70,14 @@ pub fn lex(text: &str) -> Result<Vec<Token>, InputRejection> {
         source: text,
         pos: 0,
         tokens: Vec::new(),
+        errors: Vec::new(),
         line_has_tokens: false,
     };
     lexer.run();
-    Ok(lexer.tokens)
+    Ok(LexResult {
+        tokens: lexer.tokens,
+        errors: lexer.errors,
+    })
 }
 
 /// Splits a document given as raw bytes into tokens.
@@ -53,7 +89,7 @@ pub fn lex(text: &str) -> Result<Vec<Token>, InputRejection> {
 ///
 /// Returns an [`InputRejection`] if `bytes` is not well-formed UTF-8 or contains U+0000, which the
 /// specification rejects as a whole, or is longer than [`u32::MAX`] bytes. No tokens are produced.
-pub fn lex_bytes(bytes: &[u8]) -> Result<Vec<Token>, InputRejection> {
+pub fn lex_bytes(bytes: &[u8]) -> Result<LexResult, InputRejection> {
     to_offset(bytes.len())?;
     let text = match std::str::from_utf8(bytes) {
         Ok(text) => text,
@@ -70,49 +106,57 @@ fn to_offset(n: usize) -> Result<u32, InputRejection> {
     u32::try_from(n).map_err(|_| InputRejection::TooLarge)
 }
 
+// Cannot fail: `lex` rejects any text longer than u32::MAX bytes, so every position and length
+// within it fits.
+fn to_u32(n: usize) -> u32 {
+    u32::try_from(n).expect("lex rejects text longer than u32::MAX bytes")
+}
+
 struct Lexer<'a> {
     source: &'a str,
     pos: usize,
     tokens: Vec<Token>,
+    errors: Vec<LexicalError>,
     line_has_tokens: bool,
 }
 
 impl Lexer<'_> {
     fn run(&mut self) {
-        if self.peek() == Some(BYTE_ORDER_MARK) {
+        if self.rest().starts_with(BYTE_ORDER_MARK) {
+            let start = self.pos;
             self.bump(BYTE_ORDER_MARK);
-            self.push(TokenKind::ByteOrderMark, BYTE_ORDER_MARK.len_utf8());
+            self.push(TokenKind::ByteOrderMark, start);
         }
         while let Some(c) = self.peek() {
+            let start = self.pos;
             match c {
-                ' ' => self.whitespace(),
-                '#' => self.comment(),
-                '\n' | '\r' => self.line_terminator(c),
-                '@' => self.at_sign(),
-                ':' => self.colon(),
-                ',' => self.comma(),
-                '"' => self.string(),
-                c if c.is_ascii_alphabetic() => self.word(),
+                ' ' => self.whitespace(start),
+                '#' => self.comment(start),
+                '\n' | '\r' => self.line_terminator(c, start),
+                '@' => self.at_sign(start),
+                ':' => self.colon(start),
+                ',' => self.comma(start),
+                '"' => self.string(start),
+                c if c.is_ascii_alphabetic() => self.word(start),
                 _ => {
                     self.bump(c);
-                    self.push(TokenKind::Error, c.len_utf8());
+                    self.push_error(LexicalErrorKind::UnexpectedCharacter, start);
                 }
             }
         }
     }
 
-    fn whitespace(&mut self) {
-        let len = self.eat_while(|c| c == ' ');
-        self.push(TokenKind::Whitespace, len);
+    fn whitespace(&mut self, start: usize) {
+        self.eat_while(|c| c == ' ');
+        self.push(TokenKind::Whitespace, start);
     }
 
-    fn comment(&mut self) {
-        let len = self.eat_while(|c| c != '\n' && c != '\r');
-        self.push(TokenKind::Comment, len);
+    fn comment(&mut self, start: usize) {
+        self.eat_while(|c| !is_line_terminator(c));
+        self.push(TokenKind::Comment, start);
     }
 
-    fn line_terminator(&mut self, c: char) {
-        let start = self.pos;
+    fn line_terminator(&mut self, c: char, start: usize) {
         self.bump(c);
         if c == '\r' && self.peek() == Some('\n') {
             self.bump('\n');
@@ -122,94 +166,141 @@ impl Lexer<'_> {
         } else {
             TokenKind::BlankLine
         };
-        self.push(kind, self.pos - start);
+        self.push(kind, start);
         self.line_has_tokens = false;
     }
 
-    fn at_sign(&mut self) {
-        self.single(TokenKind::AtSign, '@');
+    fn at_sign(&mut self, start: usize) {
+        self.single(TokenKind::AtSign, '@', start);
     }
 
-    fn colon(&mut self) {
-        self.single(TokenKind::Colon, ':');
+    fn colon(&mut self, start: usize) {
+        self.single(TokenKind::Colon, ':', start);
     }
 
-    fn comma(&mut self) {
-        self.single(TokenKind::Comma, ',');
+    fn comma(&mut self, start: usize) {
+        self.single(TokenKind::Comma, ',', start);
     }
 
-    fn string(&mut self) {
-        let start = self.pos;
+    fn string(&mut self, start: usize) {
         self.bump('"');
-        let kind = loop {
+        let terminated = loop {
             match self.peek() {
-                None | Some('\n' | '\r') => break TokenKind::Error,
                 Some('"') => {
                     self.bump('"');
-                    break TokenKind::String;
+                    break true;
                 }
                 Some('\\') => {
                     self.bump('\\');
-                    match self.peek() {
-                        None | Some('\n' | '\r') => break TokenKind::Error,
-                        Some(c) => self.bump(c),
+                    // The escaped character belongs to the string, unless the line ends instead.
+                    if let Some(c) = self.peek()
+                        && !is_line_terminator(c)
+                    {
+                        self.bump(c);
                     }
                 }
-                Some(c) => self.bump(c),
+                Some(c) if !is_line_terminator(c) => self.bump(c),
+                _ => break false,
             }
         };
-        self.push(kind, self.pos - start);
+        if terminated {
+            self.push(TokenKind::String, start);
+        } else {
+            self.push_error(LexicalErrorKind::UnterminatedString, start);
+        }
     }
 
-    fn word(&mut self) {
-        let len = self.eat_while(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
-        self.push(TokenKind::Word, len);
+    fn word(&mut self, start: usize) {
+        self.eat_while(is_word_char);
+        self.push(TokenKind::Word, start);
     }
 
-    fn single(&mut self, kind: TokenKind, c: char) {
+    fn single(&mut self, kind: TokenKind, c: char, start: usize) {
         self.bump(c);
-        self.push(kind, c.len_utf8());
+        self.push(kind, start);
+    }
+
+    fn rest(&self) -> &str {
+        &self.source[self.pos..]
     }
 
     fn peek(&self) -> Option<char> {
-        self.source[self.pos..].chars().next()
+        self.rest().chars().next()
     }
 
     fn bump(&mut self, c: char) {
         self.pos += c.len_utf8();
     }
 
-    fn eat_while(&mut self, predicate: impl Fn(char) -> bool) -> usize {
-        let start = self.pos;
+    fn eat_while(&mut self, predicate: impl Fn(char) -> bool) {
         while let Some(c) = self.peek() {
             if !predicate(c) {
                 break;
             }
             self.bump(c);
         }
-        self.pos - start
     }
 
-    fn push(&mut self, kind: TokenKind, len: usize) {
+    fn push(&mut self, kind: TokenKind, start: usize) {
         if !kind.is_ignored() {
             self.line_has_tokens = true;
         }
-        let len = u32::try_from(len).expect("a token is at most u32::MAX bytes"); // Should be unreachable, validated ahead of time.
+        let len = to_u32(self.pos - start);
         self.tokens.push(Token { kind, len });
     }
+
+    fn report(&mut self, kind: LexicalErrorKind, start: usize, end: usize) {
+        let error = LexicalError {
+            kind,
+            offset: to_u32(start),
+            len: to_u32(end - start),
+        };
+        self.errors.push(error);
+    }
+
+    fn push_error(&mut self, kind: LexicalErrorKind, start: usize) {
+        self.report(kind, start, self.pos);
+        self.push(TokenKind::Error, start);
+    }
+}
+
+fn is_line_terminator(c: char) -> bool {
+    matches!(c, '\n' | '\r')
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '-' | '_')
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use LexicalErrorKind::{UnexpectedCharacter, UnterminatedString};
+    use TokenKind::{
+        AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Error, Newline, Whitespace, Word,
+    };
 
-    fn token(kind: TokenKind, len: u32) -> Token {
-        Token { kind, len }
+    fn check_lexer(text: &str, tokens: &[(TokenKind, &str)], errors: &[LexicalError]) {
+        let result = lex(text).expect("the text is accepted");
+        let mut pos = 0;
+        let mut actual = Vec::new();
+        for token in &result.tokens {
+            let len = token.len as usize;
+            actual.push((token.kind, &text[pos..pos + len]));
+            pos += len;
+        }
+        assert_eq!(actual, tokens, "tokens of {text:?}");
+        assert_eq!(pos, text.len(), "the tokens of {text:?} do not cover it");
+        assert_eq!(result.errors, errors, "errors of {text:?}");
+    }
+
+    fn error(kind: LexicalErrorKind, offset: u32, len: u32) -> LexicalError {
+        LexicalError { kind, offset, len }
     }
 
     #[test]
     fn empty_input_has_no_tokens() {
-        assert_eq!(lex(""), Ok(vec![]));
+        check_lexer("", &[], &[]);
     }
 
     #[test]
@@ -234,7 +325,6 @@ mod tests {
         );
     }
 
-    // Offsets past u32::MAX only exist where usize is wider than 32 bits.
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn offsets_past_u32_max_are_too_large() {
@@ -266,7 +356,6 @@ mod tests {
 
     #[test]
     fn truncated_sequence_is_invalid_utf8() {
-        // The first byte of "é" without its second byte.
         assert_eq!(
             lex_bytes(b"a\xc3"),
             Err(InputRejection::InvalidUtf8 { offset: 1 })
@@ -275,7 +364,6 @@ mod tests {
 
     #[test]
     fn encoded_surrogate_is_invalid_utf8() {
-        // U+D800 encoded as if it were a character. Well-formed UTF-8 never contains surrogates.
         assert_eq!(
             lex_bytes(b"\xed\xa0\x80"),
             Err(InputRejection::InvalidUtf8 { offset: 0 })
@@ -292,7 +380,6 @@ mod tests {
 
     #[test]
     fn invalid_utf8_is_reported_before_nul() {
-        // Decoding comes first, so a later invalid byte wins over an earlier U+0000.
         assert_eq!(
             lex_bytes(b"\0\xff"),
             Err(InputRejection::InvalidUtf8 { offset: 1 })
@@ -311,512 +398,466 @@ mod tests {
     #[test]
     fn each_unexpected_character_is_its_own_error_token() {
         // "é" is one character but two bytes in UTF-8.
-        assert_eq!(
-            lex("-é_"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Error, 2),
-                token(TokenKind::Error, 1),
-            ])
+        check_lexer(
+            "-é_",
+            &[(Error, "-"), (Error, "é"), (Error, "_")],
+            &[
+                error(UnexpectedCharacter, 0, 1),
+                error(UnexpectedCharacter, 1, 2),
+                error(UnexpectedCharacter, 3, 1),
+            ],
         );
     }
 
     #[test]
+    fn errors_are_reported_in_source_order() {
+        check_lexer(
+            "- \"x",
+            &[(Error, "-"), (Whitespace, " "), (Error, "\"x")],
+            &[
+                error(UnexpectedCharacter, 0, 1),
+                error(UnterminatedString, 2, 2),
+            ],
+        );
+    }
+
+    #[test]
+    fn every_error_token_has_one_error_spanning_it() {
+        for text in ["-é_", "a \"b\nc", "\u{FEFF}\u{FEFF}@-x", "# ok\n\"\\"] {
+            let result = lex(text).unwrap();
+            let mut pos = 0;
+            let mut spans = Vec::new();
+            for token in &result.tokens {
+                if token.kind == Error {
+                    spans.push((pos, token.len));
+                }
+                pos += token.len;
+            }
+            let reported: Vec<(u32, u32)> = result
+                .errors
+                .iter()
+                .map(|error| (error.offset, error.len))
+                .collect();
+            assert_eq!(reported, spans, "input: {text:?}");
+        }
+    }
+
+    #[test]
     fn leading_byte_order_mark_is_its_own_token() {
-        assert_eq!(
-            lex("\u{FEFF}-"),
-            Ok(vec![
-                token(TokenKind::ByteOrderMark, 3),
-                token(TokenKind::Error, 1),
-            ])
+        check_lexer(
+            "\u{FEFF}a",
+            &[(ByteOrderMark, "\u{FEFF}"), (Word, "a")],
+            &[],
         );
     }
 
     #[test]
     fn byte_order_mark_elsewhere_is_an_error() {
-        assert_eq!(
-            lex("-\u{FEFF}"),
-            Ok(vec![token(TokenKind::Error, 1), token(TokenKind::Error, 3)])
+        check_lexer(
+            "a\u{FEFF}",
+            &[(Word, "a"), (Error, "\u{FEFF}")],
+            &[error(UnexpectedCharacter, 1, 3)],
         );
     }
 
     #[test]
     fn only_the_first_byte_order_mark_is_ignored() {
-        assert_eq!(
-            lex("\u{FEFF}\u{FEFF}"),
-            Ok(vec![
-                token(TokenKind::ByteOrderMark, 3),
-                token(TokenKind::Error, 3),
-            ])
+        check_lexer(
+            "\u{FEFF}\u{FEFF}",
+            &[(ByteOrderMark, "\u{FEFF}"), (Error, "\u{FEFF}")],
+            &[error(UnexpectedCharacter, 3, 3)],
         );
     }
 
     #[test]
     fn byte_order_mark_survives_decoding() {
-        assert_eq!(
-            lex_bytes(b"\xef\xbb\xbf-"),
-            Ok(vec![
-                token(TokenKind::ByteOrderMark, 3),
-                token(TokenKind::Error, 1),
-            ])
-        );
+        assert_eq!(lex_bytes(b"\xef\xbb\xbfa"), lex("\u{FEFF}a"));
     }
+
+    // Whitespace
 
     #[test]
     fn a_run_of_spaces_is_one_whitespace_token() {
-        assert_eq!(lex("   "), Ok(vec![token(TokenKind::Whitespace, 3)]));
+        check_lexer("   ", &[(Whitespace, "   ")], &[]);
     }
 
     #[test]
     fn whitespace_sits_between_other_tokens() {
-        assert_eq!(
-            lex("-  -"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Whitespace, 2),
-                token(TokenKind::Error, 1),
-            ])
-        );
+        check_lexer("a  b", &[(Word, "a"), (Whitespace, "  "), (Word, "b")], &[]);
     }
 
     #[test]
     fn a_tab_is_not_whitespace() {
-        assert_eq!(
-            lex(" \t "),
-            Ok(vec![
-                token(TokenKind::Whitespace, 1),
-                token(TokenKind::Error, 1),
-                token(TokenKind::Whitespace, 1),
-            ])
+        check_lexer(
+            " \t ",
+            &[(Whitespace, " "), (Error, "\t"), (Whitespace, " ")],
+            &[error(UnexpectedCharacter, 1, 1)],
         );
     }
 
     #[test]
     fn a_comment_runs_to_the_end_of_the_line() {
-        assert_eq!(lex("# a note"), Ok(vec![token(TokenKind::Comment, 8)]));
+        check_lexer("# a note", &[(Comment, "# a note")], &[]);
     }
 
     #[test]
     fn a_comment_stops_before_a_line_terminator() {
-        for text in ["# a\nb", "# a\rb", "# a\r\nb"] {
-            assert_eq!(
-                lex(text).unwrap()[0],
-                token(TokenKind::Comment, 3),
-                "input: {text:?}"
+        for terminator in ["\n", "\r", "\r\n"] {
+            check_lexer(
+                &format!("# a{terminator}b"),
+                &[(Comment, "# a"), (BlankLine, terminator), (Word, "b")],
+                &[],
             );
         }
     }
 
     #[test]
     fn a_lone_hash_is_a_comment() {
-        assert_eq!(lex("#"), Ok(vec![token(TokenKind::Comment, 1)]));
+        check_lexer("#", &[(Comment, "#")], &[]);
     }
 
     #[test]
     fn a_comment_may_follow_other_tokens() {
-        assert_eq!(
-            lex("- # x"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Whitespace, 1),
-                token(TokenKind::Comment, 3),
-            ])
+        check_lexer(
+            "a # x",
+            &[(Word, "a"), (Whitespace, " "), (Comment, "# x")],
+            &[],
         );
     }
 
     #[test]
     fn a_comment_may_contain_anything_but_a_line_terminator() {
-        assert_eq!(lex("#\t@\"é#"), Ok(vec![token(TokenKind::Comment, 7)]));
+        check_lexer("#\t@\"é#", &[(Comment, "#\t@\"é#")], &[]);
     }
 
     #[test]
     fn a_line_feed_after_tokens_is_a_newline() {
-        assert_eq!(
-            lex("-\n"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 1)
-            ])
-        );
+        check_lexer("a\n", &[(Word, "a"), (Newline, "\n")], &[]);
     }
 
     #[test]
     fn a_line_feed_on_an_empty_line_is_a_blank_line() {
-        assert_eq!(lex("\n"), Ok(vec![token(TokenKind::BlankLine, 1)]));
+        check_lexer("\n", &[(BlankLine, "\n")], &[]);
     }
 
     #[test]
     fn a_line_of_whitespace_and_a_comment_is_a_blank_line() {
-        assert_eq!(
-            lex("  # x\n"),
-            Ok(vec![
-                token(TokenKind::Whitespace, 2),
-                token(TokenKind::Comment, 3),
-                token(TokenKind::BlankLine, 1),
-            ])
+        check_lexer(
+            "  # x\n",
+            &[(Whitespace, "  "), (Comment, "# x"), (BlankLine, "\n")],
+            &[],
         );
     }
 
     #[test]
     fn a_line_with_only_a_byte_order_mark_is_a_blank_line() {
-        assert_eq!(
-            lex("\u{FEFF}\n"),
-            Ok(vec![
-                token(TokenKind::ByteOrderMark, 3),
-                token(TokenKind::BlankLine, 1),
-            ])
+        check_lexer(
+            "\u{FEFF}\n",
+            &[(ByteOrderMark, "\u{FEFF}"), (BlankLine, "\n")],
+            &[],
         );
     }
 
     #[test]
     fn a_comment_after_tokens_keeps_the_newline() {
-        assert_eq!(
-            lex("- # x\n"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Whitespace, 1),
-                token(TokenKind::Comment, 3),
-                token(TokenKind::Newline, 1),
-            ])
+        check_lexer(
+            "a # x\n",
+            &[
+                (Word, "a"),
+                (Whitespace, " "),
+                (Comment, "# x"),
+                (Newline, "\n"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_line_with_an_error_ends_in_a_newline() {
+        check_lexer(
+            "-\n",
+            &[(Error, "-"), (Newline, "\n")],
+            &[error(UnexpectedCharacter, 0, 1)],
         );
     }
 
     #[test]
     fn each_line_is_judged_on_its_own_tokens() {
-        assert_eq!(
-            lex("-\n\n-\n"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 1),
-                token(TokenKind::BlankLine, 1),
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 1),
-            ])
+        check_lexer(
+            "a\n\nb\n",
+            &[
+                (Word, "a"),
+                (Newline, "\n"),
+                (BlankLine, "\n"),
+                (Word, "b"),
+                (Newline, "\n"),
+            ],
+            &[],
         );
     }
 
     #[test]
     fn every_line_terminator_ends_a_line() {
-        for (terminator, len) in [("\n", 1), ("\r\n", 2), ("\r", 1)] {
-            assert_eq!(
-                lex(&format!("-{terminator}{terminator}")),
-                Ok(vec![
-                    token(TokenKind::Error, 1),
-                    token(TokenKind::Newline, len),
-                    token(TokenKind::BlankLine, len),
-                ]),
-                "terminator: {terminator:?}"
+        for terminator in ["\n", "\r\n", "\r"] {
+            check_lexer(
+                &format!("a{terminator}{terminator}"),
+                &[(Word, "a"), (Newline, terminator), (BlankLine, terminator)],
+                &[],
             );
         }
     }
 
     #[test]
     fn a_carriage_return_and_line_feed_are_one_terminator() {
-        assert_eq!(lex("\r\n"), Ok(vec![token(TokenKind::BlankLine, 2)]));
+        check_lexer("\r\n", &[(BlankLine, "\r\n")], &[]);
     }
 
     #[test]
     fn a_line_feed_before_a_carriage_return_is_two_terminators() {
-        assert_eq!(
-            lex("\n\r"),
-            Ok(vec![
-                token(TokenKind::BlankLine, 1),
-                token(TokenKind::BlankLine, 1),
-            ])
-        );
+        check_lexer("\n\r", &[(BlankLine, "\n"), (BlankLine, "\r")], &[]);
     }
 
     #[test]
     fn a_carriage_return_before_a_crlf_is_two_terminators() {
-        assert_eq!(
-            lex("-\r\r\n"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 1),
-                token(TokenKind::BlankLine, 2),
-            ])
+        check_lexer(
+            "a\r\r\n",
+            &[(Word, "a"), (Newline, "\r"), (BlankLine, "\r\n")],
+            &[],
         );
     }
 
     #[test]
     fn terminators_may_be_mixed_in_one_document() {
-        assert_eq!(
-            lex("-\r\n-\r-\n"),
-            Ok(vec![
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 2),
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 1),
-                token(TokenKind::Error, 1),
-                token(TokenKind::Newline, 1),
-            ])
+        check_lexer(
+            "a\r\nb\rc\n",
+            &[
+                (Word, "a"),
+                (Newline, "\r\n"),
+                (Word, "b"),
+                (Newline, "\r"),
+                (Word, "c"),
+                (Newline, "\n"),
+            ],
+            &[],
         );
     }
 
     #[test]
     fn a_comment_line_ending_in_crlf_is_a_blank_line() {
-        assert_eq!(
-            lex("# x\r\n"),
-            Ok(vec![
-                token(TokenKind::Comment, 3),
-                token(TokenKind::BlankLine, 2),
-            ])
-        );
+        check_lexer("# x\r\n", &[(Comment, "# x"), (BlankLine, "\r\n")], &[]);
     }
 
     #[test]
-    fn an_at_sign_is_its_own_token() {
-        assert_eq!(lex("@"), Ok(vec![token(TokenKind::AtSign, 1)]));
-    }
-
-    #[test]
-    fn a_colon_is_its_own_token() {
-        assert_eq!(lex(":"), Ok(vec![token(TokenKind::Colon, 1)]));
-    }
-
-    #[test]
-    fn a_comma_is_its_own_token() {
-        assert_eq!(lex(","), Ok(vec![token(TokenKind::Comma, 1)]));
+    fn each_punctuator_is_its_own_token() {
+        check_lexer("@", &[(AtSign, "@")], &[]);
+        check_lexer(":", &[(Colon, ":")], &[]);
+        check_lexer(",", &[(Comma, ",")], &[]);
     }
 
     #[test]
     fn adjacent_punctuators_are_separate_tokens() {
-        assert_eq!(
-            lex("@:,"),
-            Ok(vec![
-                token(TokenKind::AtSign, 1),
-                token(TokenKind::Colon, 1),
-                token(TokenKind::Comma, 1),
-            ])
-        );
+        check_lexer("@:,", &[(AtSign, "@"), (Colon, ":"), (Comma, ",")], &[]);
     }
 
     #[test]
     fn a_line_with_a_punctuator_ends_in_a_newline() {
-        for text in ["@\n", ":\n", ",\n"] {
-            assert_eq!(
-                lex(text).unwrap()[1],
-                token(TokenKind::Newline, 1),
-                "input: {text:?}"
+        for (punctuator, kind) in [("@", AtSign), (":", Colon), (",", Comma)] {
+            check_lexer(
+                &format!("{punctuator}\n"),
+                &[(kind, punctuator), (Newline, "\n")],
+                &[],
             );
         }
     }
 
     #[test]
     fn punctuators_inside_a_comment_are_part_of_it() {
-        assert_eq!(lex("# @:,"), Ok(vec![token(TokenKind::Comment, 5)]));
+        check_lexer("# @:,", &[(Comment, "# @:,")], &[]);
     }
 
     #[test]
     fn a_keyword_is_a_word() {
-        assert_eq!(lex("contest"), Ok(vec![token(TokenKind::Word, 7)]));
+        check_lexer("contest", &[(Word, "contest")], &[]);
     }
 
     #[test]
     fn a_hyphenated_keyword_is_one_word() {
-        assert_eq!(lex("no-position"), Ok(vec![token(TokenKind::Word, 11)]));
+        check_lexer("no-position", &[(Word, "no-position")], &[]);
     }
 
     #[test]
     fn a_word_continues_through_letters_digits_hyphens_and_underscores() {
         for text in ["if_yes", "x1", "A-b_C", "z-9_"] {
-            assert_eq!(
-                lex(text),
-                Ok(vec![token(
-                    TokenKind::Word,
-                    u32::try_from(text.len()).unwrap()
-                )]),
-                "input: {text:?}"
-            );
+            check_lexer(text, &[(Word, text)], &[]);
         }
     }
 
     #[test]
     fn an_identifier_is_an_at_sign_and_a_word() {
-        assert_eq!(
-            lex("@dana-lombardi"),
-            Ok(vec![
-                token(TokenKind::AtSign, 1),
-                token(TokenKind::Word, 13)
-            ])
+        check_lexer(
+            "@dana-lombardi",
+            &[(AtSign, "@"), (Word, "dana-lombardi")],
+            &[],
         );
     }
 
     #[test]
     fn a_word_cannot_start_with_a_hyphen() {
-        // The specification's example for the unexpected-character error.
-        assert_eq!(
-            lex("@-lombardi"),
-            Ok(vec![
-                token(TokenKind::AtSign, 1),
-                token(TokenKind::Error, 1),
-                token(TokenKind::Word, 8),
-            ])
+        check_lexer(
+            "@-lombardi",
+            &[(AtSign, "@"), (Error, "-"), (Word, "lombardi")],
+            &[error(UnexpectedCharacter, 1, 1)],
         );
     }
 
     #[test]
     fn a_word_cannot_start_with_an_underscore() {
-        assert_eq!(
-            lex("_x"),
-            Ok(vec![token(TokenKind::Error, 1), token(TokenKind::Word, 1)])
+        check_lexer(
+            "_x",
+            &[(Error, "_"), (Word, "x")],
+            &[error(UnexpectedCharacter, 0, 1)],
         );
     }
 
     #[test]
     fn letters_in_a_word_are_ascii_only() {
-        assert_eq!(
-            lex("café"),
-            Ok(vec![token(TokenKind::Word, 3), token(TokenKind::Error, 2)])
+        check_lexer(
+            "café",
+            &[(Word, "caf"), (Error, "é")],
+            &[error(UnexpectedCharacter, 3, 2)],
         );
     }
 
     #[test]
     fn a_word_cannot_start_with_a_digit() {
-        // Until numbers are lexed, each leading digit is an unexpected character.
-        assert_eq!(
-            lex("9abc"),
-            Ok(vec![token(TokenKind::Error, 1), token(TokenKind::Word, 3)])
+        check_lexer(
+            "9abc",
+            &[(Error, "9"), (Word, "abc")],
+            &[error(UnexpectedCharacter, 0, 1)],
         );
     }
 
     #[test]
     fn words_are_separated_by_whitespace_and_punctuators() {
-        assert_eq!(
-            lex("a b,c:d"),
-            Ok(vec![
-                token(TokenKind::Word, 1),
-                token(TokenKind::Whitespace, 1),
-                token(TokenKind::Word, 1),
-                token(TokenKind::Comma, 1),
-                token(TokenKind::Word, 1),
-                token(TokenKind::Colon, 1),
-                token(TokenKind::Word, 1),
-            ])
+        check_lexer(
+            "a b,c:d",
+            &[
+                (Word, "a"),
+                (Whitespace, " "),
+                (Word, "b"),
+                (Comma, ","),
+                (Word, "c"),
+                (Colon, ":"),
+                (Word, "d"),
+            ],
+            &[],
         );
     }
 
     #[test]
     fn a_line_with_a_word_ends_in_a_newline() {
-        assert_eq!(
-            lex("guide\n"),
-            Ok(vec![
-                token(TokenKind::Word, 5),
-                token(TokenKind::Newline, 1)
-            ])
-        );
+        check_lexer("guide\n", &[(Word, "guide"), (Newline, "\n")], &[]);
     }
 
     #[test]
-    fn a_string_includes_both_quotes() {
-        assert_eq!(
-            lex(r#""Vote for one""#),
-            Ok(vec![token(TokenKind::String, 14)])
-        );
-    }
-
-    #[test]
-    fn an_empty_string_is_two_quotes() {
-        assert_eq!(lex(r#""""#), Ok(vec![token(TokenKind::String, 2)]));
-    }
-
-    #[test]
-    fn an_escaped_quote_does_not_close_a_string() {
-        assert_eq!(
-            lex(r#""a \"b\" c""#),
-            Ok(vec![token(TokenKind::String, 11)])
-        );
-    }
-
-    #[test]
-    fn an_escaped_backslash_is_part_of_a_string() {
-        assert_eq!(lex(r#""a \\ b""#), Ok(vec![token(TokenKind::String, 8)]));
+    fn a_whole_string_is_one_token() {
+        for text in [
+            r#""Vote for one""#,
+            r#""""#,
+            r#""a \"b\" c""#,
+            r#""a \\ b""#,
+            r##""# @ : , é""##,
+        ] {
+            check_lexer(text, &[(TokenKind::String, text)], &[]);
+        }
     }
 
     #[test]
     fn an_escaped_backslash_before_the_closing_quote_does_not_escape_it() {
-        assert_eq!(
-            lex(r#""a\\" x"#),
-            Ok(vec![
-                token(TokenKind::String, 5),
-                token(TokenKind::Whitespace, 1),
-                token(TokenKind::Word, 1),
-            ])
+        check_lexer(
+            r#""a\\" x"#,
+            &[
+                (TokenKind::String, r#""a\\""#),
+                (Whitespace, " "),
+                (Word, "x"),
+            ],
+            &[],
         );
     }
 
     #[test]
     fn an_invalid_escape_is_still_a_string() {
-        // The specification's example for the invalid-escape error: the token is still a String.
-        assert_eq!(
-            lex(r#""Measure \#3""#),
-            Ok(vec![token(TokenKind::String, 13)])
-        );
-    }
-
-    #[test]
-    fn a_string_may_contain_comment_and_punctuator_characters() {
-        assert_eq!(
-            lex(r##""# @ : , é""##),
-            Ok(vec![token(TokenKind::String, 12)])
+        check_lexer(
+            r#""Measure \#3""#,
+            &[(TokenKind::String, r#""Measure \#3""#)],
+            &[],
         );
     }
 
     #[test]
     fn an_unterminated_string_is_an_error_up_to_the_line_terminator() {
-        // The specification's example for the unterminated-string error.
-        assert_eq!(
-            lex("\"November 3\ndate"),
-            Ok(vec![
-                token(TokenKind::Error, 11),
-                token(TokenKind::Newline, 1),
-                token(TokenKind::Word, 4),
-            ])
+        check_lexer(
+            "\"November 3\ndate",
+            &[(Error, "\"November 3"), (Newline, "\n"), (Word, "date")],
+            &[error(UnterminatedString, 0, 11)],
         );
     }
 
     #[test]
     fn an_unterminated_string_stops_before_a_carriage_return() {
-        assert_eq!(
-            lex("\"a\r\n"),
-            Ok(vec![
-                token(TokenKind::Error, 2),
-                token(TokenKind::Newline, 2)
-            ])
+        check_lexer(
+            "\"a\r\n",
+            &[(Error, "\"a"), (Newline, "\r\n")],
+            &[error(UnterminatedString, 0, 2)],
         );
     }
 
     #[test]
     fn an_unterminated_string_may_end_at_the_end_of_input() {
-        assert_eq!(lex("\"abc"), Ok(vec![token(TokenKind::Error, 4)]));
+        check_lexer(
+            "\"abc",
+            &[(Error, "\"abc")],
+            &[error(UnterminatedString, 0, 4)],
+        );
+    }
+
+    #[test]
+    fn an_unterminated_string_is_reported_where_it_starts() {
+        check_lexer(
+            "a \"b",
+            &[(Word, "a"), (Whitespace, " "), (Error, "\"b")],
+            &[error(UnterminatedString, 2, 2)],
+        );
     }
 
     #[test]
     fn a_backslash_before_a_line_terminator_is_part_of_an_unterminated_string() {
-        assert_eq!(
-            lex("\"x\\\n"),
-            Ok(vec![
-                token(TokenKind::Error, 3),
-                token(TokenKind::Newline, 1)
-            ])
+        check_lexer(
+            "\"x\\\n",
+            &[(Error, "\"x\\"), (Newline, "\n")],
+            &[error(UnterminatedString, 0, 3)],
         );
     }
 
     #[test]
     fn a_backslash_at_the_end_of_input_is_part_of_an_unterminated_string() {
-        assert_eq!(lex("\"x\\"), Ok(vec![token(TokenKind::Error, 3)]));
+        check_lexer(
+            "\"x\\",
+            &[(Error, "\"x\\")],
+            &[error(UnterminatedString, 0, 3)],
+        );
     }
 
     #[test]
     fn a_field_with_a_string_value() {
-        // The specification's example for the illegal-tab error, without the tab.
-        assert_eq!(
-            lex(r#"subtitle "Vote for one""#),
-            Ok(vec![
-                token(TokenKind::Word, 8),
-                token(TokenKind::Whitespace, 1),
-                token(TokenKind::String, 14),
-            ])
+        check_lexer(
+            r#"subtitle "Vote for one""#,
+            &[
+                (Word, "subtitle"),
+                (Whitespace, " "),
+                (TokenKind::String, r#""Vote for one""#),
+            ],
+            &[],
         );
     }
 
@@ -835,6 +876,7 @@ mod tests {
         ] {
             let total: usize = lex(text)
                 .unwrap()
+                .tokens
                 .iter()
                 .map(|token| token.len as usize)
                 .sum();

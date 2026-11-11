@@ -5,5 +5,5 @@ mod lexer;
 mod token;
 
 pub use input_rejection::InputRejection;
-pub use lexer::{lex, lex_bytes};
+pub use lexer::{LexResult, LexicalError, LexicalErrorKind, lex, lex_bytes};
 pub use token::{Token, TokenKind};
