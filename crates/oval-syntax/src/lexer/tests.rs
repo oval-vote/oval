@@ -102,7 +102,7 @@ fn each_unexpected_character_is_its_own_error_token() {
     // "é" is one character but two bytes in UTF-8.
     check_lexer(
         "-é_",
-        &[(Error, "-"), (Error, "é"), (Error, "_")],
+        &[(Error, "-"), (Error, "é"), (Error, "_"), (Newline, "")],
         &[
             error(UnexpectedCharacter, 0, 1),
             error(UnexpectedCharacter, 1, 2),
@@ -115,7 +115,12 @@ fn each_unexpected_character_is_its_own_error_token() {
 fn errors_are_reported_in_source_order() {
     check_lexer(
         "- \"x",
-        &[(Error, "-"), (Whitespace, " "), (Error, "\"x")],
+        &[
+            (Error, "-"),
+            (Whitespace, " "),
+            (Error, "\"x"),
+            (Newline, ""),
+        ],
         &[
             error(UnexpectedCharacter, 0, 1),
             error(UnterminatedString, 2, 2),
@@ -148,7 +153,7 @@ fn every_error_token_has_one_error_spanning_it() {
 fn leading_byte_order_mark_is_its_own_token() {
     check_lexer(
         "\u{FEFF}a",
-        &[(ByteOrderMark, "\u{FEFF}"), (Word, "a")],
+        &[(ByteOrderMark, "\u{FEFF}"), (Word, "a"), (Newline, "")],
         &[],
     );
 }
@@ -157,7 +162,7 @@ fn leading_byte_order_mark_is_its_own_token() {
 fn byte_order_mark_elsewhere_is_an_error() {
     check_lexer(
         "a\u{FEFF}",
-        &[(Word, "a"), (Error, "\u{FEFF}")],
+        &[(Word, "a"), (Error, "\u{FEFF}"), (Newline, "")],
         &[error(UnexpectedCharacter, 1, 3)],
     );
 }
@@ -166,7 +171,11 @@ fn byte_order_mark_elsewhere_is_an_error() {
 fn only_the_first_byte_order_mark_is_ignored() {
     check_lexer(
         "\u{FEFF}\u{FEFF}",
-        &[(ByteOrderMark, "\u{FEFF}"), (Error, "\u{FEFF}")],
+        &[
+            (ByteOrderMark, "\u{FEFF}"),
+            (Error, "\u{FEFF}"),
+            (Newline, ""),
+        ],
         &[error(UnexpectedCharacter, 3, 3)],
     );
 }
@@ -185,14 +194,23 @@ fn a_run_of_spaces_is_one_whitespace_token() {
 
 #[test]
 fn whitespace_sits_between_other_tokens() {
-    check_lexer("a  b", &[(Word, "a"), (Whitespace, "  "), (Word, "b")], &[]);
+    check_lexer(
+        "a  b",
+        &[(Word, "a"), (Whitespace, "  "), (Word, "b"), (Newline, "")],
+        &[],
+    );
 }
 
 #[test]
 fn a_tab_is_not_whitespace() {
     check_lexer(
         " \t ",
-        &[(Whitespace, " "), (Error, "\t"), (Whitespace, " ")],
+        &[
+            (Whitespace, " "),
+            (Error, "\t"),
+            (Whitespace, " "),
+            (Newline, ""),
+        ],
         &[error(IllegalTab, 1, 1)],
     );
 }
@@ -201,7 +219,7 @@ fn a_tab_is_not_whitespace() {
 fn a_run_of_tabs_is_one_error() {
     check_lexer(
         "\t\t\ta",
-        &[(Error, "\t\t\t"), (Word, "a")],
+        &[(Error, "\t\t\t"), (Word, "a"), (Newline, "")],
         &[error(IllegalTab, 0, 3)],
     );
 }
@@ -210,7 +228,12 @@ fn a_run_of_tabs_is_one_error() {
 fn tabs_separated_by_a_space_are_two_errors() {
     check_lexer(
         "\t \t",
-        &[(Error, "\t"), (Whitespace, " "), (Error, "\t")],
+        &[
+            (Error, "\t"),
+            (Whitespace, " "),
+            (Error, "\t"),
+            (Newline, ""),
+        ],
         &[error(IllegalTab, 0, 1), error(IllegalTab, 2, 1)],
     );
 }
@@ -224,6 +247,7 @@ fn a_tab_between_tokens_is_an_error() {
             (Word, "subtitle"),
             (Error, "\t"),
             (TokenKind::String, "\"Vote for one\""),
+            (Newline, ""),
         ],
         &[error(IllegalTab, 8, 1)],
     );
@@ -231,7 +255,11 @@ fn a_tab_between_tokens_is_an_error() {
 
 #[test]
 fn a_tab_inside_a_string_is_part_of_it() {
-    check_lexer("\"a\tb\"", &[(TokenKind::String, "\"a\tb\"")], &[]);
+    check_lexer(
+        "\"a\tb\"",
+        &[(TokenKind::String, "\"a\tb\""), (Newline, "")],
+        &[],
+    );
 }
 
 #[test]
@@ -259,7 +287,12 @@ fn a_comment_stops_before_a_line_terminator() {
     for terminator in ["\n", "\r", "\r\n"] {
         check_lexer(
             &format!("# a{terminator}b"),
-            &[(Comment, "# a"), (BlankLine, terminator), (Word, "b")],
+            &[
+                (Comment, "# a"),
+                (BlankLine, terminator),
+                (Word, "b"),
+                (Newline, ""),
+            ],
             &[],
         );
     }
@@ -274,7 +307,12 @@ fn a_lone_hash_is_a_comment() {
 fn a_comment_may_follow_other_tokens() {
     check_lexer(
         "a # x",
-        &[(Word, "a"), (Whitespace, " "), (Comment, "# x")],
+        &[
+            (Word, "a"),
+            (Whitespace, " "),
+            (Comment, "# x"),
+            (Newline, ""),
+        ],
         &[],
     );
 }
@@ -402,15 +440,64 @@ fn a_comment_line_ending_in_crlf_is_a_blank_line() {
 }
 
 #[test]
+fn a_last_line_without_a_terminator_ends_in_an_empty_newline() {
+    check_lexer("a", &[(Word, "a"), (Newline, "")], &[]);
+}
+
+#[test]
+fn a_last_line_with_a_terminator_gets_no_extra_newline() {
+    check_lexer("a\n", &[(Word, "a"), (Newline, "\n")], &[]);
+}
+
+#[test]
+fn a_last_line_with_only_ignored_tokens_gets_no_newline() {
+    check_lexer("  ", &[(Whitespace, "  ")], &[]);
+    check_lexer("# c", &[(Comment, "# c")], &[]);
+    check_lexer("\u{FEFF}", &[(ByteOrderMark, "\u{FEFF}")], &[]);
+    check_lexer(
+        "a\n  # c",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Comment, "# c"),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_last_line_with_only_an_error_ends_in_an_empty_newline() {
+    check_lexer(
+        "-",
+        &[(Error, "-"), (Newline, "")],
+        &[error(UnexpectedCharacter, 0, 1)],
+    );
+}
+
+#[test]
+fn a_blank_last_line_gets_no_newline() {
+    check_lexer(
+        "a\n\n",
+        &[(Word, "a"), (Newline, "\n"), (BlankLine, "\n")],
+        &[],
+    );
+}
+
+#[test]
 fn each_punctuator_is_its_own_token() {
-    check_lexer("@", &[(AtSign, "@")], &[]);
-    check_lexer(":", &[(Colon, ":")], &[]);
-    check_lexer(",", &[(Comma, ",")], &[]);
+    check_lexer("@", &[(AtSign, "@"), (Newline, "")], &[]);
+    check_lexer(":", &[(Colon, ":"), (Newline, "")], &[]);
+    check_lexer(",", &[(Comma, ","), (Newline, "")], &[]);
 }
 
 #[test]
 fn adjacent_punctuators_are_separate_tokens() {
-    check_lexer("@:,", &[(AtSign, "@"), (Colon, ":"), (Comma, ",")], &[]);
+    check_lexer(
+        "@:,",
+        &[(AtSign, "@"), (Colon, ":"), (Comma, ","), (Newline, "")],
+        &[],
+    );
 }
 
 #[test]
@@ -431,18 +518,18 @@ fn punctuators_inside_a_comment_are_part_of_it() {
 
 #[test]
 fn a_keyword_is_a_word() {
-    check_lexer("contest", &[(Word, "contest")], &[]);
+    check_lexer("contest", &[(Word, "contest"), (Newline, "")], &[]);
 }
 
 #[test]
 fn a_hyphenated_keyword_is_one_word() {
-    check_lexer("no-position", &[(Word, "no-position")], &[]);
+    check_lexer("no-position", &[(Word, "no-position"), (Newline, "")], &[]);
 }
 
 #[test]
 fn a_word_continues_through_letters_digits_hyphens_and_underscores() {
     for text in ["if_yes", "x1", "A-b_C", "z-9_"] {
-        check_lexer(text, &[(Word, text)], &[]);
+        check_lexer(text, &[(Word, text), (Newline, "")], &[]);
     }
 }
 
@@ -450,7 +537,7 @@ fn a_word_continues_through_letters_digits_hyphens_and_underscores() {
 fn an_identifier_is_an_at_sign_and_a_word() {
     check_lexer(
         "@dana-lombardi",
-        &[(AtSign, "@"), (Word, "dana-lombardi")],
+        &[(AtSign, "@"), (Word, "dana-lombardi"), (Newline, "")],
         &[],
     );
 }
@@ -459,7 +546,12 @@ fn an_identifier_is_an_at_sign_and_a_word() {
 fn a_word_cannot_start_with_a_hyphen() {
     check_lexer(
         "@-lombardi",
-        &[(AtSign, "@"), (Error, "-"), (Word, "lombardi")],
+        &[
+            (AtSign, "@"),
+            (Error, "-"),
+            (Word, "lombardi"),
+            (Newline, ""),
+        ],
         &[error(UnexpectedCharacter, 1, 1)],
     );
 }
@@ -468,7 +560,7 @@ fn a_word_cannot_start_with_a_hyphen() {
 fn a_word_cannot_start_with_an_underscore() {
     check_lexer(
         "_x",
-        &[(Error, "_"), (Word, "x")],
+        &[(Error, "_"), (Word, "x"), (Newline, "")],
         &[error(UnexpectedCharacter, 0, 1)],
     );
 }
@@ -477,7 +569,7 @@ fn a_word_cannot_start_with_an_underscore() {
 fn letters_in_a_word_are_ascii_only() {
     check_lexer(
         "café",
-        &[(Word, "caf"), (Error, "é")],
+        &[(Word, "caf"), (Error, "é"), (Newline, "")],
         &[error(UnexpectedCharacter, 3, 2)],
     );
 }
@@ -485,30 +577,34 @@ fn letters_in_a_word_are_ascii_only() {
 #[test]
 fn a_word_cannot_start_with_a_digit() {
     // A run that starts with a digit is a number, so this is one malformed number.
-    check_lexer("9abc", &[(Error, "9abc")], &[error(MalformedNumber, 0, 4)]);
+    check_lexer(
+        "9abc",
+        &[(Error, "9abc"), (Newline, "")],
+        &[error(MalformedNumber, 0, 4)],
+    );
 }
 
 #[test]
 fn digits_are_an_integer() {
     for text in ["0", "1", "42", "2026"] {
-        check_lexer(text, &[(Integer, text)], &[]);
+        check_lexer(text, &[(Integer, text), (Newline, "")], &[]);
     }
 }
 
 #[test]
 fn leading_zeros_are_part_of_an_integer() {
-    check_lexer("007", &[(Integer, "007")], &[]);
+    check_lexer("007", &[(Integer, "007"), (Newline, "")], &[]);
 }
 
 #[test]
 fn a_date_has_the_shape_yyyy_mm_dd() {
-    check_lexer("2026-11-03", &[(Date, "2026-11-03")], &[]);
+    check_lexer("2026-11-03", &[(Date, "2026-11-03"), (Newline, "")], &[]);
 }
 
 #[test]
 fn a_date_is_checked_for_its_shape_only() {
     // February 30 does not exist, but that is a validation error, not a lexical one.
-    check_lexer("2026-02-30", &[(Date, "2026-02-30")], &[]);
+    check_lexer("2026-02-30", &[(Date, "2026-02-30"), (Newline, "")], &[]);
 }
 
 #[test]
@@ -516,7 +612,11 @@ fn a_run_that_is_neither_an_integer_nor_a_date_is_one_malformed_number() {
     // The specification's examples of malformed numbers.
     for text in ["12abc", "3_000", "2026-11-5", "1.1", "1.x"] {
         let len = u32::try_from(text.len()).unwrap();
-        check_lexer(text, &[(Error, text)], &[error(MalformedNumber, 0, len)]);
+        check_lexer(
+            text,
+            &[(Error, text), (Newline, "")],
+            &[error(MalformedNumber, 0, len)],
+        );
     }
 }
 
@@ -530,7 +630,11 @@ fn a_date_with_the_wrong_shape_is_a_malformed_number() {
         "2026-11-03x",
     ] {
         let len = u32::try_from(text.len()).unwrap();
-        check_lexer(text, &[(Error, text)], &[error(MalformedNumber, 0, len)]);
+        check_lexer(
+            text,
+            &[(Error, text), (Newline, "")],
+            &[error(MalformedNumber, 0, len)],
+        );
     }
 }
 
@@ -548,6 +652,7 @@ fn a_number_stops_at_whitespace_and_punctuators() {
             (Integer, "4"),
             (AtSign, "@"),
             (Integer, "5"),
+            (Newline, ""),
         ],
         &[],
     );
@@ -557,7 +662,7 @@ fn a_number_stops_at_whitespace_and_punctuators() {
 fn a_number_stops_before_a_character_outside_ascii() {
     check_lexer(
         "1é",
-        &[(Integer, "1"), (Error, "é")],
+        &[(Integer, "1"), (Error, "é"), (Newline, "")],
         &[error(UnexpectedCharacter, 1, 2)],
     );
 }
@@ -598,7 +703,7 @@ fn a_url_is_one_token() {
         "http://x",
         "https://a.example/b?c=d",
     ] {
-        check_lexer(text, &[(Url, text)], &[]);
+        check_lexer(text, &[(Url, text), (Newline, "")], &[]);
     }
 }
 
@@ -607,24 +712,39 @@ fn a_url_includes_characters_that_begin_other_tokens() {
     // A URL is written bare, so `#`, `"`, `@`, `:`, `,`, and characters outside ASCII are part
     // of it rather than the start of a comment, a string, or an error.
     let text = "https://a.example/#top\"@:,é";
-    check_lexer(text, &[(Url, text)], &[]);
+    check_lexer(text, &[(Url, text), (Newline, "")], &[]);
 }
 
 #[test]
 fn a_url_ends_at_a_space_a_tab_or_a_line_terminator() {
     check_lexer(
         "https://a b",
-        &[(Url, "https://a"), (Whitespace, " "), (Word, "b")],
+        &[
+            (Url, "https://a"),
+            (Whitespace, " "),
+            (Word, "b"),
+            (Newline, ""),
+        ],
         &[],
     );
     check_lexer(
         "https://a\tb",
-        &[(Url, "https://a"), (Error, "\t"), (Word, "b")],
+        &[
+            (Url, "https://a"),
+            (Error, "\t"),
+            (Word, "b"),
+            (Newline, ""),
+        ],
         &[error(IllegalTab, 9, 1)],
     );
     check_lexer(
         "https://a\nb",
-        &[(Url, "https://a"), (Newline, "\n"), (Word, "b")],
+        &[
+            (Url, "https://a"),
+            (Newline, "\n"),
+            (Word, "b"),
+            (Newline, ""),
+        ],
         &[],
     );
 }
@@ -633,7 +753,11 @@ fn a_url_ends_at_a_space_a_tab_or_a_line_terminator() {
 fn a_scheme_with_nothing_after_it_is_a_malformed_url() {
     for scheme in ["https://", "http://"] {
         let len = u32::try_from(scheme.len()).unwrap();
-        check_lexer(scheme, &[(Error, scheme)], &[error(MalformedUrl, 0, len)]);
+        check_lexer(
+            scheme,
+            &[(Error, scheme), (Newline, "")],
+            &[error(MalformedUrl, 0, len)],
+        );
     }
 }
 
@@ -641,7 +765,12 @@ fn a_scheme_with_nothing_after_it_is_a_malformed_url() {
 fn a_malformed_url_ends_before_a_space_or_a_line_terminator() {
     check_lexer(
         "https:// x",
-        &[(Error, "https://"), (Whitespace, " "), (Word, "x")],
+        &[
+            (Error, "https://"),
+            (Whitespace, " "),
+            (Word, "x"),
+            (Newline, ""),
+        ],
         &[error(MalformedUrl, 0, 8)],
     );
     check_lexer(
@@ -661,6 +790,7 @@ fn only_http_and_https_begin_a_url() {
             (Error, "/"),
             (Error, "/"),
             (Word, "x"),
+            (Newline, ""),
         ],
         &[
             error(UnexpectedCharacter, 4, 1),
@@ -679,6 +809,7 @@ fn a_scheme_is_lowercase() {
             (Error, "/"),
             (Error, "/"),
             (Word, "x"),
+            (Newline, ""),
         ],
         &[
             error(UnexpectedCharacter, 6, 1),
@@ -691,7 +822,7 @@ fn a_scheme_is_lowercase() {
 fn a_scheme_needs_both_slashes() {
     check_lexer(
         "https:x",
-        &[(Word, "https"), (Colon, ":"), (Word, "x")],
+        &[(Word, "https"), (Colon, ":"), (Word, "x"), (Newline, "")],
         &[],
     );
 }
@@ -706,6 +837,7 @@ fn a_longer_word_is_not_a_scheme() {
             (Error, "/"),
             (Error, "/"),
             (Word, "y"),
+            (Newline, ""),
         ],
         &[
             error(UnexpectedCharacter, 7, 1),
@@ -718,7 +850,12 @@ fn a_longer_word_is_not_a_scheme() {
 fn the_scheme_words_alone_are_words() {
     check_lexer(
         "https http",
-        &[(Word, "https"), (Whitespace, " "), (Word, "http")],
+        &[
+            (Word, "https"),
+            (Whitespace, " "),
+            (Word, "http"),
+            (Newline, ""),
+        ],
         &[],
     );
 }
@@ -750,6 +887,7 @@ fn words_are_separated_by_whitespace_and_punctuators() {
             (Word, "c"),
             (Colon, ":"),
             (Word, "d"),
+            (Newline, ""),
         ],
         &[],
     );
@@ -769,7 +907,7 @@ fn a_whole_string_is_one_token() {
         r#""a \\ b""#,
         r##""# @ : , é""##,
     ] {
-        check_lexer(text, &[(TokenKind::String, text)], &[]);
+        check_lexer(text, &[(TokenKind::String, text), (Newline, "")], &[]);
     }
 }
 
@@ -781,6 +919,7 @@ fn an_escaped_backslash_before_the_closing_quote_does_not_escape_it() {
             (TokenKind::String, r#""a\\""#),
             (Whitespace, " "),
             (Word, "x"),
+            (Newline, ""),
         ],
         &[],
     );
@@ -792,7 +931,7 @@ fn an_invalid_escape_is_still_a_string() {
     // and the character after it, and the token is still a String.
     check_lexer(
         r#""Measure \#3""#,
-        &[(TokenKind::String, r#""Measure \#3""#)],
+        &[(TokenKind::String, r#""Measure \#3""#), (Newline, "")],
         &[error(InvalidEscape, 9, 2)],
     );
 }
@@ -802,7 +941,7 @@ fn any_character_but_a_quote_or_backslash_makes_an_invalid_escape() {
     // A backslash and "n" is not a line break in Oval, just an invalid escape.
     check_lexer(
         r#""a\nb""#,
-        &[(TokenKind::String, r#""a\nb""#)],
+        &[(TokenKind::String, r#""a\nb""#), (Newline, "")],
         &[error(InvalidEscape, 2, 2)],
     );
 }
@@ -812,7 +951,7 @@ fn an_invalid_escape_spans_a_whole_multibyte_character() {
     // "é" is two bytes, so the escape is three.
     check_lexer(
         r#""\é""#,
-        &[(TokenKind::String, r#""\é""#)],
+        &[(TokenKind::String, r#""\é""#), (Newline, "")],
         &[error(InvalidEscape, 1, 3)],
     );
 }
@@ -821,7 +960,7 @@ fn an_invalid_escape_spans_a_whole_multibyte_character() {
 fn each_invalid_escape_is_reported() {
     check_lexer(
         r#""\a\b""#,
-        &[(TokenKind::String, r#""\a\b""#)],
+        &[(TokenKind::String, r#""\a\b""#), (Newline, "")],
         &[error(InvalidEscape, 1, 2), error(InvalidEscape, 3, 2)],
     );
 }
@@ -834,6 +973,7 @@ fn an_invalid_escape_is_reported_where_it_is() {
             (Word, "x"),
             (Whitespace, " "),
             (TokenKind::String, r#""\#""#),
+            (Newline, ""),
         ],
         &[error(InvalidEscape, 3, 2)],
     );
@@ -852,7 +992,12 @@ fn an_unterminated_string_reports_no_invalid_escapes() {
 fn an_unterminated_string_is_an_error_up_to_the_line_terminator() {
     check_lexer(
         "\"November 3\ndate",
-        &[(Error, "\"November 3"), (Newline, "\n"), (Word, "date")],
+        &[
+            (Error, "\"November 3"),
+            (Newline, "\n"),
+            (Word, "date"),
+            (Newline, ""),
+        ],
         &[error(UnterminatedString, 0, 11)],
     );
 }
@@ -870,7 +1015,7 @@ fn an_unterminated_string_stops_before_a_carriage_return() {
 fn an_unterminated_string_may_end_at_the_end_of_input() {
     check_lexer(
         "\"abc",
-        &[(Error, "\"abc")],
+        &[(Error, "\"abc"), (Newline, "")],
         &[error(UnterminatedString, 0, 4)],
     );
 }
@@ -879,7 +1024,12 @@ fn an_unterminated_string_may_end_at_the_end_of_input() {
 fn an_unterminated_string_is_reported_where_it_starts() {
     check_lexer(
         "a \"b",
-        &[(Word, "a"), (Whitespace, " "), (Error, "\"b")],
+        &[
+            (Word, "a"),
+            (Whitespace, " "),
+            (Error, "\"b"),
+            (Newline, ""),
+        ],
         &[error(UnterminatedString, 2, 2)],
     );
 }
@@ -897,7 +1047,7 @@ fn a_backslash_before_a_line_terminator_is_part_of_an_unterminated_string() {
 fn a_backslash_at_the_end_of_input_is_part_of_an_unterminated_string() {
     check_lexer(
         "\"x\\",
-        &[(Error, "\"x\\")],
+        &[(Error, "\"x\\"), (Newline, "")],
         &[error(UnterminatedString, 0, 3)],
     );
 }
@@ -910,6 +1060,7 @@ fn a_field_with_a_string_value() {
             (Word, "subtitle"),
             (Whitespace, " "),
             (TokenKind::String, r#""Vote for one""#),
+            (Newline, ""),
         ],
         &[],
     );

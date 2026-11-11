@@ -1,4 +1,13 @@
-use crate::{InputRejection, LexResult, LexicalError, LexicalErrorKind, Token, TokenKind};
+use crate::{Token, TokenKind};
+
+mod input_rejection;
+mod layout;
+mod lex_result;
+mod lexical_error;
+
+pub use input_rejection::InputRejection;
+pub use lex_result::LexResult;
+pub use lexical_error::{LexicalError, LexicalErrorKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
@@ -26,6 +35,9 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// line terminator becomes a [`TokenKind::Url`] token, and a single [`TokenKind::Error`] token if
 /// nothing follows. Every other character becomes its own [`TokenKind::Error`] token, which is how
 /// the specification treats a character that cannot begin any token.
+///
+/// Every line with tokens ends in a [`TokenKind::Newline`]. When the last line has no line
+/// terminator, its `Newline` is zero-length.
 ///
 /// Lexing never stops at an error. Each [`TokenKind::Error`] token has a [`LexicalError`] in
 /// [`LexResult::errors`] spanning exactly its bytes, and lexing continues after it.
@@ -115,6 +127,7 @@ impl Lexer<'_> {
                 _ => self.unexpected_character(c, start),
             }
         }
+        self.end_input();
     }
 
     fn byte_order_mark(&mut self, start: usize) {
