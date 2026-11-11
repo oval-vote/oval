@@ -1,5 +1,4 @@
-use std::fmt;
-
+use crate::InputRejection;
 use crate::{Token, TokenKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
@@ -15,16 +14,14 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 ///
 /// # Errors
 ///
-/// Returns an [`InputRejection`] if `text` contains U+0000. The specification rejects such a
-/// document as a whole, so no tokens are produced.
-///
-/// # Panics
-///
-/// Panics if `text` is longer than [`u32::MAX`] bytes.
+/// Returns an [`InputRejection`] if `text` contains U+0000, which the specification rejects as a
+/// whole, or is longer than [`u32::MAX`] bytes. No tokens are produced.
 pub fn lex(text: &str) -> Result<Vec<Token>, InputRejection> {
+    to_offset(text.len())?;
     if let Some(offset) = text.find('\0') {
-        let offset = u32::try_from(offset).expect("a document is at most u32::MAX bytes");
-        return Err(InputRejection::NulCharacter { offset });
+        return Err(InputRejection::NulCharacter {
+            offset: to_offset(offset)?,
+        });
     }
     let mut lexer = Lexer {
         source: text,
@@ -42,50 +39,24 @@ pub fn lex(text: &str) -> Result<Vec<Token>, InputRejection> {
 ///
 /// # Errors
 ///
-/// Returns an [`InputRejection`] if `bytes` is not well-formed UTF-8 or contains U+0000. The
-/// specification rejects such a document as a whole, so no tokens are produced.
-///
-/// # Panics
-///
-/// Panics if `bytes` is longer than [`u32::MAX`] bytes.
+/// Returns an [`InputRejection`] if `bytes` is not well-formed UTF-8 or contains U+0000, which the
+/// specification rejects as a whole, or is longer than [`u32::MAX`] bytes. No tokens are produced.
 pub fn lex_bytes(bytes: &[u8]) -> Result<Vec<Token>, InputRejection> {
-    let text = std::str::from_utf8(bytes).map_err(|error| {
-        let offset =
-            u32::try_from(error.valid_up_to()).expect("a document is at most u32::MAX bytes");
-        InputRejection::InvalidUtf8 { offset }
-    })?;
+    to_offset(bytes.len())?;
+    let text = match std::str::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(error) => {
+            return Err(InputRejection::InvalidUtf8 {
+                offset: to_offset(error.valid_up_to())?,
+            });
+        }
+    };
     lex(text)
 }
 
-/// Why a document was rejected as a whole, before any of it was lexed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum InputRejection {
-    /// The document contains U+0000, which is not permitted anywhere in a document.
-    NulCharacter {
-        /// The byte offset of the first U+0000.
-        offset: u32,
-    },
-    /// The document is not well-formed UTF-8.
-    InvalidUtf8 {
-        /// The byte offset of the first byte that does not begin a valid UTF-8 sequence.
-        offset: u32,
-    },
+fn to_offset(n: usize) -> Result<u32, InputRejection> {
+    u32::try_from(n).map_err(|_| InputRejection::TooLarge)
 }
-
-impl fmt::Display for InputRejection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NulCharacter { offset } => {
-                write!(f, "the document contains U+0000 at byte {offset}")
-            }
-            Self::InvalidUtf8 { offset } => {
-                write!(f, "the document is not valid UTF-8 at byte {offset}")
-            }
-        }
-    }
-}
-
-impl std::error::Error for InputRejection {}
 
 struct Lexer<'a> {
     source: &'a str,
@@ -114,6 +85,7 @@ impl Lexer<'_> {
     }
 
     fn push(&mut self, kind: TokenKind, len: usize) {
+        // Cannot fail: `lex` rejects any text longer than u32::MAX bytes.
         let len = u32::try_from(len).expect("a token is at most u32::MAX bytes");
         self.tokens.push(Token { kind, len });
     }
@@ -151,6 +123,23 @@ mod tests {
         assert_eq!(
             rejection.to_string(),
             "the document contains U+0000 at byte 7"
+        );
+    }
+
+    // Offsets past u32::MAX only exist where usize is wider than 32 bits.
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn offsets_past_u32_max_are_too_large() {
+        let max = usize::try_from(u32::MAX).unwrap();
+        assert_eq!(to_offset(max), Ok(u32::MAX));
+        assert_eq!(to_offset(max + 1), Err(InputRejection::TooLarge));
+    }
+
+    #[test]
+    fn too_large_describes_itself() {
+        assert_eq!(
+            InputRejection::TooLarge.to_string(),
+            "the document is too large"
         );
     }
 
