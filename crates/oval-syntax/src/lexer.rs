@@ -61,6 +61,36 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 ///
 /// Returns an [`InputRejection`] if `text` contains U+0000, which the specification rejects as a
 /// whole, or is longer than [`u32::MAX`] bytes. No tokens are produced.
+///
+/// # Examples
+///
+/// A token has a kind and a length but no text of its own. Its text is the slice of `text` that
+/// begins where the token before it ends.
+///
+/// ```
+/// use oval_syntax::{TokenKind, lex};
+///
+/// let text = "date 2026-11-03\n";
+/// let result = lex(text)?;
+/// let mut start = 0;
+/// let mut tokens = Vec::new();
+/// for token in &result.tokens {
+///     let end = start + token.len as usize;
+///     tokens.push((token.kind, &text[start..end]));
+///     start = end;
+/// }
+/// assert_eq!(
+///     tokens,
+///     [
+///         (TokenKind::Word, "date"),
+///         (TokenKind::Whitespace, " "),
+///         (TokenKind::Date, "2026-11-03"),
+///         (TokenKind::Newline, "\n"),
+///     ]
+/// );
+/// assert!(result.errors.is_empty());
+/// # Ok::<(), oval_syntax::InputRejection>(())
+/// ```
 pub fn lex(text: &str) -> Result<LexResult, InputRejection> {
     to_offset(text.len())?;
     if let Some(offset) = text.find('\0') {
