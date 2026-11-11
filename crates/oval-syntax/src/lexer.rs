@@ -2,11 +2,9 @@ use crate::{Token, TokenKind};
 
 mod input_rejection;
 mod layout;
-mod lex_result;
 mod lexical_error;
 
 pub use input_rejection::InputRejection;
-pub use lex_result::LexResult;
 pub use lexical_error::{LexicalError, LexicalErrorKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
@@ -39,6 +37,12 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// Every line with tokens ends in a [`TokenKind::Newline`]. When the last line has no line
 /// terminator, its `Newline` is zero-length.
 ///
+/// Indentation becomes zero-length layout tokens. A line indented more deeply than the enclosing
+/// block opens a block with a [`TokenKind::Indent`], and a line indented less closes each block it
+/// leaves with a [`TokenKind::Dedent`]. Both sit just before the line's first token, after its
+/// leading [`TokenKind::Whitespace`]. Blocks still open at the end of input are closed there. Lines
+/// that contain only whitespace and comments do not affect indentation.
+///
 /// Lexing never stops at an error. Each [`TokenKind::Error`] token has a [`LexicalError`] in
 /// [`LexResult::errors`] spanning exactly its bytes, and lexing continues after it.
 ///
@@ -59,6 +63,8 @@ pub fn lex(text: &str) -> Result<LexResult, InputRejection> {
         tokens: Vec::new(),
         errors: Vec::new(),
         line_has_tokens: false,
+        line_start: 0,
+        indent_stack: vec![0],
     };
     lexer.run();
     Ok(LexResult {
@@ -89,6 +95,15 @@ pub fn lex_bytes(bytes: &[u8]) -> Result<LexResult, InputRejection> {
     lex(text)
 }
 
+/// The result of a lexing operation
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LexResult {
+    /// The tokens
+    pub tokens: Vec<Token>,
+    /// The lexical errors, if any
+    pub errors: Vec<LexicalError>,
+}
+
 fn to_offset(n: usize) -> Result<u32, InputRejection> {
     u32::try_from(n).map_err(|_| InputRejection::TooLarge)
 }
@@ -105,12 +120,17 @@ struct Lexer<'a> {
     tokens: Vec<Token>,
     errors: Vec<LexicalError>,
     line_has_tokens: bool,
+    line_start: usize,
+    indent_stack: Vec<usize>,
 }
 
 impl Lexer<'_> {
     fn run(&mut self) {
         while let Some(c) = self.peek() {
             let start = self.pos;
+            if !self.line_has_tokens && !self.starts_ignored_token(c) {
+                self.begin_line(start);
+            }
             match c {
                 BYTE_ORDER_MARK if start == 0 => self.byte_order_mark(start),
                 ' ' => self.whitespace(start),
@@ -133,6 +153,8 @@ impl Lexer<'_> {
     fn byte_order_mark(&mut self, start: usize) {
         self.bump(BYTE_ORDER_MARK);
         self.push(TokenKind::ByteOrderMark, start);
+        // The first line's indentation is counted after the byte order mark.
+        self.line_start = self.pos;
     }
 
     fn whitespace(&mut self, start: usize) {
@@ -162,6 +184,7 @@ impl Lexer<'_> {
         };
         self.push(kind, start);
         self.line_has_tokens = false;
+        self.line_start = self.pos;
     }
 
     fn at_sign(&mut self, start: usize) {

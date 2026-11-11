@@ -4,8 +4,8 @@ use LexicalErrorKind::{
     UnterminatedString,
 };
 use TokenKind::{
-    AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Date, Error, Integer, Newline, Url,
-    Whitespace, Word,
+    AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Date, Dedent, Error, Indent, Integer,
+    Newline, Url, Whitespace, Word,
 };
 
 fn check_lexer(text: &str, tokens: &[(TokenKind, &str)], errors: &[LexicalError]) {
@@ -204,14 +204,16 @@ fn whitespace_sits_between_other_tokens() {
 #[test]
 fn a_tab_is_not_whitespace() {
     check_lexer(
-        " \t ",
+        "a \t b",
         &[
+            (Word, "a"),
             (Whitespace, " "),
             (Error, "\t"),
             (Whitespace, " "),
+            (Word, "b"),
             (Newline, ""),
         ],
-        &[error(IllegalTab, 1, 1)],
+        &[error(IllegalTab, 2, 1)],
     );
 }
 
@@ -1087,4 +1089,237 @@ fn token_lengths_cover_the_input() {
             .sum();
         assert_eq!(total, text.len(), "input: {text:?}");
     }
+}
+
+#[test]
+fn an_indented_line_opens_a_block_that_closes_at_the_end_of_input() {
+    check_lexer(
+        "a\n  b\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_line_back_at_an_outer_level_closes_the_block() {
+    check_lexer(
+        "a\n  b\nc\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Dedent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_line_at_the_same_level_adds_no_layout_tokens() {
+    check_lexer(
+        "  a\n  b\n",
+        &[
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn one_line_may_close_several_blocks() {
+    check_lexer(
+        "a\n  b\n    c\nd\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, "    "),
+            (Indent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+            (Dedent, ""),
+            (Dedent, ""),
+            (Word, "d"),
+            (Newline, "\n"),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn the_end_of_input_closes_every_open_block() {
+    check_lexer(
+        "a\n  b\n    c",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, "    "),
+            (Indent, ""),
+            (Word, "c"),
+            (Newline, ""),
+            (Dedent, ""),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn indentation_width_is_free() {
+    check_lexer(
+        "a\n   b\n       c\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "   "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (Whitespace, "       "),
+            (Indent, ""),
+            (Word, "c"),
+            (Newline, "\n"),
+            (Dedent, ""),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn blank_and_comment_lines_do_not_affect_layout() {
+    check_lexer(
+        "a\n  b\n\n# outer\n      # deeper\n  c\n",
+        &[
+            (Word, "a"),
+            (Newline, "\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\n"),
+            (BlankLine, "\n"),
+            (Comment, "# outer"),
+            (BlankLine, "\n"),
+            (Whitespace, "      "),
+            (Comment, "# deeper"),
+            (BlankLine, "\n"),
+            (Whitespace, "  "),
+            (Word, "c"),
+            (Newline, "\n"),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn an_indented_first_line_opens_a_block() {
+    check_lexer(
+        "  a",
+        &[
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "a"),
+            (Newline, ""),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_leading_tab_is_at_indentation_zero() {
+    // A tab ends a line's indentation, so this line is at indentation 0 and opens no block.
+    check_lexer(
+        "\ta",
+        &[(Error, "\t"), (Word, "a"), (Newline, "")],
+        &[error(IllegalTab, 0, 1)],
+    );
+}
+
+#[test]
+fn spaces_before_a_tab_are_indentation() {
+    check_lexer(
+        "  \ta",
+        &[
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Error, "\t"),
+            (Word, "a"),
+            (Newline, ""),
+            (Dedent, ""),
+        ],
+        &[error(IllegalTab, 2, 1)],
+    );
+}
+
+#[test]
+fn indentation_is_counted_after_a_byte_order_mark() {
+    check_lexer(
+        "\u{FEFF}  a",
+        &[
+            (ByteOrderMark, "\u{FEFF}"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "a"),
+            (Newline, ""),
+            (Dedent, ""),
+        ],
+        &[],
+    );
+}
+
+#[test]
+fn a_byte_order_mark_alone_is_not_indentation() {
+    check_lexer(
+        "\u{FEFF}a",
+        &[(ByteOrderMark, "\u{FEFF}"), (Word, "a"), (Newline, "")],
+        &[],
+    );
+}
+
+#[test]
+fn layout_works_with_carriage_returns() {
+    check_lexer(
+        "a\r\n  b\rc",
+        &[
+            (Word, "a"),
+            (Newline, "\r\n"),
+            (Whitespace, "  "),
+            (Indent, ""),
+            (Word, "b"),
+            (Newline, "\r"),
+            (Dedent, ""),
+            (Word, "c"),
+            (Newline, ""),
+        ],
+        &[],
+    );
 }
