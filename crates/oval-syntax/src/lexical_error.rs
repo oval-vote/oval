@@ -14,6 +14,8 @@ pub enum LexicalErrorKind {
     /// A run of letters, digits, `-`, `_`, and `.` that begins with a digit but is neither an
     /// integer nor a date
     MalformedNumber,
+    /// `http://` or `https://` with nothing after it
+    MalformedUrl,
 }
 
 impl LexicalErrorKind {
@@ -25,6 +27,7 @@ impl LexicalErrorKind {
             Self::InvalidEscape => "invalid-escape",
             Self::IllegalTab => "illegal-tab",
             Self::MalformedNumber => "malformed-number",
+            Self::MalformedUrl => "malformed-url",
         }
     }
 }
@@ -68,6 +71,7 @@ mod tests {
             (LexicalErrorKind::InvalidEscape, "invalid-escape"),
             (LexicalErrorKind::IllegalTab, "illegal-tab"),
             (LexicalErrorKind::MalformedNumber, "malformed-number"),
+            (LexicalErrorKind::MalformedUrl, "malformed-url"),
         ] {
             assert_eq!(kind.spec_id(), identifier, "{kind:?}");
         }

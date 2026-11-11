@@ -22,9 +22,10 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// comment becomes a single [`TokenKind::Error`] token. Each run of ASCII letters, digits, `-`, `_`,
 /// and `.` that begins with a digit becomes a [`TokenKind::Integer`] token if it is all digits, a
 /// [`TokenKind::Date`] token if it has the shape `YYYY-MM-DD`, and a single [`TokenKind::Error`]
-/// token otherwise. Every other character becomes its own
-/// [`TokenKind::Error`] token, which is how the specification treats a character that cannot begin
-/// any token.
+/// token otherwise. Each `http://` or `https://` followed by anything up to the next space, tab, or
+/// line terminator becomes a [`TokenKind::Url`] token, and a single [`TokenKind::Error`] token if
+/// nothing follows. Every other character becomes its own [`TokenKind::Error`] token, which is how
+/// the specification treats a character that cannot begin any token.
 ///
 /// Lexing never stops at an error. Each [`TokenKind::Error`] token has a [`LexicalError`] in
 /// [`LexResult::errors`] spanning exactly its bytes, and lexing continues after it.
@@ -96,14 +97,10 @@ struct Lexer<'a> {
 
 impl Lexer<'_> {
     fn run(&mut self) {
-        if self.rest().starts_with(BYTE_ORDER_MARK) {
-            let start = self.pos;
-            self.bump(BYTE_ORDER_MARK);
-            self.push(TokenKind::ByteOrderMark, start);
-        }
         while let Some(c) = self.peek() {
             let start = self.pos;
             match c {
+                BYTE_ORDER_MARK if start == 0 => self.byte_order_mark(start),
                 ' ' => self.whitespace(start),
                 '\t' => self.illegal_tab(start),
                 '#' => self.comment(start),
@@ -112,14 +109,17 @@ impl Lexer<'_> {
                 ':' => self.colon(start),
                 ',' => self.comma(start),
                 '"' => self.string(start),
+                'h' if self.at_url() => self.url(start),
                 c if c.is_ascii_digit() => self.number(start),
                 c if c.is_ascii_alphabetic() => self.word(start),
-                _ => {
-                    self.bump(c);
-                    self.push_error(LexicalErrorKind::UnexpectedCharacter, start);
-                }
+                _ => self.unexpected_character(c, start),
             }
         }
+    }
+
+    fn byte_order_mark(&mut self, start: usize) {
+        self.bump(BYTE_ORDER_MARK);
+        self.push(TokenKind::ByteOrderMark, start);
     }
 
     fn whitespace(&mut self, start: usize) {
@@ -175,7 +175,6 @@ impl Lexer<'_> {
                 Some('\\') => {
                     let escape_start = self.pos;
                     self.bump('\\');
-                    // The escaped character belongs to the string, unless the line ends instead.
                     if let Some(c) = self.peek()
                         && !is_line_terminator(c)
                     {
@@ -190,8 +189,6 @@ impl Lexer<'_> {
             }
         };
         if terminated {
-            // An unterminated string is reported only as unterminated, so its escapes are reported
-            // only once the closing quote is found.
             for (escape_start, escape_end) in invalid_escapes {
                 self.report(LexicalErrorKind::InvalidEscape, escape_start, escape_end);
             }
@@ -216,6 +213,27 @@ impl Lexer<'_> {
     fn word(&mut self, start: usize) {
         self.eat_while(is_word_char);
         self.push(TokenKind::Word, start);
+    }
+
+    fn at_url(&self) -> bool {
+        self.rest().starts_with("http://") || self.rest().starts_with("https://")
+    }
+
+    fn url(&mut self, start: usize) {
+        self.eat_while(|c| c != ':');
+        self.pos += "://".len();
+        let path_start = self.pos;
+        self.eat_while(|c| !matches!(c, ' ' | '\t') && !is_line_terminator(c));
+        if self.pos == path_start {
+            self.push_error(LexicalErrorKind::MalformedUrl, start);
+        } else {
+            self.push(TokenKind::Url, start);
+        }
+    }
+
+    fn unexpected_character(&mut self, c: char, start: usize) {
+        self.bump(c);
+        self.push_error(LexicalErrorKind::UnexpectedCharacter, start);
     }
 
     fn single(&mut self, kind: TokenKind, c: char, start: usize) {
@@ -291,11 +309,12 @@ fn is_date_shaped(text: &str) -> bool {
 mod tests {
     use super::*;
     use LexicalErrorKind::{
-        IllegalTab, InvalidEscape, MalformedNumber, UnexpectedCharacter, UnterminatedString,
+        IllegalTab, InvalidEscape, MalformedNumber, MalformedUrl, UnexpectedCharacter,
+        UnterminatedString,
     };
     use TokenKind::{
         AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Date, Error, Integer, Newline,
-        Whitespace, Word,
+        Url, Whitespace, Word,
     };
 
     fn check_lexer(text: &str, tokens: &[(TokenKind, &str)], errors: &[LexicalError]) {
@@ -875,6 +894,153 @@ mod tests {
                 (Word, "date"),
                 (Whitespace, " "),
                 (Date, "2026-11-03"),
+                (Newline, "\n"),
+            ],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_url_is_one_token() {
+        for text in [
+            "https://santosformayor.example",
+            "http://x",
+            "https://a.example/b?c=d",
+        ] {
+            check_lexer(text, &[(Url, text)], &[]);
+        }
+    }
+
+    #[test]
+    fn a_url_includes_characters_that_begin_other_tokens() {
+        // A URL is written bare, so `#`, `"`, `@`, `:`, `,`, and characters outside ASCII are part
+        // of it rather than the start of a comment, a string, or an error.
+        let text = "https://a.example/#top\"@:,é";
+        check_lexer(text, &[(Url, text)], &[]);
+    }
+
+    #[test]
+    fn a_url_ends_at_a_space_a_tab_or_a_line_terminator() {
+        check_lexer(
+            "https://a b",
+            &[(Url, "https://a"), (Whitespace, " "), (Word, "b")],
+            &[],
+        );
+        check_lexer(
+            "https://a\tb",
+            &[(Url, "https://a"), (Error, "\t"), (Word, "b")],
+            &[error(IllegalTab, 9, 1)],
+        );
+        check_lexer(
+            "https://a\nb",
+            &[(Url, "https://a"), (Newline, "\n"), (Word, "b")],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_scheme_with_nothing_after_it_is_a_malformed_url() {
+        for scheme in ["https://", "http://"] {
+            let len = u32::try_from(scheme.len()).unwrap();
+            check_lexer(scheme, &[(Error, scheme)], &[error(MalformedUrl, 0, len)]);
+        }
+    }
+
+    #[test]
+    fn a_malformed_url_ends_before_a_space_or_a_line_terminator() {
+        check_lexer(
+            "https:// x",
+            &[(Error, "https://"), (Whitespace, " "), (Word, "x")],
+            &[error(MalformedUrl, 0, 8)],
+        );
+        check_lexer(
+            "https://\n",
+            &[(Error, "https://"), (Newline, "\n")],
+            &[error(MalformedUrl, 0, 8)],
+        );
+    }
+
+    #[test]
+    fn only_http_and_https_begin_a_url() {
+        check_lexer(
+            "ftp://x",
+            &[
+                (Word, "ftp"),
+                (Colon, ":"),
+                (Error, "/"),
+                (Error, "/"),
+                (Word, "x"),
+            ],
+            &[
+                error(UnexpectedCharacter, 4, 1),
+                error(UnexpectedCharacter, 5, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_scheme_is_lowercase() {
+        check_lexer(
+            "HTTPS://x",
+            &[
+                (Word, "HTTPS"),
+                (Colon, ":"),
+                (Error, "/"),
+                (Error, "/"),
+                (Word, "x"),
+            ],
+            &[
+                error(UnexpectedCharacter, 6, 1),
+                error(UnexpectedCharacter, 7, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn a_scheme_needs_both_slashes() {
+        check_lexer(
+            "https:x",
+            &[(Word, "https"), (Colon, ":"), (Word, "x")],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_longer_word_is_not_a_scheme() {
+        check_lexer(
+            "httpsx://y",
+            &[
+                (Word, "httpsx"),
+                (Colon, ":"),
+                (Error, "/"),
+                (Error, "/"),
+                (Word, "y"),
+            ],
+            &[
+                error(UnexpectedCharacter, 7, 1),
+                error(UnexpectedCharacter, 8, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn the_scheme_words_alone_are_words() {
+        check_lexer(
+            "https http",
+            &[(Word, "https"), (Whitespace, " "), (Word, "http")],
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_website_field() {
+        // The specification's example for the malformed-url error.
+        check_lexer(
+            "website https://santosformayor.example\n",
+            &[
+                (Word, "website"),
+                (Whitespace, " "),
+                (Url, "https://santosformayor.example"),
                 (Newline, "\n"),
             ],
             &[],

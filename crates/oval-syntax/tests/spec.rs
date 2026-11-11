@@ -10,11 +10,11 @@ const SPEC: &str = include_str!("fixtures/SPEC.md");
 
 // Token kinds the lexer does not produce yet. Examples that use any of them are skipped. Remove a
 // kind from this list in the step that starts lexing it.
-const NOT_YET_LEXED: &[&str] = &["Url", "Indent", "Dedent", "MarkdownBlock"];
+const NOT_YET_LEXED: &[&str] = &["Indent", "Dedent", "MarkdownBlock"];
 
 // Errors the lexer does not report yet. Examples that expect any of them are skipped. Remove an
 // identifier from this list in the step that starts reporting it.
-const NOT_YET_REPORTED: &[&str] = &["malformed-url", "inconsistent-dedent"];
+const NOT_YET_REPORTED: &[&str] = &["inconsistent-dedent"];
 
 struct Block<'a> {
     info: &'a str,
