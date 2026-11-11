@@ -3,7 +3,7 @@ use crate::{LexicalError, Token};
 /// The tokens and lexical errors of a document, as returned by [`lex`](crate::lex) and
 /// [`lex_bytes`](crate::lex_bytes).
 ///
-/// As per the spev, an Oval document with lexical errors still lexes completely, so the tokens always cover the whole
+/// As per the spec, an Oval document with lexical errors still lexes completely, so the tokens always cover the whole
 /// document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexResult {

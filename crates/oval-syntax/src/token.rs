@@ -49,10 +49,11 @@ pub enum TokenKind {
     Word,
     /// Text in double quotes on one line, such as `"Vote for one"`.
     ///
-    /// The token includes the quotes. Inside a string, `\"` is a quote and `\\` is a backslash. Any other escape is an
-    /// [`InvalidEscape`](crate::LexicalErrorKind::InvalidEscape) error, but the string is still a
-    /// `String` token. A string with no closing quote before the end of its line is an
-    /// [`UnterminatedString`](crate::LexicalErrorKind::UnterminatedString) error token instead.
+    /// The token includes the quotes. Inside a string, `\"` is a quote and `\\` is a backslash. Any
+    /// other escape is an [`InvalidEscape`](crate::LexicalErrorKind::InvalidEscape) error, but the
+    /// string is still a `String` token. A string with no closing quote before the end of its line
+    /// is an [`UnterminatedString`](crate::LexicalErrorKind::UnterminatedString) error token
+    /// instead.
     String,
     /// A run of ASCII digits, such as `42`.
     ///
@@ -68,9 +69,9 @@ pub enum TokenKind {
     AtSign,
     /// A URL that begins with `http://` or `https://`, such as `https://example.com`.
     ///
-    /// A URL runs up to the next space, tab, or line terminator. It is written without quotes, so a `#` or `"` inside one is part of it. A scheme with
-    /// nothing after its `://` is a [`MalformedUrl`](crate::LexicalErrorKind::MalformedUrl) error
-    /// token.
+    /// A URL runs up to the next space, tab, or line terminator. It is written without quotes, so a
+    /// `#` or `"` inside one is part of it. A scheme with nothing after its `://` is a
+    /// [`MalformedUrl`](crate::LexicalErrorKind::MalformedUrl) error token.
     Url,
     /// `:`, which opens a Markdown body when it is the last token on its line.
     Colon,
@@ -80,9 +81,9 @@ pub enum TokenKind {
     ///
     /// A body follows a line whose last token, ignoring whitespace and comments, is a
     /// [`Colon`](Self::Colon). Blank lines after that line are [`BlankLine`](Self::BlankLine)
-    /// tokens. If the next line with content is indented more deeply than the opening line, the body
-    /// begins there; otherwise there is no body. The body runs over every following line that is
-    /// blank or indented more deeply than the opening line, and ends with the terminator of its
+    /// tokens. If the next line with content is indented more deeply than the opening line, the
+    /// body begins there; otherwise there is no body. The body runs over every following line that
+    /// is blank or indented more deeply than the opening line, and ends with the terminator of its
     /// last line that is not blank. Blank lines after it are `BlankLine` tokens.
     ///
     /// The token covers the body's raw text, including each line's leading spaces. Nothing inside
@@ -111,8 +112,8 @@ pub enum TokenKind {
     /// The end of a line with tokens.
     ///
     /// It covers the line's terminator, which is a line feed (U+000A), a carriage return (U+000D)
-    /// followed by a line feed, or a carriage return alone. If the last line has tokens but no terminator, its
-    /// `Newline` has no text, so every line with tokens ends in a `Newline`.
+    /// followed by a line feed, or a carriage return alone. If the last line has tokens but no
+    /// terminator, its `Newline` has no text, so every line with tokens ends in a `Newline`.
     Newline,
     /// The start of a block, before the first token of a line indented more deeply than the
     /// enclosing block.
@@ -138,7 +139,8 @@ impl TokenKind {
     /// Returns `true` if the parser ignores this kind of token.
     ///
     /// The ignored kinds are [`Whitespace`](Self::Whitespace), [`Comment`](Self::Comment),
-    /// [`ByteOrderMark`](Self::ByteOrderMark), and [`BlankLine`](Self::BlankLine). Ignored tokens matter only for reproducing a document's text, so a formatter keeps them.
+    /// [`ByteOrderMark`](Self::ByteOrderMark), and [`BlankLine`](Self::BlankLine). Ignored tokens
+    /// matter only for reproducing a document's text, so a formatter keeps them.
     pub fn is_ignored(self) -> bool {
         match self {
             Self::Whitespace | Self::Comment | Self::BlankLine | Self::ByteOrderMark => true,
