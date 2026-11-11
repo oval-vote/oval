@@ -8,12 +8,8 @@ use oval_syntax::{TokenKind, lex};
 
 const SPEC: &str = include_str!("fixtures/SPEC.md");
 
-// Token kinds the lexer does not produce yet. Examples that use any of them are skipped. Remove a
-// kind from this list in the step that starts lexing it.
 const NOT_YET_LEXED: &[&str] = &[];
 
-// Errors the lexer does not report yet. Examples that expect any of them are skipped. Remove an
-// identifier from this list in the step that starts reporting it.
 const NOT_YET_REPORTED: &[&str] = &[];
 
 struct Block<'a> {
@@ -22,7 +18,6 @@ struct Block<'a> {
     line: usize,
 }
 
-// Every fenced code block in `spec`, with its info string and the line its opening fence is on.
 fn blocks(spec: &str) -> Vec<Block<'_>> {
     let mut blocks = Vec::new();
     let mut lines = spec.lines().enumerate();
@@ -47,7 +42,6 @@ fn blocks(spec: &str) -> Vec<Block<'_>> {
     blocks
 }
 
-// Splits a line such as `Word «subtitle»` into its name and its decoded text, if it has any.
 fn parse_line(line: &str) -> (&str, Option<String>) {
     match line.split_once(" «") {
         Some((name, rest)) => {
@@ -58,7 +52,6 @@ fn parse_line(line: &str) -> (&str, Option<String>) {
     }
 }
 
-// Turns the specification's visible symbols back into the characters they stand for.
 fn decode(text: &str) -> String {
     text.replace('␣', " ").replace('⇥', "\t").replace('↵', "\n")
 }

@@ -1,75 +1,144 @@
 /// A token in an Oval document
+///
+/// A token holds no text of its own. Tokens are contiguous, so a token's text is the slice of the
+/// document that begins where previous token ends. [`TokenKind::Indent`] and
+/// [`TokenKind::Dedent`] tokens, and a [`TokenKind::Newline`] at the end of input, have no text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Token {
-    /// The kind of token
+    /// The kind of the token.
     pub kind: TokenKind,
-    /// The length of the token in bytes
+    /// The length of the token's text in bytes.
     pub len: u32,
 }
 
 impl Token {
-    /// Whether the token is ignored.
+    /// Returns `true` if the token is ignored by the parser. See [`TokenKind::is_ignored`].
     pub fn is_ignored(self) -> bool {
         self.kind.is_ignored()
     }
 
-    /// Whether the token is a layout token.
+    /// Returns `true` if the token is a layout token. See [`TokenKind::is_layout`].
     pub fn is_layout(self) -> bool {
         self.kind.is_layout()
     }
 
-    /// Whether the token is a lexical token.
+    /// Returns `true` if the token is a lexical token. See [`TokenKind::is_lexical`].
     pub fn is_lexical(self) -> bool {
         self.kind.is_lexical()
     }
 
-    /// Whether the token is an error token.
+    /// Returns `true` if the token is an error token. See [`TokenKind::is_error`].
     pub fn is_error(self) -> bool {
         self.kind.is_error()
     }
 }
 
-/// The kinds of tokens in an Oval document
+/// The kind of a [`Token`], which says what text it covers.
+///
+/// Every kind is in exactly one of four categories. Lexical tokens carry a document's content,
+/// ignored tokens are skipped by the parser, layout tokens give a document its structure, and error
+/// tokens cover text that cannot be lexed. See [`is_lexical`](Self::is_lexical),
+/// [`is_ignored`](Self::is_ignored), [`is_layout`](Self::is_layout), and
+/// [`is_error`](Self::is_error).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenKind {
-    /// A word token
+    /// A run of ASCII letters, digits, `-`, and `_` that begins with a letter, such as `ballot` or
+    /// `vote-for`.
+    ///
+    /// Keywords are words too. Which words are keywords, and where, is up to the parser.
     Word,
-    /// A string token
+    /// Text in double quotes on one line, such as `"Vote for one"`.
+    ///
+    /// The token includes the quotes. Inside a string, `\"` is a quote and `\\` is a backslash. Any other escape is an
+    /// [`InvalidEscape`](crate::LexicalErrorKind::InvalidEscape) error, but the string is still a
+    /// `String` token. A string with no closing quote before the end of its line is an
+    /// [`UnterminatedString`](crate::LexicalErrorKind::UnterminatedString) error token instead.
     String,
-    /// An integer token
+    /// A run of ASCII digits, such as `42`.
+    ///
+    /// Integers are unsigned, and leading zeros are allowed. A run that begins with a digit but is
+    /// neither an integer nor a date, such as `12abc` or `1.5`, is a
+    /// [`MalformedNumber`](crate::LexicalErrorKind::MalformedNumber) error token.
     Integer,
-    /// A date token
+    /// A date in the shape `YYYY-MM-DD`, such as `2026-11-03`.
+    ///
+    /// Only the shape is checked, so `2026-02-30` is a `Date` too.
     Date,
-    /// An at sign
+    /// `@`, which begins an identifier such as `@dana-lombardi`.
     AtSign,
-    /// A URL
+    /// A URL that begins with `http://` or `https://`, such as `https://example.com`.
+    ///
+    /// A URL runs up to the next space, tab, or line terminator. It is written without quotes, so a `#` or `"` inside one is part of it. A scheme with
+    /// nothing after its `://` is a [`MalformedUrl`](crate::LexicalErrorKind::MalformedUrl) error
+    /// token.
     Url,
-    /// A colon
+    /// `:`, which opens a Markdown body when it is the last token on its line.
     Colon,
-    /// A comma
+    /// `,`, which separates the strings in a list.
     Comma,
-    /// A markdown block
+    /// The body of a Markdown field, such as the text under `note:`.
+    ///
+    /// A body follows a line whose last token, ignoring whitespace and comments, is a
+    /// [`Colon`](Self::Colon). Blank lines after that line are [`BlankLine`](Self::BlankLine)
+    /// tokens. If the next line with content is indented more deeply than the opening line, the body
+    /// begins there; otherwise there is no body. The body runs over every following line that is
+    /// blank or indented more deeply than the opening line, and ends with the terminator of its
+    /// last line that is not blank. Blank lines after it are `BlankLine` tokens.
+    ///
+    /// The token covers the body's raw text, including each line's leading spaces. Nothing inside
+    /// it is lexed, so `#`, `@`, `"`, and tabs there are just text, and it produces no
+    /// [`Newline`](Self::Newline), [`Indent`](Self::Indent), or [`Dedent`](Self::Dedent) tokens.
     MarkdownBlock,
-    /// A white space
+    /// A run of spaces (U+0020).
+    ///
+    /// Tabs are not whitespace. A run of tabs outside a string, a comment, or a Markdown body is an
+    /// [`IllegalTab`](crate::LexicalErrorKind::IllegalTab) error token.
     Whitespace,
-    /// A comment
+    /// A `#` and everything after it up to the end of its line.
+    ///
+    /// A `#` inside a string, a URL, or a Markdown body does not begin a comment.
     Comment,
-    /// A byte order mark (U+FEFF) at the very start of a document, which is ignored.
+    /// A byte order mark (U+FEFF) at the very start of a document.
+    ///
+    /// The first line's indentation is counted after it. U+FEFF anywhere else is an
+    /// [`UnexpectedCharacter`](crate::LexicalErrorKind::UnexpectedCharacter) error token.
     ByteOrderMark,
-    /// A blank line
+    /// The line terminator of a blank line, which has nothing on it but whitespace, a comment, or a
+    /// byte order mark.
+    ///
+    /// Blank lines do not end a line for the parser, and they do not affect indentation.
     BlankLine,
-    /// A new line
+    /// The end of a line with tokens.
+    ///
+    /// It covers the line's terminator, which is a line feed (U+000A), a carriage return (U+000D)
+    /// followed by a line feed, or a carriage return alone. If the last line has tokens but no terminator, its
+    /// `Newline` has no text, so every line with tokens ends in a `Newline`.
     Newline,
-    /// An indent
+    /// The start of a block, before the first token of a line indented more deeply than the
+    /// enclosing block.
+    ///
+    /// A line's indentation is the number of spaces before its first other character, and any
+    /// increase opens a block. An `Indent` has no text, and comes after the line's leading
+    /// [`Whitespace`](Self::Whitespace).
     Indent,
-    /// A dedent
+    /// The end of a block, for each block a line leaves by being indented less deeply.
+    ///
+    /// A `Dedent` has no text, and comes after the line's leading [`Whitespace`](Self::Whitespace).
+    /// Every block still open at the end of input is closed there. A line indented between two
+    /// enclosing levels is an [`InconsistentDedent`](crate::LexicalErrorKind::InconsistentDedent)
+    /// error.
     Dedent,
-    /// An error
+    /// Text that cannot be lexed.
+    ///
+    /// Each `Error` token has a [`LexicalError`](crate::LexicalError) that spans it exactly.
     Error,
 }
 
 impl TokenKind {
-    /// Whether the token is ignored.
+    /// Returns `true` if the parser ignores this kind of token.
+    ///
+    /// The ignored kinds are [`Whitespace`](Self::Whitespace), [`Comment`](Self::Comment),
+    /// [`ByteOrderMark`](Self::ByteOrderMark), and [`BlankLine`](Self::BlankLine). Ignored tokens matter only for reproducing a document's text, so a formatter keeps them.
     pub fn is_ignored(self) -> bool {
         match self {
             Self::Whitespace | Self::Comment | Self::BlankLine | Self::ByteOrderMark => true,
@@ -89,7 +158,10 @@ impl TokenKind {
         }
     }
 
-    /// Whether the token is a layout token.
+    /// Returns `true` if this kind of token gives a document its structure.
+    ///
+    /// The layout kinds are [`Newline`](Self::Newline), [`Indent`](Self::Indent), and
+    /// [`Dedent`](Self::Dedent).
     pub fn is_layout(self) -> bool {
         match self {
             Self::Newline | Self::Indent | Self::Dedent => true,
@@ -110,7 +182,9 @@ impl TokenKind {
         }
     }
 
-    /// Whether the token is a lexical token.
+    /// Returns `true` if this kind of token carries a document's content.
+    ///
+    /// Every kind but the ignored, layout, and error kinds is lexical.
     pub fn is_lexical(self) -> bool {
         match self {
             Self::Word
@@ -133,7 +207,7 @@ impl TokenKind {
         }
     }
 
-    /// Whether the token is an error token.
+    /// Returns `true` if this is [`Error`](Self::Error).
     pub fn is_error(self) -> bool {
         self == Self::Error
     }

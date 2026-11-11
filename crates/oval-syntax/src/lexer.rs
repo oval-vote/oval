@@ -12,50 +12,15 @@ pub use lexical_error::{LexicalError, LexicalErrorKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
-/// Splits `text` into tokens.
+/// Splits an Oval document into tokens.
 ///
-/// Every byte of `text` belongs to exactly one token, so the lengths of the returned tokens always
-/// add up to `text.len()`.
+/// Every byte of `text` belongs to exactly one token, so the tokens reproduce `text` exactly and
+/// their lengths add up to `text.len()`. See [`TokenKind`] for the text each kind of token covers.
 ///
-/// So far, only a few tokens are recognized. A byte order mark (U+FEFF) at the very start of `text`
-/// becomes a [`TokenKind::ByteOrderMark`] token, each run of spaces becomes a
-/// [`TokenKind::Whitespace`] token, and each `#` up to the end of its line becomes a
-/// [`TokenKind::Comment`] token. Each line terminator, which is a line feed (U+000A), a carriage
-/// return (U+000D) followed by a line feed, or a carriage return alone, becomes one
-/// [`TokenKind::Newline`] token when its line has other tokens, and one [`TokenKind::BlankLine`]
-/// token when the line contains only whitespace, a comment, or a byte order mark. Each `@`, `:`,
-/// and `,` becomes a [`TokenKind::AtSign`], [`TokenKind::Colon`], or [`TokenKind::Comma`] token, and
-/// each ASCII letter followed by any ASCII letters, digits, `-`, and `_` becomes a
-/// [`TokenKind::Word`] token. Each `"` up to its closing `"` becomes a [`TokenKind::String`]
-/// token, where `\"` and `\\` do not close it; a string with no closing `"` before the end of its
-/// line becomes a single [`TokenKind::Error`] token instead. Each run of tabs outside a string or a
-/// comment becomes a single [`TokenKind::Error`] token. Each run of ASCII letters, digits, `-`, `_`,
-/// and `.` that begins with a digit becomes a [`TokenKind::Integer`] token if it is all digits, a
-/// [`TokenKind::Date`] token if it has the shape `YYYY-MM-DD`, and a single [`TokenKind::Error`]
-/// token otherwise. Each `http://` or `https://` followed by anything up to the next space, tab, or
-/// line terminator becomes a [`TokenKind::Url`] token, and a single [`TokenKind::Error`] token if
-/// nothing follows. Every other character becomes its own [`TokenKind::Error`] token, which is how
-/// the specification treats a character that cannot begin any token.
-///
-/// A line whose last token, ignoring whitespace and comments, is a `:` opens a Markdown body. If
-/// the next line that is not blank is indented more deeply than that line, it and the lines after
-/// it that are blank or also indented more deeply become a single [`TokenKind::MarkdownBlock`]
-/// token, which covers their raw text through the terminator of the last line that is not blank.
-/// Blank lines before and after a body are [`TokenKind::BlankLine`] tokens. Nothing inside a body
-/// is lexed, so a `#` there is not a comment and a tab is not an error.
-///
-/// Every line with tokens, other than the lines of a Markdown body, ends in a
-/// [`TokenKind::Newline`]. When the last line has no line terminator, its `Newline` is zero-length.
-///
-/// Indentation becomes zero-length layout tokens. A line indented more deeply than the enclosing
-/// block opens a block with a [`TokenKind::Indent`], and a line indented less closes each block it
-/// leaves with a [`TokenKind::Dedent`]. Both sit just before the line's first token, after its
-/// leading [`TokenKind::Whitespace`]. Blocks still open at the end of input are closed there. Lines
-/// that contain only whitespace and comments, and the lines of a Markdown body, do not affect
-/// indentation.
-///
-/// Lexing never stops at an error. Each [`TokenKind::Error`] token has a [`LexicalError`] in
-/// [`LexResult::errors`] spanning exactly its bytes, and lexing continues after it.
+/// Lexing never stops at an error. Text that cannot be lexed becomes a [`TokenKind::Error`] token,
+/// with a [`LexicalError`] in [`LexResult::errors`] that spans it, and lexing continues after it as
+/// the specification prescribes. A few flaws, such as an invalid escape in a string, are reported
+/// without changing the token they are in.
 ///
 /// # Errors
 ///
@@ -117,15 +82,27 @@ pub fn lex(text: &str) -> Result<LexResult, InputRejection> {
     })
 }
 
-/// Splits a document given as raw bytes into tokens.
+/// Splits an Oval document given as raw bytes into tokens.
 ///
 /// The bytes are decoded as UTF-8 and then lexed by [`lex`]. Use this where a document arrives as
 /// bytes, such as when reading a file, so that malformed UTF-8 is rejected rather than repaired.
 ///
 /// # Errors
 ///
-/// Returns an [`InputRejection`] if `bytes` is not well-formed UTF-8 or contains U+0000, which the
-/// specification rejects as a whole, or is longer than [`u32::MAX`] bytes. No tokens are produced.
+/// Returns an [`InputRejection`] if `bytes` is not well-formed UTF-8, contains U+0000, or is longer
+/// than [`u32::MAX`] bytes. No tokens are produced.
+///
+/// # Examples
+///
+/// ```
+/// use oval_syntax::{InputRejection, lex_bytes};
+///
+/// assert!(lex_bytes(b"date 2026-11-03\n").is_ok());
+/// assert_eq!(
+///     lex_bytes(b"note \xFF"),
+///     Err(InputRejection::InvalidUtf8 { offset: 5 })
+/// );
+/// ```
 pub fn lex_bytes(bytes: &[u8]) -> Result<LexResult, InputRejection> {
     to_offset(bytes.len())?;
     let text = match std::str::from_utf8(bytes) {

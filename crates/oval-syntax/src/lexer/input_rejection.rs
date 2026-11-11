@@ -1,16 +1,24 @@
 use std::fmt;
 
 /// Why a document was rejected as a whole, before any of it was lexed.
+///
+/// [`lex`](crate::lex) and [`lex_bytes`](crate::lex_bytes) return a rejection, and no tokens, for
+/// input that cannot be an Oval document at all. Any other document lexes completely, with its
+/// flaws reported as [`LexicalError`](crate::LexicalError)s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InputRejection {
-    /// The document is longer than [`u32::MAX`] bytes, the largest this implementation accepts.
+    /// The document is longer than [`u32::MAX`] bytes.
+    ///
+    /// Offsets and lengths are `u32`, so this is the largest document that can be lexed.
     TooLarge,
-    /// The document contains U+0000, which is not permitted anywhere in a document.
+    /// The document contains U+0000, which the specification does not allow anywhere in a document.
     NulCharacter {
         /// The byte offset of the first U+0000.
         offset: u32,
     },
     /// The document is not well-formed UTF-8.
+    ///
+    /// Only [`lex_bytes`](crate::lex_bytes) returns this, since a `&str` is always valid UTF-8.
     InvalidUtf8 {
         /// The byte offset of the first byte that does not begin a valid UTF-8 sequence.
         offset: u32,
