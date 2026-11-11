@@ -1,36 +1,6 @@
-use crate::InputRejection;
-use crate::{Token, TokenKind};
+use crate::{InputRejection, LexResult, LexicalError, LexicalErrorKind, Token, TokenKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
-
-/// The kinds of lexical errors
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LexicalErrorKind {
-    /// An unexpected character
-    UnexpectedCharacter,
-    /// A string with no closing quote before the end of its line
-    UnterminatedString,
-}
-
-/// A lexical error
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LexicalError {
-    /// The kind of error
-    pub kind: LexicalErrorKind,
-    /// The offset, in bytes, in the document where the error occurred
-    pub offset: u32,
-    /// How many bytes the error spans
-    pub len: u32,
-}
-
-/// The result of a lexing operation
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LexResult {
-    /// The tokens
-    pub tokens: Vec<Token>,
-    /// The lexical errors, if any
-    pub errors: Vec<LexicalError>,
-}
 
 /// Splits `text` into tokens.
 ///
@@ -184,6 +154,7 @@ impl Lexer<'_> {
 
     fn string(&mut self, start: usize) {
         self.bump('"');
+        let mut invalid_escapes = Vec::new();
         let terminated = loop {
             match self.peek() {
                 Some('"') => {
@@ -191,12 +162,16 @@ impl Lexer<'_> {
                     break true;
                 }
                 Some('\\') => {
+                    let escape_start = self.pos;
                     self.bump('\\');
                     // The escaped character belongs to the string, unless the line ends instead.
                     if let Some(c) = self.peek()
                         && !is_line_terminator(c)
                     {
                         self.bump(c);
+                        if !matches!(c, '"' | '\\') {
+                            invalid_escapes.push((escape_start, self.pos));
+                        }
                     }
                 }
                 Some(c) if !is_line_terminator(c) => self.bump(c),
@@ -204,6 +179,11 @@ impl Lexer<'_> {
             }
         };
         if terminated {
+            // An unterminated string is reported only as unterminated, so its escapes are reported
+            // only once the closing quote is found.
+            for (escape_start, escape_end) in invalid_escapes {
+                self.report(LexicalErrorKind::InvalidEscape, escape_start, escape_end);
+            }
             self.push(TokenKind::String, start);
         } else {
             self.push_error(LexicalErrorKind::UnterminatedString, start);
@@ -275,7 +255,7 @@ fn is_word_char(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use LexicalErrorKind::{UnexpectedCharacter, UnterminatedString};
+    use LexicalErrorKind::{InvalidEscape, UnexpectedCharacter, UnterminatedString};
     use TokenKind::{
         AtSign, BlankLine, ByteOrderMark, Colon, Comma, Comment, Error, Newline, Whitespace, Word,
     };
@@ -316,29 +296,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn rejection_describes_itself() {
-        let rejection = InputRejection::NulCharacter { offset: 7 };
-        assert_eq!(
-            rejection.to_string(),
-            "the document contains U+0000 at byte 7"
-        );
-    }
-
     #[cfg(target_pointer_width = "64")]
     #[test]
     fn offsets_past_u32_max_are_too_large() {
         let max = usize::try_from(u32::MAX).unwrap();
         assert_eq!(to_offset(max), Ok(u32::MAX));
         assert_eq!(to_offset(max + 1), Err(InputRejection::TooLarge));
-    }
-
-    #[test]
-    fn too_large_describes_itself() {
-        assert_eq!(
-            InputRejection::TooLarge.to_string(),
-            "the document is too large"
-        );
     }
 
     #[test]
@@ -383,15 +346,6 @@ mod tests {
         assert_eq!(
             lex_bytes(b"\0\xff"),
             Err(InputRejection::InvalidUtf8 { offset: 1 })
-        );
-    }
-
-    #[test]
-    fn invalid_utf8_describes_itself() {
-        let rejection = InputRejection::InvalidUtf8 { offset: 3 };
-        assert_eq!(
-            rejection.to_string(),
-            "the document is not valid UTF-8 at byte 3"
         );
     }
 
@@ -787,10 +741,63 @@ mod tests {
 
     #[test]
     fn an_invalid_escape_is_still_a_string() {
+        // The specification's example for the invalid-escape error: the error spans the backslash
+        // and the character after it, and the token is still a String.
         check_lexer(
             r#""Measure \#3""#,
             &[(TokenKind::String, r#""Measure \#3""#)],
-            &[],
+            &[error(InvalidEscape, 9, 2)],
+        );
+    }
+
+    #[test]
+    fn any_character_but_a_quote_or_backslash_makes_an_invalid_escape() {
+        // A backslash and "n" is not a line break in Oval, just an invalid escape.
+        check_lexer(
+            r#""a\nb""#,
+            &[(TokenKind::String, r#""a\nb""#)],
+            &[error(InvalidEscape, 2, 2)],
+        );
+    }
+
+    #[test]
+    fn an_invalid_escape_spans_a_whole_multibyte_character() {
+        // "é" is two bytes, so the escape is three.
+        check_lexer(
+            r#""\é""#,
+            &[(TokenKind::String, r#""\é""#)],
+            &[error(InvalidEscape, 1, 3)],
+        );
+    }
+
+    #[test]
+    fn each_invalid_escape_is_reported() {
+        check_lexer(
+            r#""\a\b""#,
+            &[(TokenKind::String, r#""\a\b""#)],
+            &[error(InvalidEscape, 1, 2), error(InvalidEscape, 3, 2)],
+        );
+    }
+
+    #[test]
+    fn an_invalid_escape_is_reported_where_it_is() {
+        check_lexer(
+            r#"x "\#""#,
+            &[
+                (Word, "x"),
+                (Whitespace, " "),
+                (TokenKind::String, r#""\#""#),
+            ],
+            &[error(InvalidEscape, 3, 2)],
+        );
+    }
+
+    #[test]
+    fn an_unterminated_string_reports_no_invalid_escapes() {
+        check_lexer(
+            "\"\\#\n",
+            &[(Error, "\"\\#"), (Newline, "\n")],
+            &[error(UnterminatedString, 0, 3)],
         );
     }
 

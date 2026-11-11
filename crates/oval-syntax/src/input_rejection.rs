@@ -34,3 +34,42 @@ impl fmt::Display for InputRejection {
 }
 
 impl std::error::Error for InputRejection {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nul_character_describes_itself() {
+        let rejection = InputRejection::NulCharacter { offset: 7 };
+        assert_eq!(
+            rejection.to_string(),
+            "the document contains U+0000 at byte 7"
+        );
+    }
+
+    #[test]
+    fn too_large_describes_itself() {
+        assert_eq!(
+            InputRejection::TooLarge.to_string(),
+            "the document is too large"
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_describes_itself() {
+        let rejection = InputRejection::InvalidUtf8 { offset: 3 };
+        assert_eq!(
+            rejection.to_string(),
+            "the document is not valid UTF-8 at byte 3"
+        );
+    }
+
+    #[test]
+    fn a_rejection_is_a_standard_error() {
+        // Compiles only if `InputRejection` implements `std::error::Error`, so callers can use `?`
+        // with other error types and box it.
+        let error: Box<dyn std::error::Error> = Box::new(InputRejection::TooLarge);
+        assert_eq!(error.to_string(), "the document is too large");
+    }
+}
