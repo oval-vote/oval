@@ -1,7 +1,7 @@
-use super::{Lexer, is_line_terminator};
+use super::{Cursor, is_line_terminator};
 use crate::TokenKind;
 
-impl Lexer<'_> {
+impl Cursor<'_> {
     pub(super) fn markdown_block(&mut self, start: usize) -> bool {
         let Some(opener) = self.body_opener else {
             return false;

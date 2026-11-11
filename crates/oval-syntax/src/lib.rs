@@ -53,7 +53,9 @@
 //! than [`u32::MAX`] bytes is rejected, so every offset in an accepted document fits.
 
 mod lexer;
+mod syntax;
 mod token;
 
 pub use lexer::{InputRejection, LexResult, LexicalError, LexicalErrorKind, lex, lex_bytes};
+pub use syntax::SyntaxKind;
 pub use token::{Token, TokenKind};

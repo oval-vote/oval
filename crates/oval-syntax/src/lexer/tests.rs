@@ -1,4 +1,6 @@
 use super::*;
+use crate::TokenKind;
+
 use LexicalErrorKind::{
     IllegalTab, InconsistentDedent, InvalidEscape, MalformedNumber, MalformedUrl,
     UnexpectedCharacter, UnterminatedString,
