@@ -13,6 +13,7 @@ impl Lexer<'_> {
     pub(super) fn begin_line(&mut self, start: usize) {
         // Only spaces can come before a line's first token, since anything else would be that token.
         let indentation = start - self.line_start;
+        self.line_indentation = indentation;
         if indentation > self.current_indentation() {
             self.indent_stack.push(indentation);
             self.push(TokenKind::Indent, start);

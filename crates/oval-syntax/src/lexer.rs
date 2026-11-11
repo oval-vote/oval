@@ -2,6 +2,7 @@ mod input_rejection;
 mod layout;
 mod lex_result;
 mod lexical_error;
+mod markdown;
 
 use crate::{Token, TokenKind};
 
@@ -36,14 +37,21 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// nothing follows. Every other character becomes its own [`TokenKind::Error`] token, which is how
 /// the specification treats a character that cannot begin any token.
 ///
-/// Every line with tokens ends in a [`TokenKind::Newline`]. When the last line has no line
-/// terminator, its `Newline` is zero-length.
+/// A line whose last token, ignoring whitespace and comments, is a `:` opens a Markdown body. If
+/// the next line that is not blank is indented more deeply than that line, it and the lines after
+/// it that are also indented more deeply become a single [`TokenKind::MarkdownBlock`] token, which
+/// covers their raw text through the last line's terminator. Nothing inside a body is lexed, so a
+/// `#` there is not a comment and a tab is not an error. A blank line ends the body.
+///
+/// Every line with tokens, other than the lines of a Markdown body, ends in a
+/// [`TokenKind::Newline`]. When the last line has no line terminator, its `Newline` is zero-length.
 ///
 /// Indentation becomes zero-length layout tokens. A line indented more deeply than the enclosing
 /// block opens a block with a [`TokenKind::Indent`], and a line indented less closes each block it
 /// leaves with a [`TokenKind::Dedent`]. Both sit just before the line's first token, after its
 /// leading [`TokenKind::Whitespace`]. Blocks still open at the end of input are closed there. Lines
-/// that contain only whitespace and comments do not affect indentation.
+/// that contain only whitespace and comments, and the lines of a Markdown body, do not affect
+/// indentation.
 ///
 /// Lexing never stops at an error. Each [`TokenKind::Error`] token has a [`LexicalError`] in
 /// [`LexResult::errors`] spanning exactly its bytes, and lexing continues after it.
@@ -67,6 +75,9 @@ pub fn lex(text: &str) -> Result<LexResult, InputRejection> {
         line_has_tokens: false,
         line_start: 0,
         indent_stack: vec![0],
+        line_ends_with_colon: false,
+        line_indentation: 0,
+        body_opener: None,
     };
     lexer.run();
     Ok(LexResult {
@@ -101,8 +112,6 @@ fn to_offset(n: usize) -> Result<u32, InputRejection> {
     u32::try_from(n).map_err(|_| InputRejection::TooLarge)
 }
 
-// Cannot fail: `lex` rejects any text longer than u32::MAX bytes, so every position and length
-// within it fits.
 fn to_u32(n: usize) -> u32 {
     u32::try_from(n).expect("lex rejects text longer than u32::MAX bytes")
 }
@@ -115,12 +124,18 @@ struct Lexer<'a> {
     line_has_tokens: bool,
     line_start: usize,
     indent_stack: Vec<usize>,
+    line_ends_with_colon: bool,
+    line_indentation: usize,
+    body_opener: Option<usize>,
 }
 
 impl Lexer<'_> {
     fn run(&mut self) {
         while let Some(c) = self.peek() {
             let start = self.pos;
+            if start == self.line_start && self.markdown_block(start) {
+                continue;
+            }
             if !self.line_has_tokens && !self.starts_ignored_token(c) {
                 self.begin_line(start);
             }
@@ -171,6 +186,7 @@ impl Lexer<'_> {
             self.bump('\n');
         }
         let kind = if self.line_has_tokens {
+            self.body_opener = self.line_ends_with_colon.then_some(self.line_indentation);
             TokenKind::Newline
         } else {
             TokenKind::BlankLine
@@ -294,6 +310,7 @@ impl Lexer<'_> {
     fn push(&mut self, kind: TokenKind, start: usize) {
         if !kind.is_ignored() {
             self.line_has_tokens = true;
+            self.line_ends_with_colon = kind == TokenKind::Colon;
         }
         let len = to_u32(self.pos - start);
         self.tokens.push(Token { kind, len });
