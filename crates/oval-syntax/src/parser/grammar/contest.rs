@@ -27,16 +27,49 @@ impl Parser<'_> {
     }
 
     fn contest_kind(&mut self) {
-        if matches!(
-            self.current_keyword(),
-            Some(Keyword::Single | Keyword::Multiple | Keyword::Ranked | Keyword::Retention)
-        ) {
-            self.start_node(SyntaxKind::ContestKind);
-            self.bump();
-            self.finish_node();
-        } else {
+        let Some(kind) = self.current_keyword().filter(|keyword| {
+            matches!(
+                keyword,
+                Keyword::Single | Keyword::Multiple | Keyword::Ranked | Keyword::Retention
+            )
+        }) else {
             self.recover_missing(SyntaxErrorKind::MissingContestKind, CONTEST_KINDS.to_vec());
+            return;
+        };
+        self.start_node(SyntaxKind::ContestKind);
+        self.bump();
+        if kind == Keyword::Multiple {
+            self.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
         }
+        let accepts = contest_modifiers(kind);
+        while let Some(modifier) = self
+            .current_keyword()
+            .filter(|keyword| accepts.contains(keyword))
+        {
+            self.contest_modifier(modifier);
+        }
+        self.finish_node();
+        if !self.at_line_end() {
+            let mut expected: Vec<_> = accepts.iter().copied().map(Expected::Keyword).collect();
+            expected.push(Expected::Token(TokenKind::Newline));
+            self.skip_line(expected);
+        }
+    }
+
+    fn contest_modifier(&mut self, modifier: Keyword) {
+        let node = match modifier {
+            Keyword::Seats => SyntaxKind::Seats,
+            Keyword::Min => SyntaxKind::Minimum,
+            Keyword::Max => SyntaxKind::RankedMax,
+            _ => {
+                self.bump();
+                return;
+            }
+        };
+        self.start_node(node);
+        self.bump();
+        self.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
+        self.finish_node();
     }
 
     fn contest_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
@@ -54,6 +87,15 @@ impl Parser<'_> {
             _ => return false,
         }
         true
+    }
+}
+
+fn contest_modifiers(kind: Keyword) -> &'static [Keyword] {
+    match kind {
+        Keyword::Single => &[Keyword::Seats],
+        Keyword::Multiple => &[Keyword::Seats, Keyword::Min],
+        Keyword::Ranked => &[Keyword::Seats, Keyword::Max, Keyword::Min, Keyword::All],
+        _ => &[],
     }
 }
 
@@ -283,6 +325,243 @@ mod tests {
         check_errors(
             "ballot @a \"A\"\n  required section \"S\"\n    exhaustive contest @m \"M\" single\n      subtitle \"T\"\n",
             &[],
+        );
+    }
+
+    fn header(kind: &str) -> String {
+        format!("ballot @a \"A\"\n  contest @m \"M\" {kind}\n    subtitle \"S\"\n")
+    }
+
+    fn modifier_nodes(text: &str) -> Vec<SyntaxKind> {
+        let tree = parse(text).unwrap().syntax();
+        let kind = tree
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::ContestKind)
+            .expect("the contest has a kind");
+        kind.children().map(|node| node.kind()).collect()
+    }
+
+    fn unexpected_token(offset: u32, len: u32, expected: Vec<Expected>) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedToken,
+            offset,
+            len,
+            expected,
+        }
+    }
+
+    fn missing_value(offset: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::MissingValue,
+            offset,
+            len: 0,
+            expected: vec![Expected::Token(TokenKind::Integer)],
+        }
+    }
+
+    #[test]
+    fn modifiers_are_nodes_inside_the_contest_kind() {
+        let text = header("multiple 5 seats 7 min 2");
+        check_errors(&text, &[]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..73
+              Ballot@0..73
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..73
+                  Indent@16..16 ""
+                  Contest@16..73
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..55
+                      Word@31..39 "multiple"
+                      Whitespace@39..40 " "
+                      Integer@40..41 "5"
+                      Whitespace@41..42 " "
+                      Seats@42..49
+                        Word@42..47 "seats"
+                        Whitespace@47..48 " "
+                        Integer@48..49 "7"
+                      Whitespace@49..50 " "
+                      Minimum@50..55
+                        Word@50..53 "min"
+                        Whitespace@53..54 " "
+                        Integer@54..55 "2"
+                    Newline@55..56 "\n"
+                    Whitespace@56..60 "    "
+                    Block@60..73
+                      Indent@60..60 ""
+                      StringField@60..73
+                        Word@60..68 "subtitle"
+                        Whitespace@68..69 " "
+                        String@69..72 "\"S\""
+                        Newline@72..73 "\n"
+                      Dedent@73..73 ""
+                  Dedent@73..73 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn each_kind_takes_its_modifiers() {
+        for (kind, nodes) in [
+            ("single seats 2", &[SyntaxKind::Seats][..]),
+            ("multiple 5 seats 7", &[SyntaxKind::Seats]),
+            (
+                "multiple 3 seats 4 min 2",
+                &[SyntaxKind::Seats, SyntaxKind::Minimum],
+            ),
+            (
+                "ranked seats 3 max 6",
+                &[SyntaxKind::Seats, SyntaxKind::RankedMax],
+            ),
+            (
+                "ranked max 5 min 2",
+                &[SyntaxKind::RankedMax, SyntaxKind::Minimum],
+            ),
+            ("retention", &[]),
+        ] {
+            let text = header(kind);
+            check_errors(&text, &[]);
+            assert_eq!(modifier_nodes(&text), nodes, "{kind}");
+        }
+    }
+
+    #[test]
+    fn modifiers_are_in_any_order() {
+        let text = header("multiple 3 min 2 seats 4");
+        check_errors(&text, &[]);
+        assert_eq!(
+            modifier_nodes(&text),
+            [SyntaxKind::Minimum, SyntaxKind::Seats]
+        );
+    }
+
+    #[test]
+    fn all_is_a_word_in_the_contest_kind() {
+        let text = header("ranked all");
+        check_errors(&text, &[]);
+        assert_eq!(modifier_nodes(&text), []);
+        let tree = parse(&text).unwrap().syntax();
+        let kind = tree
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::ContestKind)
+            .expect("the contest has a kind");
+        assert_eq!(kind.text().to_string(), "ranked all");
+    }
+
+    #[test]
+    fn multiple_without_a_number_is_missing_its_value() {
+        check_errors(&header("multiple"), &[missing_value(39)]);
+    }
+
+    #[test]
+    fn a_modifier_without_a_number_is_kept_and_missing_its_value() {
+        let text = header("single seats");
+        check_errors(&text, &[missing_value(43)]);
+        assert_eq!(modifier_nodes(&text), [SyntaxKind::Seats]);
+    }
+
+    #[test]
+    fn a_modifier_the_kind_does_not_accept_is_an_unexpected_token() {
+        let text = header("single max 5");
+        check_errors(
+            &text,
+            &[unexpected_token(
+                38,
+                5,
+                vec![
+                    Expected::Keyword(Keyword::Seats),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+        assert_eq!(
+            contest_child_nodes(&text),
+            [
+                SyntaxKind::Identifier,
+                SyntaxKind::ContestKind,
+                SyntaxKind::ErrorNode,
+                SyntaxKind::Block
+            ]
+        );
+        check_errors(
+            &header("multiple 3 all"),
+            &[unexpected_token(
+                42,
+                3,
+                vec![
+                    Expected::Keyword(Keyword::Seats),
+                    Expected::Keyword(Keyword::Min),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+    }
+
+    #[test]
+    fn retention_takes_no_modifiers() {
+        check_errors(
+            &header("retention seats 1"),
+            &[unexpected_token(
+                41,
+                7,
+                vec![Expected::Token(TokenKind::Newline)],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_second_number_is_an_unexpected_token() {
+        check_errors(
+            &header("single seats 2 3"),
+            &[unexpected_token(
+                46,
+                1,
+                vec![
+                    Expected::Keyword(Keyword::Seats),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_modifier_in_place_of_the_number_of_votes_is_an_unexpected_token() {
+        check_errors(
+            &header("multiple seats 7"),
+            &[unexpected_token(
+                40,
+                7,
+                vec![Expected::Token(TokenKind::Integer)],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_modifier_with_a_string_is_an_unexpected_token() {
+        check_errors(
+            &header("single seats \"3\""),
+            &[unexpected_token(
+                44,
+                3,
+                vec![Expected::Token(TokenKind::Integer)],
+            )],
         );
     }
 }

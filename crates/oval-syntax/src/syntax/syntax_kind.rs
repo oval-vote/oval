@@ -82,8 +82,19 @@ pub enum SyntaxKind {
     Section,
     /// A contest, such as `contest @mayor "Mayor" single` and the block below it.
     Contest,
-    /// A contest's kind, such as `single` or `ranked`, written after the contest's name.
+    /// A contest's kind and the modifiers written after it, such as `ranked seats 3 max 6`.
+    ///
+    /// The `seats`, `min`, and `max` modifiers are child nodes. The `all` modifier is a
+    /// [`Word`](SyntaxKind::Word) token.
     ContestKind,
+    /// A contest's `seats` modifier, such as `seats 3`, which sets how many candidates are elected.
+    Seats,
+    /// A contest's `min` modifier, such as `min 2`, which sets how many choices a ballot that marks
+    /// the contest must mark.
+    Minimum,
+    /// A ranked contest's `max` modifier, such as `max 6`, which sets how many choices a voter may
+    /// rank.
+    RankedMax,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -127,6 +138,9 @@ impl SyntaxKind {
         Self::Section,
         Self::Contest,
         Self::ContestKind,
+        Self::Seats,
+        Self::Minimum,
+        Self::RankedMax,
         Self::ErrorNode,
     ];
 }
