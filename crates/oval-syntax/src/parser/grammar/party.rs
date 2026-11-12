@@ -18,6 +18,24 @@ impl Parser<'_> {
         self.finish_node();
     }
 
+    pub(super) fn party_ref(&mut self) {
+        self.start_node(SyntaxKind::PartyRef);
+        self.bump();
+        self.identifier();
+        let declares = self.eat(TokenKind::String);
+        if !declares && !self.at_line_end() {
+            self.skip_line(vec![
+                Expected::Token(TokenKind::String),
+                Expected::Token(TokenKind::Newline),
+            ]);
+        }
+        self.end_of_line();
+        if declares {
+            self.party_block();
+        }
+        self.finish_node();
+    }
+
     fn party_block(&mut self) {
         if self.at(TokenKind::Indent) {
             self.block(&PARTY_FIELDS, Self::party_field);
@@ -45,7 +63,7 @@ impl Parser<'_> {
 #[cfg(test)]
 mod tests {
     use crate::parser::tests::check;
-    use crate::{Expected, SyntaxError, SyntaxErrorKind, TokenKind, parse};
+    use crate::{Expected, Keyword, SyntaxError, SyntaxErrorKind, TokenKind, parse};
     use expect_test::expect;
 
     fn check_errors(text: &str, expected: &[SyntaxError]) {
@@ -339,6 +357,166 @@ mod tests {
                     Newline@26..27 "\n"
                   Dedent@27..27 ""
         "#]],
+        );
+    }
+
+    #[test]
+    fn a_party_field_can_refer_to_a_party() {
+        let text = "candidate @c \"C\"\n  party @dem\n";
+        check_errors(text, &[]);
+        check(
+            text,
+            &expect![[r#"
+            Document@0..30
+              Candidate@0..30
+                Word@0..9 "candidate"
+                Whitespace@9..10 " "
+                Identifier@10..12
+                  AtSign@10..11 "@"
+                  Word@11..12 "c"
+                Whitespace@12..13 " "
+                String@13..16 "\"C\""
+                Newline@16..17 "\n"
+                Whitespace@17..19 "  "
+                Block@19..30
+                  Indent@19..19 ""
+                  PartyRef@19..30
+                    Word@19..24 "party"
+                    Whitespace@24..25 " "
+                    Identifier@25..29
+                      AtSign@25..26 "@"
+                      Word@26..29 "dem"
+                    Newline@29..30 "\n"
+                  Dedent@30..30 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_party_field_can_declare_a_party_with_a_block() {
+        let text = "candidate @c \"C\"\n  party @green \"Green\"\n    abbreviation \"G\"\n";
+        check_errors(text, &[]);
+        check(
+            text,
+            &expect![[r#"
+            Document@0..61
+              Candidate@0..61
+                Word@0..9 "candidate"
+                Whitespace@9..10 " "
+                Identifier@10..12
+                  AtSign@10..11 "@"
+                  Word@11..12 "c"
+                Whitespace@12..13 " "
+                String@13..16 "\"C\""
+                Newline@16..17 "\n"
+                Whitespace@17..19 "  "
+                Block@19..61
+                  Indent@19..19 ""
+                  PartyRef@19..61
+                    Word@19..24 "party"
+                    Whitespace@24..25 " "
+                    Identifier@25..31
+                      AtSign@25..26 "@"
+                      Word@26..31 "green"
+                    Whitespace@31..32 " "
+                    String@32..39 "\"Green\""
+                    Newline@39..40 "\n"
+                    Whitespace@40..44 "    "
+                    Block@44..61
+                      Indent@44..44 ""
+                      StringField@44..61
+                        Word@44..56 "abbreviation"
+                        Whitespace@56..57 " "
+                        String@57..60 "\"G\""
+                        Newline@60..61 "\n"
+                      Dedent@61..61 ""
+                  Dedent@61..61 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_block_below_a_party_reference_is_unexpected() {
+        check_errors(
+            "candidate @c \"C\"\n  party @dem\n    abbreviation \"D\"\n",
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedBlock,
+                offset: 34,
+                len: 16,
+                expected: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn a_bare_party_field_is_missing_only_its_identifier() {
+        check_errors(
+            "candidate @c \"C\"\n  party\n",
+            &[error(
+                SyntaxErrorKind::MissingIdentifier,
+                24,
+                0,
+                TokenKind::AtSign,
+            )],
+        );
+    }
+
+    #[test]
+    fn a_declaration_without_an_identifier_keeps_its_block() {
+        check_errors(
+            "candidate @c \"C\"\n  party \"Green\"\n    abbreviation \"G\"\n",
+            &[error(
+                SyntaxErrorKind::MissingIdentifier,
+                25,
+                0,
+                TokenKind::AtSign,
+            )],
+        );
+    }
+
+    #[test]
+    fn a_party_field_expects_a_name_or_the_end_of_the_line() {
+        check_errors(
+            "candidate @c \"C\"\n  party @g 5\n",
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedToken,
+                offset: 28,
+                len: 1,
+                expected: vec![
+                    Expected::Token(TokenKind::String),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            }],
+        );
+    }
+
+    #[test]
+    fn a_repeated_party_field_is_set_aside_with_its_block() {
+        check_errors(
+            "candidate @c \"C\"\n  party @dem\n  party @green \"Green\"\n    abbreviation \"G\"\n",
+            &[SyntaxError {
+                kind: SyntaxErrorKind::RepeatedField,
+                offset: 32,
+                len: 41,
+                expected: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn a_party_declared_in_place_takes_party_fields() {
+        check_errors(
+            "candidate @c \"C\"\n  party @green \"Green\"\n    designation \"G\"\n",
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedEntry,
+                offset: 44,
+                len: 15,
+                expected: vec![
+                    Expected::Keyword(Keyword::Abbreviation),
+                    Expected::Keyword(Keyword::Website),
+                    Expected::Keyword(Keyword::Note),
+                ],
+            }],
         );
     }
 

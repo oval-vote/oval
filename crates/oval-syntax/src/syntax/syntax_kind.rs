@@ -66,6 +66,12 @@ pub enum SyntaxKind {
     Party,
     /// A candidate declaration, such as `candidate @nreyes "Nadia Reyes"`.
     Candidate,
+    /// A `party` field, which refers to a party, such as `party @dem`, or declares one in place,
+    /// such as `party @green "Green"`.
+    ///
+    /// A party declared in place has a name, and may have a [`Block`](SyntaxKind::Block) of party
+    /// fields below it. A reference has neither.
+    PartyRef,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -102,6 +108,7 @@ impl SyntaxKind {
         Self::Identifier,
         Self::Party,
         Self::Candidate,
+        Self::PartyRef,
         Self::ErrorNode,
     ];
 }

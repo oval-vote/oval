@@ -1,8 +1,9 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const CANDIDATE_FIELDS: [Expected; 2] = [
+const CANDIDATE_FIELDS: [Expected; 3] = [
     Expected::Keyword(Keyword::Designation),
+    Expected::Keyword(Keyword::Party),
     Expected::Keyword(Keyword::Note),
 ];
 
@@ -27,6 +28,7 @@ impl Parser<'_> {
             Keyword::Designation => self.field_once(seen, keyword, |p| {
                 p.value_field(SyntaxKind::StringField, TokenKind::String);
             }),
+            Keyword::Party => self.field_once(seen, keyword, Self::party_ref),
             Keyword::Note => self.field_once(seen, keyword, Self::markdown_field),
             _ => return false,
         }
@@ -128,6 +130,7 @@ mod tests {
                 len: 25,
                 expected: vec![
                     Expected::Keyword(Keyword::Designation),
+                    Expected::Keyword(Keyword::Party),
                     Expected::Keyword(Keyword::Note),
                 ],
             }],
