@@ -1635,12 +1635,18 @@ stance in a `RecommendFieldBlock`. The remaining errors are entries that fit the
 document's structure. A parser never needs a fallback error.
 
 The parser skips `Error` tokens from the lexer as it skips comments and whitespace, so a lexical
-error is the only diagnostic for the text it covers. On a line that contains an `Error` token, no
-missing-token error is reported, since what is missing may be the text the lexer rejected. A line
-whose only tokens the parser does not skip are its terminator and layout tokens is treated as blank.
-Its `Indent` or `Dedent` still opens or closes a block, so a block may hold nothing but such lines.
-No syntax error is reported for such a block, whether or not the line before it takes one, since the
-lexical errors are the only diagnostics for its text.
+error is the only diagnostic for the text it covers. A missing-token error is not reported when an
+`Error` token lies where the missing token would begin, after the last token the parser accepted and
+before the next token it does not skip, since the missing token may be the text the lexer rejected.
+For the same reason, `missing-body` is not reported when an `Error` token follows the field's `:`,
+since the rejected text keeps the lexer from opening a body. An `Error` token anywhere else on the
+line does not prevent a missing-token error, and an `Error` token never prevents `missing-block`,
+since a block begins on the next line.
+
+A line whose only tokens the parser does not skip are its terminator and layout tokens is treated as
+blank. Its `Indent` or `Dedent` still opens or closes a block, so a block may hold nothing but such
+lines. No syntax error is reported for such a block, whether or not the line before it takes one,
+since the lexical errors are the only diagnostics for its text.
 
 Error ranges are measured over the tokens the parser does not skip. The _end of a line_ is the end
 of the last token on it, other than a layout token, that the parser does not skip, so whitespace, a

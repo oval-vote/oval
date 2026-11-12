@@ -34,11 +34,10 @@ impl Parser<'_> {
         accepts: &[Expected],
         entry: impl FnMut(&mut Self, &mut Vec<Keyword>) -> bool,
     ) {
-        let line_has_error = self.line_has_error();
         self.end_of_line();
         if self.at(TokenKind::Indent) {
             self.block(accepts, entry);
-        } else if !line_has_error {
+        } else {
             self.report(
                 SyntaxErrorKind::MissingBlock,
                 self.offset,

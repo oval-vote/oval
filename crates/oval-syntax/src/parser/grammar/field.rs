@@ -28,10 +28,10 @@ impl Parser<'_> {
         self.start_node(SyntaxKind::MarkdownField);
         self.bump();
         let has_colon = self.expect(TokenKind::Colon, SyntaxErrorKind::MissingValue);
-        let line_has_error = self.line_has_error();
+        let error_after_colon = has_colon && self.error_token_ahead();
         if self.finish_line() {
             self.discard_body();
-        } else if has_colon && !self.eat(TokenKind::MarkdownBlock) && !line_has_error {
+        } else if has_colon && !self.eat(TokenKind::MarkdownBlock) && !error_after_colon {
             self.report(
                 SyntaxErrorKind::MissingBody,
                 self.offset,
@@ -171,10 +171,25 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_body_is_not_reported_on_a_line_with_an_error_token() {
-        let result = parse("note ~:\n").unwrap();
+    fn a_missing_body_is_not_reported_when_an_error_token_follows_the_colon() {
+        let result = parse("note: ~\n").unwrap();
         assert_eq!(result.syntax_errors, []);
         assert_eq!(result.lexical_errors.len(), 1);
+    }
+
+    #[test]
+    fn a_missing_body_is_reported_when_an_error_token_comes_before_the_colon() {
+        let result = parse("note ~:\n").unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(
+            result.syntax_errors,
+            [SyntaxError {
+                kind: SyntaxErrorKind::MissingBody,
+                offset: 8,
+                len: 0,
+                expected: vec![Expected::Token(TokenKind::MarkdownBlock)],
+            }]
+        );
     }
 
     #[test]

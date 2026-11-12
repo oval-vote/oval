@@ -152,10 +152,10 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_block_is_not_reported_on_a_line_with_an_error_token() {
+    fn a_missing_block_is_reported_beside_an_error_token() {
         let result = parse("ballot @a \"A\" ~\n").unwrap();
         assert_eq!(result.lexical_errors.len(), 1);
-        assert_eq!(result.syntax_errors, []);
+        assert_eq!(result.syntax_errors, [missing_block(16)]);
     }
 
     #[test]

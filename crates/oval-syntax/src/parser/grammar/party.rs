@@ -545,4 +545,26 @@ mod tests {
             )],
         );
     }
+
+    #[test]
+    fn a_name_is_missing_after_an_identifier_that_follows_an_error_token() {
+        let result = parse("party ~ @dem\n").unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(
+            result.syntax_errors,
+            [error(
+                SyntaxErrorKind::MissingName,
+                12,
+                0,
+                TokenKind::String
+            )]
+        );
+    }
+
+    #[test]
+    fn an_unterminated_name_is_not_also_missing() {
+        let result = parse("party @dem \"Democ\n").unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(result.syntax_errors, []);
+    }
 }

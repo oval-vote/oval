@@ -6,7 +6,7 @@ impl Parser<'_> {
         if self.at(TokenKind::AtSign) {
             self.start_node(SyntaxKind::Identifier);
             self.bump();
-            if !self.eat(TokenKind::Word) && !self.line_has_error() {
+            if !self.eat(TokenKind::Word) && !self.error_token_ahead() {
                 self.report(
                     SyntaxErrorKind::MissingIdentifier,
                     self.offset,
@@ -16,7 +16,7 @@ impl Parser<'_> {
             }
             self.finish_node();
         } else if self.at_line_end() || self.at(TokenKind::String) {
-            if !self.line_has_error() {
+            if !self.error_token_ahead() {
                 let offset = match self.peek() {
                     Some((token, offset)) if token.kind == TokenKind::String => offset,
                     _ => self.line_end,
@@ -166,9 +166,11 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_identifier_is_not_reported_on_a_line_with_an_error_token() {
-        let result = parse("party ~ \"Democratic\"\n").unwrap();
-        assert_eq!(result.syntax_errors, []);
-        assert_eq!(result.lexical_errors.len(), 1);
+    fn a_missing_identifier_is_not_reported_where_an_error_token_is() {
+        for text in ["party ~ \"Democratic\"\n", "party @~\n"] {
+            let result = parse(text).unwrap();
+            assert_eq!(result.syntax_errors, [], "{text:?}");
+            assert_eq!(result.lexical_errors.len(), 1, "{text:?}");
+        }
     }
 }

@@ -145,7 +145,7 @@ impl<'t> Parser<'t> {
     fn recover_missing(&mut self, missing: SyntaxErrorKind, expected: Vec<Expected>) {
         if !self.at_line_end() {
             self.skip_line(expected);
-        } else if !self.line_was_skipped && !self.line_has_error() {
+        } else if !self.line_was_skipped && !self.error_token_ahead() {
             self.report(missing, self.line_end, self.line_end, expected);
         }
     }
@@ -213,10 +213,10 @@ impl<'t> Parser<'t> {
         });
     }
 
-    fn line_has_error(&self) -> bool {
-        self.tokens[self.line_start..]
+    fn error_token_ahead(&self) -> bool {
+        self.tokens[self.pos..]
             .iter()
-            .take_while(|token| !ends_line(**token))
+            .take_while(|token| is_skipped(**token, self.line_is_empty))
             .any(|token| token.is_error())
     }
 
@@ -676,13 +676,21 @@ mod tests {
     }
 
     #[test]
-    fn expect_reports_nothing_on_a_line_with_an_error_token() {
+    fn expect_reports_nothing_where_an_error_token_is() {
         for text in ["oval 1x\n", "oval\t\n", "oval ~\n"] {
             let mut parser = parser(text);
             parser.bump();
             assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
             assert_eq!(parser.errors, [], "{text:?}");
         }
+    }
+
+    #[test]
+    fn an_error_token_before_the_last_accepted_token_does_not_stop_a_report() {
+        let mut parser = parser("~ oval\n");
+        parser.bump();
+        assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(parser.errors, [missing_integer(6)]);
     }
 
     #[test]
