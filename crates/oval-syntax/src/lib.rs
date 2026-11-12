@@ -1,75 +1,64 @@
-//! Lexer, parser, and lossless syntax tree for the Oval voting guide format.
+//! Lexer for the Oval voting guide format.
 //!
-//! This crate is the reference implementation of Section 2 of the specification and of the lexical
-//! and syntax errors of Section 3. It turns source text into tokens ([`lexer`]), tokens into a
-//! tree ([`parser`]), and the tree into typed views ([`ast`]) that the validator, the formatter,
-//! and editors read.
-//!
-//! The tree is lossless. Every byte of the source belongs to exactly one token, including
-//! whitespace, comments, and text the lexer could not tokenize, so the text of the root node is
-//! the source itself. Errors never stop the parser. It records each one, recovers as the
-//! specification prescribes, and still produces a tree that covers every byte.
-//!
-//! Positions are byte offsets into the UTF-8 source, expressed with [`TextSize`] and
-//! [`TextRange`] from [`rowan`], which provides the tree.
-//!
-//! # Examples
+//! [`lex`] splits the text of an Oval document into [`Token`]s, as described in Sections 2 and 3.1
+//! of the [Oval specification](https://spec.oval.vote). [`lex_bytes`] does the same for a document
+//! that arrives as raw bytes.
 //!
 //! ```
-//! use oval_syntax::ast::{AstNode, Document};
-//! use oval_syntax::parser::parse;
+//! use oval_syntax::{TokenKind, lex};
 //!
-//! let result = parse("oval 1\nguide \"Franklin Voter Guide\"\n").unwrap();
-//! assert!(result.errors().is_empty());
-//! assert_eq!(result.syntax().text().to_string(), "oval 1\nguide \"Franklin Voter Guide\"\n");
-//!
-//! let document = Document::cast(result.syntax()).unwrap();
-//! assert_eq!(document.version().and_then(|marker| marker.value()), Some(1));
+//! let result = lex("guide \"Franklin County Voters' Guide\"\n")?;
+//! let kinds: Vec<TokenKind> = result.tokens.iter().map(|token| token.kind).collect();
+//! assert_eq!(
+//!     kinds,
+//!     [
+//!         TokenKind::Word,
+//!         TokenKind::Whitespace,
+//!         TokenKind::String,
+//!         TokenKind::Newline,
+//!     ]
+//! );
+//! # Ok::<(), oval_syntax::InputRejection>(())
 //! ```
+//!
+//! # Tokens
+//!
+//! A [`Token`] is a [`TokenKind`] and a length in bytes. Tokens hold no text. They are contiguous,
+//! so each one's text is the slice of the document that begins where the token before it ends.
+//! Every byte of a document belongs to exactly one token, so the tokens reproduce it exactly, which
+//! is what lets a formatter rewrite a document without losing anything.
+//!
+//! Every kind of token is in one of four categories.
+//!
+//! - **Lexical** tokens carry a document's content. They are words, strings, integers, dates, URLs,
+//!   `@`, `:`, `,`, and Markdown bodies.
+//! - **Ignored** tokens are whitespace, comments, blank lines, and a leading byte order mark. The
+//!   parser skips them.
+//! - **Layout** tokens give a document its structure. A [`Newline`](TokenKind::Newline) ends each
+//!   line with tokens, and [`Indent`](TokenKind::Indent) and [`Dedent`](TokenKind::Dedent) open and
+//!   close blocks as indentation changes.
+//! - **Error** tokens cover text that cannot be lexed.
+//!
+//! # Errors
+//!
+//! An [`InputRejection`] means the input cannot be an Oval document at all, because it contains
+//! U+0000, is not UTF-8, or is too large. It is returned instead of any tokens.
+//!
+//! Any other document lexes completely. Its flaws are reported as [`LexicalError`]s in
+//! [`LexResult::errors`], alongside the tokens, and lexing continues after each one.
+//!
+//! # Offsets
+//!
+//! Lengths and offsets are counted in bytes, not characters, and stored as `u32`. A document longer
+//! than [`u32::MAX`] bytes is rejected, so every offset in an accepted document fits.
 
 pub mod ast;
-pub mod lexer;
-pub mod parser;
-mod syntax_kind;
-pub mod text;
+mod lexer;
+mod parser;
+mod syntax;
+mod token;
 
-pub use rowan::{TextRange, TextSize, WalkEvent};
-pub use syntax_kind::{Keyword, SyntaxKind};
-
-/// The major version of the Oval language this crate reads.
-///
-/// Documents declare their major version in the marker that opens them, `oval 1`. The language
-/// has no minor version. Within a major version the specification only adds constructs, so an
-/// implementation of a later edition reads every earlier document. A document that names another
-/// major version is reported as `unsupported-version` rather than parsed.
-pub const SUPPORTED_LANGUAGE_MAJOR: u32 = 1;
-
-/// The Oval language, as [`rowan`] needs it to type the tree.
-///
-/// It has no values. It only ties [`SyntaxKind`] to the tree types below.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum OvalLanguage {}
-
-impl rowan::Language for OvalLanguage {
-    type Kind = SyntaxKind;
-
-    fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
-        raw.into()
-    }
-
-    fn kind_to_raw(kind: Self::Kind) -> rowan::SyntaxKind {
-        kind.into()
-    }
-}
-
-/// A node in an Oval syntax tree, which is a document, an entry, a block, or an identifier.
-///
-/// Nodes own their children and cover the exact span of source text those children do. The typed
-/// views in [`ast`] wrap nodes of particular kinds.
-pub type SyntaxNode = rowan::SyntaxNode<OvalLanguage>;
-
-/// A token in an Oval syntax tree, which is a leaf with a [`SyntaxKind`] and the text it covers.
-pub type SyntaxToken = rowan::SyntaxToken<OvalLanguage>;
-
-/// Either a [`SyntaxNode`] or a [`SyntaxToken`], as a tree walk yields them.
-pub type SyntaxElement = rowan::SyntaxElement<OvalLanguage>;
+pub use lexer::{InputRejection, LexResult, LexicalError, LexicalErrorKind, lex, lex_bytes};
+pub use parser::{Expected, ParseResult, SyntaxError, SyntaxErrorKind, parse};
+pub use syntax::{Keyword, OvalLanguage, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
+pub use token::{Token, TokenKind};

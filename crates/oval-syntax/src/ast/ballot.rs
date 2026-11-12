@@ -1,132 +1,199 @@
-//! Ballots and sections, the tree that places every question.
-//!
-//! A [`Ballot`] is what one electorate sees. Its items are contests, measures, sections, and
-//! sub-ballots, in ballot order; a sub-ballot is a narrower electorate whose voters also see
-//! everything in the enclosing ballot (Section 2.11). A [`Section`] is a titled group of questions
-//! within a ballot and nests nothing else (Section 2.12).
-
-use super::{
-    AstNode, Contest, Identifier, MarkdownField, Measure, StringField, ast_node, block, field,
-    identifier, string, string_range,
+use crate::ast::{
+    AstNode, Contest, Extensibility, Identifier, MarkdownField, Measure, Requirement, Section,
+    StringField, StringLiteral, ast_node, support,
 };
-use crate::TextRange;
-use crate::{Keyword, SyntaxNode};
+use crate::{Keyword, SyntaxKind, SyntaxNode};
 
 ast_node! {
-    /// The questions, sections, and sub-ballots one electorate sees, written as `ballot`.
+    /// A ballot, such as `ballot @franklin "State of Franklin"`, with its fields and items in the
+    /// block below it.
     ///
-    /// Root ballots are children of the [`Document`](super::Document); every other ballot is an
-    /// item of its parent. A ballot requires a block (`missing-block`), and a valid ballot has at
-    /// least one item (`empty-ballot`).
+    /// A ballot at the top level is a root ballot. A ballot among another ballot's items is a
+    /// sub-ballot, for a narrower group of voters who also see everything in the ballot around it.
+    ///
+    /// ```
+    /// use oval_syntax::ast::BallotItem;
+    ///
+    /// let text = r#"ballot @city "City"
+    ///   section "Offices"
+    ///     note:
+    ///       Offices of the city.
+    ///   ballot @ward "Ward 1"
+    ///     eligibility "Voters in Ward 1"
+    /// "#;
+    /// let result = oval_syntax::parse(text)?;
+    /// let ballot = result.document().ballots().next().expect("the document has a ballot");
+    /// let items: Vec<BallotItem> = ballot.items().collect();
+    /// assert!(matches!(items[..], [BallotItem::Section(_), BallotItem::Ballot(_)]));
+    /// # Ok::<(), oval_syntax::InputRejection>(())
+    /// ```
     Ballot
 }
 
-ast_node! {
-    /// A titled group of questions within a ballot, written as `section`.
-    ///
-    /// A section matches a heading on the printed ballot. It has no identifier and no eligibility
-    /// meaning, and a valid section has at least one question (`empty-section`).
-    Section
+impl Ballot {
+    /// Returns the requirement written before `ballot`, or `None` if there is none.
+    pub fn requirement(&self) -> Option<Requirement> {
+        support::child(self.syntax())
+    }
+
+    /// Returns the extensibility written before `ballot`, or `None` if there is none.
+    pub fn extensibility(&self) -> Option<Extensibility> {
+        support::child(self.syntax())
+    }
+
+    /// Returns the ballot's identifier, or `None` if the line has none.
+    pub fn identifier(&self) -> Option<Identifier> {
+        support::child(self.syntax())
+    }
+
+    /// Returns the ballot's name, or `None` if the line ends without one.
+    pub fn name(&self) -> Option<StringLiteral> {
+        support::token(self.syntax())
+    }
+
+    /// Returns the ballot's `eligibility` field, or `None` if it has none.
+    pub fn eligibility(&self) -> Option<StringField> {
+        support::block_field(self.syntax(), Keyword::Eligibility)
+    }
+
+    /// Returns the ballot's `note` field, or `None` if it has none.
+    pub fn note(&self) -> Option<MarkdownField> {
+        support::block_field(self.syntax(), Keyword::Note)
+    }
+
+    /// Returns the ballot's items, its sections, contests, measures, and sub-ballots, in ballot
+    /// order.
+    pub fn items(&self) -> impl Iterator<Item = BallotItem> + use<> {
+        support::block_children(self.syntax())
+    }
 }
 
-/// One entry in a ballot's block, in ballot order.
-///
-/// Fields of the ballot, such as `eligibility` and `note`, are not items; [`Ballot::items`] skips
-/// them.
+/// One of a ballot's items, which are listed in ballot order.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BallotItem {
-    /// A titled group of questions, written as `section`.
+    /// A section of the ballot.
     Section(Section),
-    /// An office chosen among campaigns, written as `contest`.
+    /// A contest directly on the ballot.
     Contest(Contest),
-    /// A yes-or-no question, written as `measure`.
+    /// A measure directly on the ballot.
     Measure(Measure),
-    /// A sub-ballot, which is a narrower electorate within this one.
+    /// A sub-ballot.
     Ballot(Ballot),
 }
 
-/// One entry in a section's block, in ballot order.
-///
-/// Sections contain only questions, so there are two cases.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SectionItem {
-    /// An office chosen among campaigns, written as `contest`.
-    Contest(Contest),
-    /// A yes-or-no question, written as `measure`.
-    Measure(Measure),
-}
-
-impl Ballot {
-    /// The declared identifier.
-    ///
-    /// `None` when the parser recovered from a line with no identifier or an `@` with no word.
-    pub fn id(&self) -> Option<Identifier> {
-        identifier(&self.0)
+impl AstNode for BallotItem {
+    fn can_cast(kind: SyntaxKind) -> bool {
+        matches!(
+            kind,
+            SyntaxKind::Section | SyntaxKind::Contest | SyntaxKind::Measure | SyntaxKind::Ballot
+        )
     }
 
-    /// The jurisdiction or grouping this ballot covers, as printed.
-    ///
-    /// `None` when the line ended before the title.
-    pub fn title(&self) -> Option<String> {
-        string(&self.0)
+    fn cast(node: SyntaxNode) -> Option<Self> {
+        match node.kind() {
+            SyntaxKind::Section => Section::cast(node).map(Self::Section),
+            SyntaxKind::Contest => Contest::cast(node).map(Self::Contest),
+            SyntaxKind::Measure => Measure::cast(node).map(Self::Measure),
+            SyntaxKind::Ballot => Ballot::cast(node).map(Self::Ballot),
+            _ => None,
+        }
     }
 
-    /// The range of the ballot's title, quotes included.
-    ///
-    /// `None` when the line ended before the title.
-    pub fn title_range(&self) -> Option<TextRange> {
-        string_range(&self.0)
-    }
-
-    /// Who votes on this ballot, from the `eligibility` field.
-    pub fn eligibility(&self) -> Option<StringField> {
-        field(&self.0, Keyword::Eligibility)
-    }
-
-    /// The `note` field.
-    pub fn note(&self) -> Option<MarkdownField> {
-        field(&self.0, Keyword::Note)
-    }
-
-    /// The items of the block, in ballot order.
-    ///
-    /// Empty when the ballot has no block or its block has only fields.
-    pub fn items(&self) -> impl Iterator<Item = BallotItem> + use<> {
-        block_nodes(&self.0).filter_map(|node| {
-            Section::cast(node.clone())
-                .map(BallotItem::Section)
-                .or_else(|| Contest::cast(node.clone()).map(BallotItem::Contest))
-                .or_else(|| Measure::cast(node.clone()).map(BallotItem::Measure))
-                .or_else(|| Ballot::cast(node).map(BallotItem::Ballot))
-        })
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Section(section) => section.syntax(),
+            Self::Contest(contest) => contest.syntax(),
+            Self::Measure(measure) => measure.syntax(),
+            Self::Ballot(ballot) => ballot.syntax(),
+        }
     }
 }
 
-impl Section {
-    /// The section heading, as printed on the ballot.
-    ///
-    /// `None` when the line ended before the title.
-    pub fn title(&self) -> Option<String> {
-        string(&self.0)
+#[cfg(test)]
+mod tests {
+    use super::{Ballot, BallotItem};
+    use crate::ast::AstNode;
+    use crate::{SyntaxKind, parse};
+
+    fn ballot(text: &str) -> Ballot {
+        parse(text)
+            .unwrap()
+            .document()
+            .ballots()
+            .next()
+            .expect("the document has a ballot")
     }
 
-    /// The `note` field.
-    pub fn note(&self) -> Option<MarkdownField> {
-        field(&self.0, Keyword::Note)
+    fn item_kinds(ballot: &Ballot) -> Vec<SyntaxKind> {
+        ballot.items().map(|item| item.syntax().kind()).collect()
     }
 
-    /// The questions of the block, in ballot order.
-    ///
-    /// Empty when the section has no block or its block has only a `note`.
-    pub fn items(&self) -> impl Iterator<Item = SectionItem> + use<> {
-        block_nodes(&self.0).filter_map(|node| {
-            Contest::cast(node.clone())
-                .map(SectionItem::Contest)
-                .or_else(|| Measure::cast(node).map(SectionItem::Measure))
-        })
+    #[test]
+    fn a_ballot_has_its_line_and_fields() {
+        let ballot = ballot(
+            "required extensible ballot @city \"City of Ashford\"\n  eligibility \"Voters\"\n  note:\n    N.\n",
+        );
+        assert!(ballot.requirement().is_some_and(|r| r.is_required()));
+        assert!(ballot.extensibility().is_some_and(|e| e.is_extensible()));
+        let id = ballot.identifier().and_then(|id| id.name());
+        assert_eq!(
+            id.map(|name| name.text().to_owned()).as_deref(),
+            Some("city")
+        );
+        let name = ballot.name().map(|name| name.value().into_owned());
+        assert_eq!(name.as_deref(), Some("City of Ashford"));
+        let eligibility = ballot.eligibility().and_then(|field| field.value());
+        assert_eq!(
+            eligibility
+                .map(|value| value.value().into_owned())
+                .as_deref(),
+            Some("Voters")
+        );
+        assert!(ballot.note().is_some());
     }
-}
 
-fn block_nodes(node: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> + use<> {
-    block(node).into_iter().flat_map(|b| b.children())
+    #[test]
+    fn a_ballot_without_modifiers_has_none() {
+        let ballot = ballot("ballot @a \"A\"\n  eligibility \"E\"\n");
+        assert_eq!(ballot.requirement(), None);
+        assert_eq!(ballot.extensibility(), None);
+    }
+
+    #[test]
+    fn a_ballot_has_every_kind_of_item_in_order() {
+        let ballot = ballot(
+            "ballot @a \"A\"\n  eligibility \"E\"\n  section \"S\"\n    note:\n      N.\n  contest @c \"C\" single\n    campaign @x\n  measure @m \"M\"\n    recommend yes\n  ballot @sub \"Sub\"\n    eligibility \"E\"\n",
+        );
+        assert_eq!(
+            item_kinds(&ballot),
+            [
+                SyntaxKind::Section,
+                SyntaxKind::Contest,
+                SyntaxKind::Measure,
+                SyntaxKind::Ballot
+            ]
+        );
+    }
+
+    #[test]
+    fn an_entry_set_aside_is_not_an_item() {
+        let ballot = ballot(
+            "ballot @a \"A\"\n  extensible measure @m \"M\"\n    recommend yes\n  contest @c \"C\" single\n    campaign @x\n",
+        );
+        assert_eq!(item_kinds(&ballot), [SyntaxKind::Contest]);
+    }
+
+    #[test]
+    fn a_ballot_item_is_a_section_contest_measure_or_ballot() {
+        for kind in [
+            SyntaxKind::Section,
+            SyntaxKind::Contest,
+            SyntaxKind::Measure,
+            SyntaxKind::Ballot,
+        ] {
+            assert!(BallotItem::can_cast(kind), "{kind:?}");
+        }
+        assert!(!BallotItem::can_cast(SyntaxKind::Party));
+        assert!(!Ballot::can_cast(SyntaxKind::Section));
+    }
 }
