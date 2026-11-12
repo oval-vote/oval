@@ -7,7 +7,7 @@
 //! clones cheaply and reads the tree each time it is asked.
 //!
 //! A document with errors still has a complete tree, and views read it like any other. A part the
-//! parser did not find is absent rather than an error. Text the parser discarded or set aside sits
+//! parser did not find is absent rather than an error. Text that was discarded or set aside lives 
 //! in an [`ErrorNode`](crate::SyntaxKind::ErrorNode) and is not part of any view.
 //!
 //! ```
@@ -32,4 +32,4 @@ pub use ast_token::AstToken;
 use ast_token::ast_token;
 pub use document::Document;
 pub use identifier::Identifier;
-pub use literals::{DateLiteral, IntegerLiteral, StringLiteral, UrlLiteral};
+pub use literals::{DateLiteral, IntegerLiteral, MarkdownBody, StringLiteral, UrlLiteral};
