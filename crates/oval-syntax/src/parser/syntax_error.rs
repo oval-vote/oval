@@ -50,6 +50,11 @@ pub enum SyntaxErrorKind {
     /// The error spans the second modifier, including its number. The parser parses the modifier,
     /// so that errors inside it are still reported, but sets it aside, and the first one stands.
     RepeatedModifier,
+    /// A campaign flag, `incumbent` or `withdrawn`, that already appeared on the same `campaign`
+    /// line.
+    ///
+    /// The error spans the second flag. The parser sets it aside, and the first one stands.
+    RepeatedFlag,
     /// A line that begins with a token no entry of the enclosing block can begin with, such as
     /// `designation` inside a party.
     ///
@@ -88,6 +93,7 @@ impl SyntaxErrorKind {
             Self::MissingName => "missing-name",
             Self::MissingContestKind => "missing-contest-kind",
             Self::RepeatedModifier => "repeated-modifier",
+            Self::RepeatedFlag => "repeated-flag",
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
             Self::MissingBlock => "missing-block",
@@ -171,6 +177,7 @@ mod tests {
             SyntaxErrorKind::RepeatedModifier.spec_id(),
             "repeated-modifier"
         );
+        assert_eq!(SyntaxErrorKind::RepeatedFlag.spec_id(), "repeated-flag");
         assert_eq!(
             SyntaxErrorKind::UnexpectedEntry.spec_id(),
             "unexpected-entry"

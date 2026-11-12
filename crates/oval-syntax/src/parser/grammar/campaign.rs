@@ -70,14 +70,24 @@ impl Parser<'_> {
     }
 
     fn flags(&mut self) {
-        while matches!(
-            self.current_keyword(),
-            Some(Keyword::Incumbent | Keyword::Withdrawn)
-        ) {
-            self.start_node(SyntaxKind::Flag);
-            self.bump();
-            self.finish_node();
+        let mut seen = Vec::new();
+        while let Some(flag) = self
+            .current_keyword()
+            .filter(|keyword| matches!(keyword, Keyword::Incumbent | Keyword::Withdrawn))
+        {
+            if seen.contains(&flag) {
+                self.set_aside(SyntaxErrorKind::RepeatedFlag, Self::flag);
+            } else {
+                seen.push(flag);
+                self.flag();
+            }
         }
+    }
+
+    fn flag(&mut self) {
+        self.start_node(SyntaxKind::Flag);
+        self.bump();
+        self.finish_node();
     }
 
     fn member(&mut self) {
@@ -888,6 +898,99 @@ mod tests {
                     expected: vec![Expected::Token(TokenKind::Indent)],
                 },
             ],
+        );
+    }
+
+    fn repeated_flag(offset: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::RepeatedFlag,
+            offset,
+            len: 9,
+            expected: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_repeated_flag_is_set_aside() {
+        let text = in_contest("    campaign incumbent incumbent @bsantos \"Beatriz Santos\"\n");
+        check_errors(&text, &[repeated_flag(61)]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..97
+              Ballot@0..97
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..97
+                  Indent@16..16 ""
+                  Contest@16..97
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..37
+                      Word@31..37 "single"
+                    Newline@37..38 "\n"
+                    Whitespace@38..42 "    "
+                    Block@42..97
+                      Indent@42..42 ""
+                      Campaign@42..97
+                        Word@42..50 "campaign"
+                        Whitespace@50..51 " "
+                        Flag@51..60
+                          Word@51..60 "incumbent"
+                        Whitespace@60..61 " "
+                        ErrorNode@61..70
+                          Flag@61..70
+                            Word@61..70 "incumbent"
+                        Whitespace@70..71 " "
+                        Member@71..96
+                          Identifier@71..79
+                            AtSign@71..72 "@"
+                            Word@72..79 "bsantos"
+                          Whitespace@79..80 " "
+                          String@80..96 "\"Beatriz Santos\""
+                        Newline@96..97 "\n"
+                      Dedent@97..97 ""
+                  Dedent@97..97 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn each_repeated_flag_is_reported() {
+        check_errors(
+            &in_contest("    campaign incumbent withdrawn incumbent withdrawn @a\n"),
+            &[repeated_flag(71), repeated_flag(81)],
+        );
+    }
+
+    #[test]
+    fn a_party_campaign_reports_a_repeated_flag() {
+        check_errors(
+            &in_contest("    campaign withdrawn withdrawn party @dem\n"),
+            &[repeated_flag(61)],
+        );
+    }
+
+    #[test]
+    fn a_repeated_flag_does_not_hide_the_block() {
+        let text = in_contest("    campaign incumbent incumbent\n      @a\n");
+        check_errors(&text, &[repeated_flag(61)]);
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::Campaign),
+            [SyntaxKind::Flag, SyntaxKind::ErrorNode, SyntaxKind::Block]
         );
     }
 }
