@@ -134,6 +134,8 @@ pub enum SyntaxKind {
     /// A write-in choice, `write-in` and the name to write in, if it has one, such as
     /// `write-in "Jane Doe"`.
     WriteIn,
+    /// A ballot measure, such as `measure @prop1 "Proposition 1"` and the block below it.
+    Measure,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -190,6 +192,7 @@ impl SyntaxKind {
         Self::Support,
         Self::Oppose,
         Self::WriteIn,
+        Self::Measure,
         Self::ErrorNode,
     ];
 }

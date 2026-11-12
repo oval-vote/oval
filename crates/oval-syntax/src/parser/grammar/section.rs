@@ -1,9 +1,10 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const SECTION_ENTRIES: [Expected; 2] = [
+const SECTION_ENTRIES: [Expected; 3] = [
     Expected::Keyword(Keyword::Note),
     Expected::Keyword(Keyword::Contest),
+    Expected::Keyword(Keyword::Measure),
 ];
 
 impl Parser<'_> {
@@ -24,6 +25,7 @@ impl Parser<'_> {
         match (keyword, head.has_modifiers()) {
             (Keyword::Note, false) => self.field_once(seen, keyword, Self::markdown_field),
             (Keyword::Contest, _) => self.contest(),
+            (Keyword::Measure, _) if !head.extensibility => self.measure(),
             _ => return false,
         }
         true
@@ -48,6 +50,7 @@ mod tests {
             expected: vec![
                 Expected::Keyword(Keyword::Note),
                 Expected::Keyword(Keyword::Contest),
+                Expected::Keyword(Keyword::Measure),
             ],
         }
     }
