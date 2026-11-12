@@ -10,6 +10,12 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits at the end of the line. The parser assumes the value and
     /// keeps the line with nothing in its place.
     MissingValue,
+    /// A token the grammar does not accept at that point on a line, such as a string after `date` or
+    /// a second value after a complete field.
+    ///
+    /// The error spans from that token to the end of the line. The parser discards those tokens,
+    /// keeps what it parsed before them, and continues on the next line.
+    UnexpectedToken,
 }
 
 impl SyntaxErrorKind {
@@ -20,6 +26,7 @@ impl SyntaxErrorKind {
     pub fn spec_id(self) -> &'static str {
         match self {
             Self::MissingValue => "missing-value",
+            Self::UnexpectedToken => "unexpected-token",
         }
     }
 }
@@ -80,6 +87,10 @@ mod tests {
     #[test]
     fn each_kind_has_its_specification_identifier() {
         assert_eq!(SyntaxErrorKind::MissingValue.spec_id(), "missing-value");
+        assert_eq!(
+            SyntaxErrorKind::UnexpectedToken.spec_id(),
+            "unexpected-token"
+        );
     }
 
     #[test]

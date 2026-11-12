@@ -38,8 +38,8 @@ mod tests {
 
     #[test]
     fn a_missing_version_is_reported_at_the_end_of_the_line() {
-        check_errors("oval   \n", &[missing_version(7)]);
-        check_errors("oval  # version?\n", &[missing_version(16)]);
+        check_errors("oval   \n", &[missing_version(4)]);
+        check_errors("oval  # version?\n", &[missing_version(4)]);
     }
 
     #[test]
@@ -190,6 +190,31 @@ mod tests {
                 Whitespace@4..5 " "
                 Error@5..7 "1x"
                 Newline@7..8 "\n"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_version_that_is_not_an_integer_is_an_unexpected_token() {
+        check_errors(
+            "oval x\n",
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedToken,
+                offset: 5,
+                len: 1,
+                expected: vec![Expected::Token(TokenKind::Integer)],
+            }],
+        );
+        check(
+            "oval x\n",
+            &expect![[r#"
+            Document@0..7
+              VersionMarker@0..7
+                Word@0..4 "oval"
+                Whitespace@4..5 " "
+                ErrorNode@5..6
+                  Word@5..6 "x"
+                Newline@6..7 "\n"
         "#]],
         );
     }

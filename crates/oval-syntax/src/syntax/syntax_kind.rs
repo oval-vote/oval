@@ -50,10 +50,15 @@ pub enum SyntaxKind {
     StringField,
     /// A field whose value is a date, such as `date 2026-11-03`.
     DateField,
+    /// Text the parser discarded or set aside while recovering from a syntax error.
+    ///
+    /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
+    /// nothing to the node that contains it.
+    ErrorNode,
 }
 
 impl SyntaxKind {
-    pub(super) const ALL: [Self; SyntaxKind::DateField as usize + 1] = [
+    pub(super) const ALL: [Self; SyntaxKind::ErrorNode as usize + 1] = [
         Self::Word,
         Self::String,
         Self::Integer,
@@ -75,6 +80,7 @@ impl SyntaxKind {
         Self::VersionMarker,
         Self::StringField,
         Self::DateField,
+        Self::ErrorNode,
     ];
 }
 

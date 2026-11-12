@@ -159,4 +159,123 @@ mod tests {
         "#]],
         );
     }
+
+    fn unexpected(offset: u32, len: u32, expected: TokenKind) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedToken,
+            offset,
+            len,
+            expected: vec![Expected::Token(expected)],
+        }
+    }
+
+    #[test]
+    fn a_value_of_the_wrong_kind_is_discarded() {
+        let text = "date \"November 3, 2026\"\n";
+        assert_eq!(
+            parse(text).unwrap().syntax_errors,
+            [unexpected(5, 18, TokenKind::Date)]
+        );
+        check(
+            text,
+            &expect![[r#"
+            Document@0..24
+              DateField@0..24
+                Word@0..4 "date"
+                Whitespace@4..5 " "
+                ErrorNode@5..23
+                  String@5..23 "\"November 3, 2026\""
+                Newline@23..24 "\n"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_token_after_a_complete_field_is_discarded() {
+        let text = "guide \"G\" extra\n";
+        assert_eq!(
+            parse(text).unwrap().syntax_errors,
+            [unexpected(10, 5, TokenKind::Newline)]
+        );
+        check(
+            text,
+            &expect![[r#"
+            Document@0..16
+              StringField@0..16
+                Word@0..5 "guide"
+                Whitespace@5..6 " "
+                String@6..9 "\"G\""
+                Whitespace@9..10 " "
+                ErrorNode@10..15
+                  Word@10..15 "extra"
+                Newline@15..16 "\n"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_second_value_is_discarded_but_not_a_comment_after_it() {
+        let text = "guide \"Vote for one\" \"Pick one\"  # which wording?\n";
+        assert_eq!(
+            parse(text).unwrap().syntax_errors,
+            [unexpected(21, 10, TokenKind::Newline)]
+        );
+        check(
+            text,
+            &expect![[r##"
+            Document@0..50
+              StringField@0..50
+                Word@0..5 "guide"
+                Whitespace@5..6 " "
+                String@6..20 "\"Vote for one\""
+                Whitespace@20..21 " "
+                ErrorNode@21..31
+                  String@21..31 "\"Pick one\""
+                Whitespace@31..33 "  "
+                Comment@33..49 "# which wording?"
+                Newline@49..50 "\n"
+        "##]],
+        );
+    }
+
+    #[test]
+    fn the_rest_of_the_line_is_discarded_together() {
+        assert_eq!(
+            parse("guide 1 2 3\n").unwrap().syntax_errors,
+            [unexpected(6, 5, TokenKind::String)]
+        );
+    }
+
+    #[test]
+    fn an_unexpected_token_beside_an_error_token_is_still_reported() {
+        let result = parse("date ~ \"x\"\n").unwrap();
+        assert_eq!(result.syntax_errors, [unexpected(7, 3, TokenKind::Date)]);
+        assert_eq!(result.lexical_errors.len(), 1);
+    }
+
+    #[test]
+    fn parsing_continues_on_the_line_after_a_skipped_one() {
+        let text = "guide 1\ndate 2026-11-03\n";
+        assert_eq!(
+            parse(text).unwrap().syntax_errors,
+            [unexpected(6, 1, TokenKind::String)]
+        );
+        check(
+            text,
+            &expect![[r#"
+            Document@0..24
+              StringField@0..8
+                Word@0..5 "guide"
+                Whitespace@5..6 " "
+                ErrorNode@6..7
+                  Integer@6..7 "1"
+                Newline@7..8 "\n"
+              DateField@8..24
+                Word@8..12 "date"
+                Whitespace@12..13 " "
+                Date@13..23 "2026-11-03"
+                Newline@23..24 "\n"
+        "#]],
+        );
+    }
 }

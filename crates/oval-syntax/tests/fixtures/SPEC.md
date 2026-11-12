@@ -1608,10 +1608,12 @@ if any, indented beneath it. The grammar says which entries each block accepts a
 line may carry, and the parser reports a syntax error at the first token it cannot accept. A
 document with a syntax error is not well-formed.
 
-Every syntax error has a recovery, so that two implementations build the same tree and report the
-same errors for the same broken document, and so that an editor can keep working on a half-written
-file. A tool that only needs to accept or reject a document may stop at the first error on the terms
-Section 3.1 gives. There are four recoveries, named here and referred to by each error below:
+Every syntax error has a recovery, so that two implementations keep and discard the same text and
+report the same errors for the same broken document, and so that an editor can keep working on a
+half-written file. This specification does not define the shape of the tree; a recovery fixes which
+text each construct keeps and which text is discarded or set aside. A tool that only needs to accept
+or reject a document may stop at the first error on the terms Section 3.1 gives. There are four
+recoveries, named here and referred to by each error below:
 
 - **Skip the line.** The tokens from the unexpected one to the end of the line are discarded. The
   construct keeps whatever was parsed before them, and parsing continues on the next line.
@@ -1638,6 +1640,14 @@ error is the only diagnostic for the text it covers. On a line that contains an 
 missing-token error is reported, since what is missing may be the text the lexer rejected. A line
 whose only token the parser does not skip is its terminator is treated as blank.
 
+Error ranges are measured over the tokens the parser does not skip. The _end of a line_ is the end
+of the last token on it, other than its terminator, that the parser does not skip, so whitespace, a
+comment, or an `Error` token after that point is not part of the line. An error that spans part of a
+line, a line, an entry, or a block begins at the first token in it that the parser does not skip and
+ends at the end of its last line, and a recovery that discards or sets aside that text leaves what
+comes before and after it in place. An error that is zero-length at the end of a line is at that
+position.
+
 #### Unexpected Token
 
 Occurs when a line carries a token the grammar does not accept at that point and the line has not
@@ -1656,6 +1666,13 @@ date "November 3, 2026"
 ```
 
 The `date` field is kept with no value; the string is discarded.
+
+```oval counter-example
+subtitle "Vote for one" "Pick one"  # which wording?
+```
+
+The error spans only the second string. The comment after it is not part of the line's range, so it
+is neither reported nor discarded.
 
 #### Missing Identifier
 

@@ -6,7 +6,7 @@ impl Parser<'_> {
         self.start_node(node);
         self.bump();
         self.expect(value, SyntaxErrorKind::MissingValue);
-        self.eat(TokenKind::Newline);
+        self.end_of_line();
         self.finish_node();
     }
 }

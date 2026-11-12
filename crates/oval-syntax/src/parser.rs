@@ -58,6 +58,7 @@ struct Parser<'t> {
     errors: Vec<SyntaxError>,
     line_start: usize,
     line_is_empty: bool,
+    line_end: usize,
 }
 
 impl<'t> Parser<'t> {
@@ -71,6 +72,7 @@ impl<'t> Parser<'t> {
             errors: Vec::new(),
             line_start: 0,
             line_is_empty: true,
+            line_end: 0,
         }
     }
 
@@ -124,16 +126,48 @@ impl<'t> Parser<'t> {
         if self.eat(kind) {
             return true;
         }
-        if self.at_line_end() && !self.line_has_error() {
-            let offset = self.peek().map_or(self.text.len(), |(_, offset)| offset);
-            self.errors.push(SyntaxError {
-                kind: missing,
-                offset: to_u32(offset),
-                len: 0,
-                expected: vec![Expected::Token(kind)],
-            });
+        if !self.at_line_end() {
+            self.skip_line(vec![Expected::Token(kind)]);
+        } else if !self.line_has_error() {
+            self.report(
+                missing,
+                self.line_end,
+                self.line_end,
+                vec![Expected::Token(kind)],
+            );
         }
         false
+    }
+
+    fn end_of_line(&mut self) {
+        if !self.at_line_end() {
+            self.skip_line(vec![Expected::Token(TokenKind::Newline)]);
+        }
+        self.eat(TokenKind::Newline);
+    }
+
+    fn skip_line(&mut self, expected: Vec<Expected>) {
+        self.start_node(SyntaxKind::ErrorNode);
+        let start = self.offset;
+        while !self.at_line_end() {
+            self.bump();
+        }
+        self.finish_node();
+        self.report(
+            SyntaxErrorKind::UnexpectedToken,
+            start,
+            self.line_end,
+            expected,
+        );
+    }
+
+    fn report(&mut self, kind: SyntaxErrorKind, start: usize, end: usize, expected: Vec<Expected>) {
+        self.errors.push(SyntaxError {
+            kind,
+            offset: to_u32(start),
+            len: to_u32(end - start),
+            expected,
+        });
     }
 
     fn line_has_error(&self) -> bool {
@@ -178,6 +212,7 @@ impl<'t> Parser<'t> {
     }
 
     fn add_token(&mut self, token: Token) {
+        let skipped = is_skipped(token, self.line_is_empty);
         let end = self.offset + token.len as usize;
         self.builder.token(
             OvalLanguage::kind_to_raw(token.kind.into()),
@@ -185,6 +220,9 @@ impl<'t> Parser<'t> {
         );
         self.pos += 1;
         self.offset = end;
+        if !skipped && token.kind != TokenKind::Newline {
+            self.line_end = end;
+        }
         if ends_line(token) {
             self.line_start = self.pos;
             self.line_is_empty = true;
@@ -345,6 +383,15 @@ mod tests {
         SyntaxNode::new_root(parser.finish().0)
     }
 
+    fn unexpected(offset: u32, len: u32, expected: TokenKind) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedToken,
+            offset,
+            len,
+            expected: vec![Expected::Token(expected)],
+        }
+    }
+
     fn missing_integer(offset: u32) -> SyntaxError {
         SyntaxError {
             kind: SyntaxErrorKind::MissingValue,
@@ -444,10 +491,10 @@ mod tests {
 
     #[test]
     fn expect_reports_a_missing_token_at_the_end_of_the_line() {
-        let mut parser = parser("oval  \n");
+        let mut parser = parser("oval  # version?\n");
         parser.bump();
         assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
-        assert_eq!(parser.errors, [missing_integer(6)]);
+        assert_eq!(parser.errors, [missing_integer(4)]);
     }
 
     #[test]
@@ -458,11 +505,12 @@ mod tests {
     }
 
     #[test]
-    fn expect_reports_nothing_when_another_token_is_there() {
-        let mut parser = parser("x\n");
+    fn expect_skips_the_rest_of_the_line_when_another_token_is_there() {
+        let mut parser = parser("oval x y\n");
+        parser.bump();
         assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
-        assert_eq!(parser.current(), Some(TokenKind::Word));
-        assert_eq!(parser.errors, []);
+        assert_eq!(parser.current(), Some(TokenKind::Newline));
+        assert_eq!(parser.errors, [unexpected(5, 3, TokenKind::Integer)]);
     }
 
     #[test]
@@ -512,5 +560,50 @@ mod tests {
         parser.bump();
         assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
         assert_eq!(parser.errors, [missing_integer(6)]);
+    }
+
+    #[test]
+    fn a_skipped_line_is_an_error_node_up_to_the_end_of_the_line() {
+        let mut parser = parser("oval x  # aside\n");
+        parser.bump();
+        parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
+        parser.end_of_line();
+        expect![[r##"
+            Document@0..16
+              Word@0..4 "oval"
+              Whitespace@4..5 " "
+              ErrorNode@5..6
+                Word@5..6 "x"
+              Whitespace@6..8 "  "
+              Comment@8..15 "# aside"
+              Newline@15..16 "\n"
+        "##]]
+        .assert_eq(&format!("{:#?}", tree(parser)));
+    }
+
+    #[test]
+    fn a_skipped_line_still_reports_beside_an_error_token() {
+        let mut parser = parser("oval ~ x\n");
+        parser.bump();
+        parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
+        assert_eq!(parser.errors, [unexpected(7, 1, TokenKind::Integer)]);
+    }
+
+    #[test]
+    fn end_of_line_takes_the_newline() {
+        let mut parser = parser("a\nb");
+        parser.bump();
+        parser.end_of_line();
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        assert_eq!(parser.errors, []);
+    }
+
+    #[test]
+    fn end_of_line_skips_tokens_before_the_newline() {
+        let mut parser = parser("a b c  # aside\nd");
+        parser.bump();
+        parser.end_of_line();
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        assert_eq!(parser.errors, [unexpected(2, 3, TokenKind::Newline)]);
     }
 }
