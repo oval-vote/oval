@@ -24,24 +24,30 @@ impl<'t> TokenParser<'t> {
         }
     }
 
-    pub(super) fn current(&mut self) -> Option<TokenKind> {
-        while let Some(token) = self.tokens.get(self.pos).copied()
-            && token.is_ignored()
-        {
-            self.add_token(token);
-        }
-        self.tokens.get(self.pos).map(|token| token.kind)
+    pub(super) fn current(&self) -> Option<TokenKind> {
+        self.peek().map(|(token, _)| token.kind)
     }
 
-    fn at(&mut self, kind: TokenKind) -> bool {
+    fn at(&self, kind: TokenKind) -> bool {
         self.current() == Some(kind)
     }
 
-    fn at_keyword(&mut self, keyword: Keyword) -> bool {
-        self.at(TokenKind::Word) && {
-            let len = self.tokens[self.pos].len as usize;
-            &self.text[self.offset..self.offset + len] == keyword.text()
+    fn at_keyword(&self, keyword: Keyword) -> bool {
+        self.peek().is_some_and(|(token, offset)| {
+            token.kind == TokenKind::Word
+                && &self.text[offset..offset + token.len as usize] == keyword.text()
+        })
+    }
+
+    fn peek(&self) -> Option<(Token, usize)> {
+        let mut offset = self.offset;
+        for &token in &self.tokens[self.pos..] {
+            if !token.is_ignored() {
+                return Some((token, offset));
+            }
+            offset += token.len as usize;
         }
+        None
     }
 
     fn eat(&mut self, kind: TokenKind) -> bool {
@@ -53,14 +59,20 @@ impl<'t> TokenParser<'t> {
     }
 
     pub(super) fn bump(&mut self) {
-        assert!(
-            self.current().is_some(),
-            "bump is only called before the end of input"
-        );
-        self.add_token(self.tokens[self.pos]);
+        self.skip_ignored();
+        let token = *self
+            .tokens
+            .get(self.pos)
+            .expect("bump is only called before the end of input");
+        self.add_token(token);
     }
 
     pub(super) fn start_node(&mut self, kind: SyntaxKind) {
+        self.skip_ignored();
+        self.start_node_here(kind);
+    }
+
+    fn start_node_here(&mut self, kind: SyntaxKind) {
         self.builder.start_node(OvalLanguage::kind_to_raw(kind));
     }
 
@@ -70,6 +82,14 @@ impl<'t> TokenParser<'t> {
 
     pub(super) fn finish(self) -> GreenNode {
         self.builder.finish()
+    }
+
+    fn skip_ignored(&mut self) {
+        while let Some(token) = self.tokens.get(self.pos).copied()
+            && token.is_ignored()
+        {
+            self.add_token(token);
+        }
     }
 
     fn add_token(&mut self, token: Token) {
@@ -87,10 +107,11 @@ impl<'t> TokenParser<'t> {
 mod tests {
     use super::*;
     use crate::{SyntaxNode, lex};
+    use expect_test::expect;
 
     fn parser(text: &str) -> TokenParser<'_> {
         let mut parser = TokenParser::new(text, lex(text).unwrap().tokens);
-        parser.start_node(SyntaxKind::Document);
+        parser.start_node_here(SyntaxKind::Document);
         parser
     }
 
@@ -100,10 +121,41 @@ mod tests {
     }
 
     #[test]
-    fn current_skips_ignored_tokens_but_keeps_them_in_the_tree() {
-        let mut parser = parser("  # aside\n\nword\n");
+    fn current_looks_past_ignored_tokens_without_taking_them() {
+        let parser = parser("  # aside\n\nword\n");
         assert_eq!(parser.current(), Some(TokenKind::Word));
-        assert_eq!(tree(parser).to_string(), "  # aside\n\n");
+        assert_eq!(tree(parser).to_string(), "");
+    }
+
+    #[test]
+    fn at_keyword_looks_past_ignored_tokens() {
+        let parser = parser("# aside\noval 1\n");
+        assert!(parser.at_keyword(Keyword::Oval));
+        assert!(!parser.at_keyword(Keyword::Guide));
+    }
+
+    #[test]
+    fn start_node_puts_ignored_tokens_before_the_node() {
+        let mut parser = parser("# aside\noval");
+        parser.start_node(SyntaxKind::VersionMarker);
+        parser.bump();
+        parser.finish_node();
+        expect![[r##"
+            Document@0..12
+              Comment@0..7 "# aside"
+              BlankLine@7..8 "\n"
+              VersionMarker@8..12
+                Word@8..12 "oval"
+        "##]]
+        .assert_eq(&format!("{:#?}", tree(parser)));
+    }
+
+    #[test]
+    fn skip_ignored_takes_ignored_tokens_up_to_the_next_real_one() {
+        let mut parser = parser("# aside\nword");
+        parser.skip_ignored();
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        assert_eq!(tree(parser).to_string(), "# aside\n");
     }
 
     #[test]
