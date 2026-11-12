@@ -58,6 +58,6 @@ mod syntax;
 mod token;
 
 pub use lexer::{InputRejection, LexResult, LexicalError, LexicalErrorKind, lex, lex_bytes};
-pub use parser::{Expected, SyntaxError, SyntaxErrorKind, parse};
+pub use parser::{Expected, ParseResult, SyntaxError, SyntaxErrorKind, parse};
 pub use syntax::{Keyword, OvalLanguage, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 pub use token::{Token, TokenKind};

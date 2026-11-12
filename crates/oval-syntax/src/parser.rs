@@ -1,16 +1,22 @@
+mod parse_result;
 mod syntax_error;
 mod token_parser;
 
 use token_parser::TokenParser;
 
+pub use parse_result::ParseResult;
 pub use syntax_error::{Expected, SyntaxError, SyntaxErrorKind};
 
-use crate::{InputRejection, SyntaxNode, lex};
+use crate::{InputRejection, LexResult, lex};
 
 /// Parses an Oval document into a syntax tree.
 ///
-/// The tree holds every token of the document, so its text is always exactly `text`. For now, every
-/// token is a child of one [`SyntaxKind::Document`](crate::SyntaxKind::Document) node.
+/// The tree holds every token of the document, so its text is always exactly `text`. Parsing never
+/// stops at an error. The tree is complete even when the document has lexical or syntax errors,
+/// which the [`ParseResult`] reports alongside it.
+///
+/// Only the version marker is parsed so far. Every other token is a direct child of the
+/// [`Document`](crate::SyntaxKind::Document) node.
 ///
 /// # Errors
 ///
@@ -21,38 +27,69 @@ use crate::{InputRejection, SyntaxNode, lex};
 /// ```
 /// use oval_syntax::{SyntaxKind, parse};
 ///
-/// let text = "date 2026-11-03\n";
-/// let tree = parse(text)?;
+/// let text = "oval 1\n";
+/// let result = parse(text)?;
+/// let tree = result.syntax();
 /// assert_eq!(tree.kind(), SyntaxKind::Document);
 /// assert_eq!(tree.to_string(), text);
+/// assert!(result.lexical_errors.is_empty());
+/// assert!(result.syntax_errors.is_empty());
 /// # Ok::<(), oval_syntax::InputRejection>(())
 /// ```
-pub fn parse(text: &str) -> Result<SyntaxNode, InputRejection> {
-    let mut parser = TokenParser::new(text, lex(text)?.tokens);
+pub fn parse(text: &str) -> Result<ParseResult, InputRejection> {
+    let LexResult { tokens, errors } = lex(text)?;
+    let mut parser = TokenParser::new(text, tokens);
     parser.document();
-    Ok(SyntaxNode::new_root(parser.finish()))
+    Ok(ParseResult {
+        green: parser.finish(),
+        lexical_errors: errors,
+        syntax_errors: Vec::new(),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SyntaxKind;
+    use crate::{LexicalError, LexicalErrorKind, SyntaxKind};
     use expect_test::{Expect, expect};
 
     pub(super) fn check(text: &str, expected: &Expect) {
-        let tree = parse(text).expect("the text is accepted");
+        let tree = parse(text).expect("the text is accepted").syntax();
         expected.assert_eq(&format!("{tree:#?}"));
     }
 
     fn check_round_trip(text: &str) {
-        let tree = parse(text).expect("the text is accepted");
+        let tree = parse(text).expect("the text is accepted").syntax();
         assert_eq!(tree.to_string(), text);
     }
 
     #[test]
     fn the_root_is_a_document() {
-        let tree = parse("date 2026-11-03\n").unwrap();
+        let tree = parse("date 2026-11-03\n").unwrap().syntax();
         assert_eq!(tree.kind(), SyntaxKind::Document);
+    }
+
+    #[test]
+    fn a_clean_document_has_no_errors() {
+        let result = parse("oval 1\nguide \"G\"\n").unwrap();
+        assert_eq!(result.lexical_errors, []);
+        assert_eq!(result.syntax_errors, []);
+    }
+
+    #[test]
+    fn lexical_errors_are_reported_alongside_the_tree() {
+        let text = "subtitle\t\"G\"\n";
+        let result = parse(text).unwrap();
+        assert_eq!(
+            result.lexical_errors,
+            [LexicalError {
+                kind: LexicalErrorKind::IllegalTab,
+                offset: 8,
+                len: 1,
+            }]
+        );
+        assert_eq!(result.syntax_errors, []);
+        assert_eq!(result.syntax().to_string(), text);
     }
 
     #[test]
@@ -78,7 +115,7 @@ mod tests {
 
     #[test]
     fn empty_input_is_an_empty_document() {
-        let tree = parse("").unwrap();
+        let tree = parse("").unwrap().syntax();
         assert_eq!(tree.kind(), SyntaxKind::Document);
         assert_eq!(tree.children_with_tokens().count(), 0);
     }
