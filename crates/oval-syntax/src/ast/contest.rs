@@ -1,7 +1,7 @@
 use crate::Keyword;
 use crate::ast::{
-    AstNode, ContestKind, Extensibility, Identifier, MarkdownField, Requirement, StringField,
-    StringLiteral, ast_node, support,
+    AstNode, Campaign, ContestKind, Extensibility, Identifier, MarkdownField, Requirement,
+    StringField, StringLiteral, ast_node, support,
 };
 
 ast_node! {
@@ -70,6 +70,11 @@ impl Contest {
     /// Returns the contest's `note` field, or `None` if it has none.
     pub fn note(&self) -> Option<MarkdownField> {
         support::block_field(self.syntax(), Keyword::Note)
+    }
+
+    /// Returns the contest's campaigns, in ballot order.
+    pub fn campaigns(&self) -> impl Iterator<Item = Campaign> + use<> {
+        support::block_children(self.syntax())
     }
 }
 
