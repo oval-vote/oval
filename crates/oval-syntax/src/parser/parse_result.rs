@@ -1,5 +1,6 @@
 use rowan::GreenNode;
 
+use crate::ast::{AstNode, Document};
 use crate::{LexicalError, SyntaxError, SyntaxNode};
 
 /// The syntax tree and errors of a document, as returned by [`parse`](crate::parse).
@@ -24,5 +25,14 @@ impl ParseResult {
     /// the tree rather than keeping the node around.
     pub fn syntax(&self) -> SyntaxNode {
         SyntaxNode::new_root(self.green.clone())
+    }
+
+    /// Returns the root of the syntax tree as a [`Document`] view.
+    ///
+    /// # Panics
+    ///
+    /// Never, since the root of every tree is a [`Document`](crate::SyntaxKind::Document) node.
+    pub fn document(&self) -> Document {
+        Document::cast(self.syntax()).expect("the root of the tree is a document")
     }
 }

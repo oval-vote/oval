@@ -52,6 +52,7 @@
 //! Lengths and offsets are counted in bytes, not characters, and stored as `u32`. A document longer
 //! than [`u32::MAX`] bytes is rejected, so every offset in an accepted document fits.
 
+pub mod ast;
 mod lexer;
 mod parser;
 mod syntax;
