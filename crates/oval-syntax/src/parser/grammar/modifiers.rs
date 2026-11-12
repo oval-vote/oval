@@ -78,6 +78,7 @@ mod tests {
                 Expected::Keyword(Keyword::Eligibility),
                 Expected::Keyword(Keyword::Note),
                 Expected::Keyword(Keyword::Section),
+                Expected::Keyword(Keyword::Contest),
                 Expected::Keyword(Keyword::Ballot),
             ],
         }

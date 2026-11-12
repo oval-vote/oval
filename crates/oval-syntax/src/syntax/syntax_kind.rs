@@ -80,6 +80,10 @@ pub enum SyntaxKind {
     Extensibility,
     /// A section of a ballot, such as `section "Federal Offices"` and the block below it.
     Section,
+    /// A contest, such as `contest @mayor "Mayor" single` and the block below it.
+    Contest,
+    /// A contest's kind, such as `single` or `ranked`, written after the contest's name.
+    ContestKind,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -121,6 +125,8 @@ impl SyntaxKind {
         Self::Requirement,
         Self::Extensibility,
         Self::Section,
+        Self::Contest,
+        Self::ContestKind,
         Self::ErrorNode,
     ];
 }

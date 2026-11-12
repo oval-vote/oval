@@ -1,10 +1,11 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const BALLOT_ENTRIES: [Expected; 4] = [
+const BALLOT_ENTRIES: [Expected; 5] = [
     Expected::Keyword(Keyword::Eligibility),
     Expected::Keyword(Keyword::Note),
     Expected::Keyword(Keyword::Section),
+    Expected::Keyword(Keyword::Contest),
     Expected::Keyword(Keyword::Ballot),
 ];
 
@@ -30,6 +31,7 @@ impl Parser<'_> {
             }),
             (Keyword::Note, false) => self.field_once(seen, keyword, Self::markdown_field),
             (Keyword::Section, _) => self.section(),
+            (Keyword::Contest, _) => self.contest(),
             (Keyword::Ballot, _) => self.ballot(),
             _ => return false,
         }
@@ -184,6 +186,7 @@ mod tests {
                     Expected::Keyword(Keyword::Eligibility),
                     Expected::Keyword(Keyword::Note),
                     Expected::Keyword(Keyword::Section),
+                    Expected::Keyword(Keyword::Contest),
                     Expected::Keyword(Keyword::Ballot),
                 ],
             }],

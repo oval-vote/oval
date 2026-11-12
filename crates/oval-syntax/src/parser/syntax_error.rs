@@ -38,6 +38,12 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits at the end of the line. The parser keeps the declaration
     /// without a name.
     MissingName,
+    /// A contest whose name is followed by the end of the line instead of its kind, such as
+    /// `single`.
+    ///
+    /// The error has no length and sits at the end of the line. The parser keeps the contest without
+    /// a kind.
+    MissingContestKind,
     /// A line that begins with a token no entry of the enclosing block can begin with, such as
     /// `designation` inside a party.
     ///
@@ -74,6 +80,7 @@ impl SyntaxErrorKind {
             Self::RepeatedField => "repeated-field",
             Self::MissingIdentifier => "missing-identifier",
             Self::MissingName => "missing-name",
+            Self::MissingContestKind => "missing-contest-kind",
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
             Self::MissingBlock => "missing-block",
@@ -149,6 +156,10 @@ mod tests {
             "missing-identifier"
         );
         assert_eq!(SyntaxErrorKind::MissingName.spec_id(), "missing-name");
+        assert_eq!(
+            SyntaxErrorKind::MissingContestKind.spec_id(),
+            "missing-contest-kind"
+        );
         assert_eq!(
             SyntaxErrorKind::UnexpectedEntry.spec_id(),
             "unexpected-entry"

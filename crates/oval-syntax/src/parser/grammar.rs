@@ -1,6 +1,7 @@
 mod ballot;
 mod block;
 mod candidate;
+mod contest;
 mod declaration;
 mod document;
 mod field;
