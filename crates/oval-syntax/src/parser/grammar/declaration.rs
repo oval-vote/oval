@@ -1,5 +1,11 @@
 use crate::parser::Parser;
-use crate::{Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
+use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
+
+const PARTY_FIELDS: [Expected; 3] = [
+    Expected::Keyword(Keyword::Abbreviation),
+    Expected::Keyword(Keyword::Website),
+    Expected::Keyword(Keyword::Note),
+];
 
 impl Parser<'_> {
     pub(super) fn declaration(&mut self) -> bool {
@@ -17,7 +23,7 @@ impl Parser<'_> {
         self.expect(TokenKind::String, SyntaxErrorKind::MissingName);
         self.end_of_line();
         if self.at(TokenKind::Indent) {
-            self.block(Self::party_field);
+            self.block(&PARTY_FIELDS, Self::party_field);
         }
         self.finish_node();
     }

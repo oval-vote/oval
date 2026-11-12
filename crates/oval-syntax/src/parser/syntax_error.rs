@@ -37,6 +37,12 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits at the end of the line. The parser keeps the declaration
     /// without a name.
     MissingName,
+    /// A line that begins with a token no entry of the enclosing block can begin with, such as
+    /// `designation` inside a party.
+    ///
+    /// The error spans the line and its block or body, if it has one. The parser discards the whole
+    /// entry and continues with the next entry at the same level.
+    UnexpectedEntry,
 }
 
 impl SyntaxErrorKind {
@@ -52,6 +58,7 @@ impl SyntaxErrorKind {
             Self::RepeatedField => "repeated-field",
             Self::MissingIdentifier => "missing-identifier",
             Self::MissingName => "missing-name",
+            Self::UnexpectedEntry => "unexpected-entry",
         }
     }
 }
@@ -123,6 +130,10 @@ mod tests {
             "missing-identifier"
         );
         assert_eq!(SyntaxErrorKind::MissingName.spec_id(), "missing-name");
+        assert_eq!(
+            SyntaxErrorKind::UnexpectedEntry.spec_id(),
+            "unexpected-entry"
+        );
     }
 
     #[test]
