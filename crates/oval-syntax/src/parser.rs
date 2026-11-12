@@ -268,10 +268,38 @@ mod tests {
     use super::*;
     use crate::{LexicalError, LexicalErrorKind, SyntaxNode};
     use expect_test::{Expect, expect};
+    use rowan::{NodeOrToken, WalkEvent};
+    use std::fmt::Write;
 
     pub(super) fn check(text: &str, expected: &Expect) {
         let tree = parse(text).expect("the text is accepted").syntax();
-        expected.assert_eq(&format!("{tree:#?}"));
+        expected.assert_eq(&dump(&tree));
+    }
+
+    fn dump(tree: &SyntaxNode) -> String {
+        let mut out = String::new();
+        let mut depth = 0;
+        for event in tree.preorder_with_tokens() {
+            match event {
+                WalkEvent::Enter(element) => {
+                    let indent = "  ".repeat(depth);
+                    write!(
+                        out,
+                        "{indent}{:?}@{:?}",
+                        element.kind(),
+                        element.text_range()
+                    )
+                    .unwrap();
+                    if let NodeOrToken::Token(token) = element {
+                        write!(out, " {:?}", token.text()).unwrap();
+                    }
+                    out.push('\n');
+                    depth += 1;
+                }
+                WalkEvent::Leave(_) => depth -= 1,
+            }
+        }
+        out
     }
 
     fn check_round_trip(text: &str) {
@@ -459,7 +487,7 @@ mod tests {
               VersionMarker@8..12
                 Word@8..12 "oval"
         "##]]
-        .assert_eq(&format!("{:#?}", tree(parser)));
+        .assert_eq(&dump(&tree(parser)));
     }
 
     #[test]
@@ -598,7 +626,7 @@ mod tests {
               Comment@8..15 "# aside"
               Newline@15..16 "\n"
         "##]]
-        .assert_eq(&format!("{:#?}", tree(parser)));
+        .assert_eq(&dump(&tree(parser)));
     }
 
     #[test]

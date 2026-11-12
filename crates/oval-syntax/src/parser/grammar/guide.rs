@@ -289,35 +289,35 @@ mod tests {
         check(
             text,
             &expect![[r#"
-            Document@0..147
-              VersionMarker@0..7
-                Word@0..4 "oval"
-                Whitespace@4..5 " "
-                Integer@5..6 "1"
-                Newline@6..7 "\n"
-              BlankLine@7..8 "\n"
-              StringField@8..37
-                Word@8..13 "guide"
-                Whitespace@13..14 " "
-                String@14..36 "\"Franklin Voter Guide\""
-                Newline@36..37 "\n"
-              StringField@37..82
-                Word@37..45 "election"
-                Whitespace@45..46 " "
-                String@46..81 "\"November 3, 2026 Gen ..."
-                Newline@81..82 "\n"
-              DateField@82..98
-                Word@82..86 "date"
-                Whitespace@86..87 " "
-                Date@87..97 "2026-11-03"
-                Newline@97..98 "\n"
-              BlankLine@98..99 "\n"
-              MarkdownField@99..147
-                Word@99..103 "note"
-                Colon@103..104 ":"
-                Newline@104..105 "\n"
-                MarkdownBlock@105..147 "  Written by the Fran ..."
-        "#]],
+                Document@0..147
+                  VersionMarker@0..7
+                    Word@0..4 "oval"
+                    Whitespace@4..5 " "
+                    Integer@5..6 "1"
+                    Newline@6..7 "\n"
+                  BlankLine@7..8 "\n"
+                  StringField@8..37
+                    Word@8..13 "guide"
+                    Whitespace@13..14 " "
+                    String@14..36 "\"Franklin Voter Guide\""
+                    Newline@36..37 "\n"
+                  StringField@37..82
+                    Word@37..45 "election"
+                    Whitespace@45..46 " "
+                    String@46..81 "\"November 3, 2026 General Election\""
+                    Newline@81..82 "\n"
+                  DateField@82..98
+                    Word@82..86 "date"
+                    Whitespace@86..87 " "
+                    Date@87..97 "2026-11-03"
+                    Newline@97..98 "\n"
+                  BlankLine@98..99 "\n"
+                  MarkdownField@99..147
+                    Word@99..103 "note"
+                    Colon@103..104 ":"
+                    Newline@104..105 "\n"
+                    MarkdownBlock@105..147 "  Written by the Franklin Civic Alliance.\n"
+            "#]],
         );
     }
 }

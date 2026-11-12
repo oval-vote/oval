@@ -54,13 +54,13 @@ mod tests {
         check(
             "note:\n  Read *both* arguments.\n",
             &expect![[r#"
-            Document@0..31
-              MarkdownField@0..31
-                Word@0..4 "note"
-                Colon@4..5 ":"
-                Newline@5..6 "\n"
-                MarkdownBlock@6..31 "  Read *both* argumen ..."
-        "#]],
+                Document@0..31
+                  MarkdownField@0..31
+                    Word@0..4 "note"
+                    Colon@4..5 ":"
+                    Newline@5..6 "\n"
+                    MarkdownBlock@6..31 "  Read *both* arguments.\n"
+            "#]],
         );
     }
 
@@ -178,17 +178,17 @@ mod tests {
         check(
             text,
             &expect![[r#"
-            Document@0..72
-              StringField@0..72
-                Word@0..5 "guide"
-                Whitespace@5..6 " "
-                String@6..28 "\"Franklin Voter Guide\""
-                ErrorNode@28..29
-                  Colon@28..29 ":"
-                Newline@29..30 "\n"
-                ErrorNode@30..72
-                  MarkdownBlock@30..72 "  Written by the Fran ..."
-        "#]],
+                Document@0..72
+                  StringField@0..72
+                    Word@0..5 "guide"
+                    Whitespace@5..6 " "
+                    String@6..28 "\"Franklin Voter Guide\""
+                    ErrorNode@28..29
+                      Colon@28..29 ":"
+                    Newline@29..30 "\n"
+                    ErrorNode@30..72
+                      MarkdownBlock@30..72 "  Written by the Franklin Civic Alliance.\n"
+            "#]],
         );
     }
 
