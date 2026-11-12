@@ -3,6 +3,10 @@ use crate::{Expected, SyntaxErrorKind, SyntaxKind, TokenKind};
 
 impl Parser<'_> {
     pub(super) fn identifier(&mut self) {
+        self.identifier_expecting(vec![Expected::Token(TokenKind::AtSign)]);
+    }
+
+    pub(super) fn identifier_expecting(&mut self, expected: Vec<Expected>) {
         if self.at(TokenKind::AtSign) {
             self.start_node(SyntaxKind::Identifier);
             self.bump();
@@ -21,15 +25,10 @@ impl Parser<'_> {
                     Some((token, offset)) if token.kind == TokenKind::String => offset,
                     _ => self.line_end,
                 };
-                self.report(
-                    SyntaxErrorKind::MissingIdentifier,
-                    offset,
-                    offset,
-                    vec![Expected::Token(TokenKind::AtSign)],
-                );
+                self.report(SyntaxErrorKind::MissingIdentifier, offset, offset, expected);
             }
         } else {
-            self.skip_line(vec![Expected::Token(TokenKind::AtSign)]);
+            self.skip_line(expected);
         }
     }
 }

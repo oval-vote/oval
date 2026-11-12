@@ -53,33 +53,32 @@ impl Parser<'_> {
     fn stance(&mut self, kind: SyntaxKind) {
         self.start_node(kind);
         self.bump();
-        let mut has_choice = false;
+        self.choice();
         while self.at(TokenKind::AtSign) || self.current_keyword() == Some(Keyword::WriteIn) {
             self.choice();
-            has_choice = true;
         }
         if !self.at_line_end() {
-            let mut expected = vec![
+            self.skip_line(vec![
                 Expected::Token(TokenKind::AtSign),
                 Expected::Keyword(Keyword::WriteIn),
-            ];
-            if has_choice {
-                expected.push(Expected::Token(TokenKind::Newline));
-            }
-            self.skip_line(expected);
+                Expected::Token(TokenKind::Newline),
+            ]);
         }
         self.end_of_line();
         self.finish_node();
     }
 
     fn choice(&mut self) {
-        if self.at(TokenKind::AtSign) {
-            self.identifier();
-        } else {
+        if self.current_keyword() == Some(Keyword::WriteIn) {
             self.start_node(SyntaxKind::WriteIn);
             self.bump();
             self.eat(TokenKind::String);
             self.finish_node();
+        } else {
+            self.identifier_expecting(vec![
+                Expected::Token(TokenKind::AtSign),
+                Expected::Keyword(Keyword::WriteIn),
+            ]);
         }
     }
 
@@ -480,5 +479,49 @@ mod tests {
                 ],
             }],
         );
+    }
+
+    fn missing_identifier(offset: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::MissingIdentifier,
+            offset,
+            len: 0,
+            expected: vec![
+                Expected::Token(TokenKind::AtSign),
+                Expected::Keyword(Keyword::WriteIn),
+            ],
+        }
+    }
+
+    #[test]
+    fn a_stance_without_a_choice_is_missing_its_identifier() {
+        let text = in_contest("    recommend\n      support\n");
+        check_errors(&text, &[missing_identifier(65)]);
+        assert_eq!(stance_child_nodes(&text), []);
+    }
+
+    #[test]
+    fn a_name_in_place_of_the_first_choice_is_missing_its_identifier_and_unexpected() {
+        let text = in_contest("    recommend\n      oppose \"Jane Doe\"\n");
+        check_errors(
+            &text,
+            &[missing_identifier(65), unexpected_token(65, 10, true)],
+        );
+        assert_eq!(stance_child_nodes(&text), [SyntaxKind::ErrorNode]);
+    }
+
+    #[test]
+    fn choices_after_a_name_in_place_of_the_first_choice_are_skipped() {
+        check_errors(
+            &in_contest("    recommend\n      support \"Jane\" @b\n"),
+            &[missing_identifier(66), unexpected_token(66, 9, true)],
+        );
+    }
+
+    #[test]
+    fn a_missing_choice_is_not_reported_where_an_error_token_is() {
+        let result = parse(&in_contest("    recommend\n      support ~\n")).unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(result.syntax_errors, []);
     }
 }
