@@ -41,7 +41,11 @@ pub(super) fn keyword(node: &SyntaxNode) -> Option<Keyword> {
 }
 
 pub(super) fn has_keyword(node: &SyntaxNode, keyword: Keyword) -> bool {
-    words(node).any(|word| word.text() == keyword.text())
+    keyword_token(node, keyword).is_some()
+}
+
+pub(super) fn keyword_token(node: &SyntaxNode, keyword: Keyword) -> Option<SyntaxToken> {
+    words(node).find(|word| word.text() == keyword.text())
 }
 
 fn words(node: &SyntaxNode) -> impl Iterator<Item = SyntaxToken> + use<> {
