@@ -140,6 +140,10 @@ pub enum SyntaxKind {
     WriteIn,
     /// A ballot measure, such as `measure @prop1 "Proposition 1"` and the block below it.
     Measure,
+    /// A measure's recommendation, such as `recommend yes` and the block of fields below it.
+    MeasureRecommend,
+    /// A measure recommendation's position, `yes`, `no`, `no-position`, or `abstain`.
+    MeasurePosition,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -198,6 +202,8 @@ impl SyntaxKind {
         Self::Oppose,
         Self::WriteIn,
         Self::Measure,
+        Self::MeasureRecommend,
+        Self::MeasurePosition,
         Self::ErrorNode,
     ];
 }

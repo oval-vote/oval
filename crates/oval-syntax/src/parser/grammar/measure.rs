@@ -1,7 +1,7 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const MEASURE_ENTRIES: [Expected; 10] = [
+const MEASURE_ENTRIES: [Expected; 11] = [
     Expected::Keyword(Keyword::Subtitle),
     Expected::Keyword(Keyword::Description),
     Expected::Keyword(Keyword::IfYes),
@@ -12,6 +12,7 @@ const MEASURE_ENTRIES: [Expected; 10] = [
     Expected::Keyword(Keyword::Supporters),
     Expected::Keyword(Keyword::Opponents),
     Expected::Keyword(Keyword::Note),
+    Expected::Keyword(Keyword::Recommend),
 ];
 
 impl Parser<'_> {
@@ -44,6 +45,7 @@ impl Parser<'_> {
             Keyword::Supporters | Keyword::Opponents => {
                 self.field_once(seen, keyword, Self::string_list_field);
             }
+            Keyword::Recommend => self.measure_recommend(),
             _ => return false,
         }
         true
@@ -72,6 +74,7 @@ mod tests {
             Expected::Keyword(Keyword::Supporters),
             Expected::Keyword(Keyword::Opponents),
             Expected::Keyword(Keyword::Note),
+            Expected::Keyword(Keyword::Recommend),
         ]
     }
 
@@ -391,5 +394,137 @@ mod tests {
         let result = parse(&in_measure("    supporters \"A\", ~\n")).unwrap();
         assert_eq!(result.lexical_errors.len(), 1);
         assert_eq!(result.syntax_errors, []);
+    }
+
+    fn positions() -> Vec<Expected> {
+        vec![
+            Expected::Keyword(Keyword::Yes),
+            Expected::Keyword(Keyword::No),
+            Expected::Keyword(Keyword::NoPosition),
+            Expected::Keyword(Keyword::Abstain),
+        ]
+    }
+
+    fn recommend_child_nodes(text: &str) -> Vec<SyntaxKind> {
+        let tree = parse(text).unwrap().syntax();
+        let recommend = tree
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::MeasureRecommend)
+            .expect("the measure has a recommendation");
+        recommend.children().map(|node| node.kind()).collect()
+    }
+
+    #[test]
+    fn a_measure_recommendation_holds_its_position_and_fields() {
+        let text = in_measure("    recommend yes\n      justification:\n        J.\n");
+        check_errors(&text, &[]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..81
+              Ballot@0..81
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..81
+                  Indent@16..16 ""
+                  Measure@16..81
+                    Word@16..23 "measure"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "p"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"P\""
+                    Newline@30..31 "\n"
+                    Whitespace@31..35 "    "
+                    Block@35..81
+                      Indent@35..35 ""
+                      MeasureRecommend@35..81
+                        Word@35..44 "recommend"
+                        Whitespace@44..45 " "
+                        MeasurePosition@45..48
+                          Word@45..48 "yes"
+                        Newline@48..49 "\n"
+                        Whitespace@49..55 "      "
+                        Block@55..81
+                          Indent@55..55 ""
+                          MarkdownField@55..81
+                            Word@55..68 "justification"
+                            Colon@68..69 ":"
+                            Newline@69..70 "\n"
+                            MarkdownBlock@70..81 "        J.\n"
+                          Dedent@81..81 ""
+                      Dedent@81..81 ""
+                  Dedent@81..81 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn each_position_is_a_node_and_needs_no_block() {
+        for position in ["yes", "no", "no-position", "abstain"] {
+            let text = in_measure(&format!("    recommend {position}\n"));
+            check_errors(&text, &[]);
+            assert_eq!(
+                recommend_child_nodes(&text),
+                [SyntaxKind::MeasurePosition],
+                "{position}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_measure_recommendation_without_a_position_is_missing_its_value() {
+        let text = in_measure("    recommend\n");
+        check_errors(&text, &[missing_value(44, positions())]);
+        assert_eq!(recommend_child_nodes(&text), []);
+    }
+
+    #[test]
+    fn a_word_that_is_not_a_position_is_an_unexpected_token() {
+        check_errors(
+            &in_measure("    recommend maybe\n"),
+            &[unexpected_token(45, 5, positions())],
+        );
+    }
+
+    #[test]
+    fn a_token_after_the_position_is_an_unexpected_token() {
+        check_errors(
+            &in_measure("    recommend yes now\n"),
+            &[unexpected_token(
+                49,
+                3,
+                vec![Expected::Token(TokenKind::Newline)],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_stance_is_an_unexpected_entry_under_a_measure_recommendation() {
+        check_errors(
+            &in_measure("    recommend yes\n      support @a\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedEntry,
+                offset: 55,
+                len: 10,
+                expected: vec![
+                    Expected::Keyword(Keyword::Justification),
+                    Expected::Keyword(Keyword::Note),
+                ],
+            }],
+        );
+    }
+
+    #[test]
+    fn a_second_measure_recommendation_is_not_a_syntax_error() {
+        check_errors(&in_measure("    recommend yes\n    recommend no\n"), &[]);
     }
 }

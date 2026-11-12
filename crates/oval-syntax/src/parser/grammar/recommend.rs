@@ -13,6 +13,13 @@ const RECOMMEND_FIELDS: [Expected; 2] = [
     Expected::Keyword(Keyword::Note),
 ];
 
+const MEASURE_POSITIONS: [Expected; 4] = [
+    Expected::Keyword(Keyword::Yes),
+    Expected::Keyword(Keyword::No),
+    Expected::Keyword(Keyword::NoPosition),
+    Expected::Keyword(Keyword::Abstain),
+];
+
 impl Parser<'_> {
     pub(super) fn contest_recommend(&mut self) {
         self.start_node(SyntaxKind::ContestRecommend);
@@ -62,6 +69,26 @@ impl Parser<'_> {
             } else {
                 self.missing_block();
             }
+        }
+        self.finish_node();
+    }
+
+    pub(super) fn measure_recommend(&mut self) {
+        self.start_node(SyntaxKind::MeasureRecommend);
+        self.bump();
+        if matches!(
+            self.current_keyword(),
+            Some(Keyword::Yes | Keyword::No | Keyword::NoPosition | Keyword::Abstain)
+        ) {
+            self.start_node(SyntaxKind::MeasurePosition);
+            self.bump();
+            self.finish_node();
+        } else {
+            self.recover_missing(SyntaxErrorKind::MissingValue, MEASURE_POSITIONS.to_vec());
+        }
+        self.end_of_line();
+        if self.at(TokenKind::Indent) {
+            self.block(&RECOMMEND_FIELDS, Self::recommend_field);
         }
         self.finish_node();
     }
