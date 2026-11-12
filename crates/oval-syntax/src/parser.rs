@@ -82,11 +82,16 @@ impl<'t> Parser<'t> {
         self.current() == Some(kind)
     }
 
+    fn current_keyword(&self) -> Option<Keyword> {
+        let (token, offset) = self.peek()?;
+        if token.kind != TokenKind::Word {
+            return None;
+        }
+        Keyword::from_text(&self.text[offset..offset + token.len as usize])
+    }
+
     fn at_keyword(&self, keyword: Keyword) -> bool {
-        self.peek().is_some_and(|(token, offset)| {
-            token.kind == TokenKind::Word
-                && &self.text[offset..offset + token.len as usize] == keyword.text()
-        })
+        self.current_keyword() == Some(keyword)
     }
 
     fn peek(&self) -> Option<(Token, usize)> {
@@ -246,15 +251,16 @@ mod tests {
     }
 
     #[test]
-    fn every_token_is_a_child_of_the_document() {
+    fn every_token_is_inside_the_document() {
         check(
             "guide \"G\"\n  note:\n    Text.\n",
             &expect![[r#"
                 Document@0..28
-                  Word@0..5 "guide"
-                  Whitespace@5..6 " "
-                  String@6..9 "\"G\""
-                  Newline@9..10 "\n"
+                  StringField@0..10
+                    Word@0..5 "guide"
+                    Whitespace@5..6 " "
+                    String@6..9 "\"G\""
+                    Newline@9..10 "\n"
                   Whitespace@10..12 "  "
                   Indent@12..12 ""
                   Word@12..16 "note"
@@ -353,6 +359,17 @@ mod tests {
         let parser = parser("  # aside\n\nword\n");
         assert_eq!(parser.current(), Some(TokenKind::Word));
         assert_eq!(tree(parser).to_string(), "");
+    }
+
+    #[test]
+    fn current_keyword_is_the_keyword_of_the_next_word() {
+        assert_eq!(
+            parser("# aside\ndate x").current_keyword(),
+            Some(Keyword::Date)
+        );
+        assert_eq!(parser("dates").current_keyword(), None);
+        assert_eq!(parser("\"date\"").current_keyword(), None);
+        assert_eq!(parser("").current_keyword(), None);
     }
 
     #[test]

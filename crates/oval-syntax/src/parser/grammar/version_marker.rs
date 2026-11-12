@@ -1,13 +1,9 @@
 use crate::parser::Parser;
-use crate::{SyntaxErrorKind, SyntaxKind, TokenKind};
+use crate::{SyntaxKind, TokenKind};
 
 impl Parser<'_> {
     pub(super) fn version_marker(&mut self) {
-        self.start_node(SyntaxKind::VersionMarker);
-        self.bump();
-        self.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
-        self.eat(TokenKind::Newline);
-        self.finish_node();
+        self.value_field(SyntaxKind::VersionMarker, TokenKind::Integer);
     }
 }
 
@@ -89,17 +85,18 @@ mod tests {
         check(
             "oval 1\nguide \"G\"\n",
             &expect![[r#"
-            Document@0..17
-              VersionMarker@0..7
-                Word@0..4 "oval"
-                Whitespace@4..5 " "
-                Integer@5..6 "1"
-                Newline@6..7 "\n"
-              Word@7..12 "guide"
-              Whitespace@12..13 " "
-              String@13..16 "\"G\""
-              Newline@16..17 "\n"
-        "#]],
+                Document@0..17
+                  VersionMarker@0..7
+                    Word@0..4 "oval"
+                    Whitespace@4..5 " "
+                    Integer@5..6 "1"
+                    Newline@6..7 "\n"
+                  StringField@7..17
+                    Word@7..12 "guide"
+                    Whitespace@12..13 " "
+                    String@13..16 "\"G\""
+                    Newline@16..17 "\n"
+            "#]],
         );
     }
 
@@ -108,12 +105,13 @@ mod tests {
         check(
             "guide \"G\"\n",
             &expect![[r#"
-            Document@0..10
-              Word@0..5 "guide"
-              Whitespace@5..6 " "
-              String@6..9 "\"G\""
-              Newline@9..10 "\n"
-        "#]],
+                Document@0..10
+                  StringField@0..10
+                    Word@0..5 "guide"
+                    Whitespace@5..6 " "
+                    String@6..9 "\"G\""
+                    Newline@9..10 "\n"
+            "#]],
         );
     }
 
@@ -150,16 +148,17 @@ mod tests {
         check(
             "guide \"G\"\noval 1\n",
             &expect![[r#"
-            Document@0..17
-              Word@0..5 "guide"
-              Whitespace@5..6 " "
-              String@6..9 "\"G\""
-              Newline@9..10 "\n"
-              Word@10..14 "oval"
-              Whitespace@14..15 " "
-              Integer@15..16 "1"
-              Newline@16..17 "\n"
-        "#]],
+                Document@0..17
+                  StringField@0..10
+                    Word@0..5 "guide"
+                    Whitespace@5..6 " "
+                    String@6..9 "\"G\""
+                    Newline@9..10 "\n"
+                  Word@10..14 "oval"
+                  Whitespace@14..15 " "
+                  Integer@15..16 "1"
+                  Newline@16..17 "\n"
+            "#]],
         );
     }
 

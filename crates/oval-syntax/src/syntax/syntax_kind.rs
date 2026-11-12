@@ -46,10 +46,14 @@ pub enum SyntaxKind {
     Document,
     /// The version marker.
     VersionMarker,
+    /// A field whose value is a string, such as `guide "Franklin Voter Guide"`.
+    StringField,
+    /// A field whose value is a date, such as `date 2026-11-03`.
+    DateField,
 }
 
 impl SyntaxKind {
-    pub(super) const ALL: [Self; SyntaxKind::VersionMarker as usize + 1] = [
+    pub(super) const ALL: [Self; SyntaxKind::DateField as usize + 1] = [
         Self::Word,
         Self::String,
         Self::Integer,
@@ -69,6 +73,8 @@ impl SyntaxKind {
         Self::Error,
         Self::Document,
         Self::VersionMarker,
+        Self::StringField,
+        Self::DateField,
     ];
 }
 

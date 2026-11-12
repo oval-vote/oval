@@ -7,6 +7,7 @@ impl Parser<'_> {
         if self.at_keyword(Keyword::Oval) {
             self.version_marker();
         }
+        while self.guide_field() {}
         while self.current().is_some() {
             self.bump();
         }
