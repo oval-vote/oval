@@ -2,12 +2,12 @@ mod token_parser;
 
 use token_parser::TokenParser;
 
-use crate::{InputRejection, SyntaxKind, SyntaxNode, lex};
+use crate::{InputRejection, SyntaxNode, lex};
 
 /// Parses an Oval document into a syntax tree.
 ///
 /// The tree holds every token of the document, so its text is always exactly `text`. For now, every
-/// token is a child of one [`SyntaxKind::Document`] node.
+/// token is a child of one [`SyntaxKind::Document`](crate::SyntaxKind::Document) node.
 ///
 /// # Errors
 ///
@@ -26,20 +26,17 @@ use crate::{InputRejection, SyntaxKind, SyntaxNode, lex};
 /// ```
 pub fn parse(text: &str) -> Result<SyntaxNode, InputRejection> {
     let mut parser = TokenParser::new(text, lex(text)?.tokens);
-    parser.start_node(SyntaxKind::Document);
-    while parser.current().is_some() {
-        parser.bump();
-    }
-    parser.finish_node();
+    parser.document();
     Ok(SyntaxNode::new_root(parser.finish()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::SyntaxKind;
     use expect_test::{Expect, expect};
 
-    fn check(text: &str, expected: &Expect) {
+    pub(super) fn check(text: &str, expected: &Expect) {
         let tree = parse(text).expect("the text is accepted");
         expected.assert_eq(&format!("{tree:#?}"));
     }

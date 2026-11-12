@@ -1,3 +1,6 @@
+mod document;
+mod version_marker;
+
 use rowan::{GreenNode, GreenNodeBuilder, Language};
 
 use crate::{OvalLanguage, SyntaxKind, Token, TokenKind};
@@ -28,6 +31,25 @@ impl<'t> TokenParser<'t> {
             self.add_token(token);
         }
         self.tokens.get(self.pos).map(|token| token.kind)
+    }
+
+    fn at(&mut self, kind: TokenKind) -> bool {
+        self.current() == Some(kind)
+    }
+
+    fn at_keyword(&mut self, keyword: &str) -> bool {
+        self.at(TokenKind::Word) && {
+            let len = self.tokens[self.pos].len as usize;
+            &self.text[self.offset..self.offset + len] == keyword
+        }
+    }
+
+    fn eat(&mut self, kind: TokenKind) -> bool {
+        let at = self.at(kind);
+        if at {
+            self.bump();
+        }
+        at
     }
 
     pub(super) fn bump(&mut self) {

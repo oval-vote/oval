@@ -44,10 +44,12 @@ pub enum SyntaxKind {
     Error,
     /// The root node of a syntax tree, which covers the whole document.
     Document,
+    /// The version marker.
+    VersionMarker,
 }
 
 impl SyntaxKind {
-    pub(super) const ALL: [Self; SyntaxKind::Document as usize + 1] = [
+    pub(super) const ALL: [Self; SyntaxKind::VersionMarker as usize + 1] = [
         Self::Word,
         Self::String,
         Self::Integer,
@@ -66,6 +68,7 @@ impl SyntaxKind {
         Self::Dedent,
         Self::Error,
         Self::Document,
+        Self::VersionMarker,
     ];
 }
 
