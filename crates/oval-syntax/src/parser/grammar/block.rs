@@ -11,15 +11,17 @@ impl Parser<'_> {
         self.bump();
         let mut seen = Vec::new();
         while !self.at(TokenKind::Dedent) && self.current().is_some() {
-            if !entry(self, &mut seen) {
-                self.skip_entry(accepts);
+            if self.at(TokenKind::Indent) {
+                self.skip_entry(SyntaxErrorKind::UnexpectedBlock, Vec::new());
+            } else if !entry(self, &mut seen) {
+                self.skip_entry(SyntaxErrorKind::UnexpectedEntry, accepts.to_vec());
             }
         }
         self.eat(TokenKind::Dedent);
         self.finish_node();
     }
 
-    fn skip_entry(&mut self, accepts: &[Expected]) {
+    fn skip_entry(&mut self, kind: SyntaxErrorKind, expected: Vec<Expected>) {
         self.start_node(SyntaxKind::ErrorNode);
         let start = self.offset;
         while !self.at_line_end() {
@@ -32,12 +34,7 @@ impl Parser<'_> {
         self.finish_node();
         let skipped_text = self.line_end > start;
         if skipped_text {
-            self.report(
-                SyntaxErrorKind::UnexpectedEntry,
-                start,
-                self.line_end,
-                accepts.to_vec(),
-            );
+            self.report(kind, start, self.line_end, expected);
         }
     }
 
@@ -281,6 +278,91 @@ mod tests {
         let result = parse("party @dem \"D\"\n  designation ~  # aside\n").unwrap();
         assert_eq!(result.lexical_errors.len(), 1);
         assert_eq!(result.syntax_errors, [unexpected_entry(17, 11)]);
+    }
+
+    fn unexpected_block(offset: u32, len: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedBlock,
+            offset,
+            len,
+            expected: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_block_below_a_line_that_takes_none_is_skipped() {
+        let text = "party @dem \"D\"\n  abbreviation \"D\"\n    website https://x.example\n  note:\n    Text.\n";
+        check_errors(text, &[unexpected_block(38, 25)]);
+        check(
+            text,
+            &expect![[r#"
+            Document@0..82
+              Party@0..82
+                Word@0..5 "party"
+                Whitespace@5..6 " "
+                Identifier@6..10
+                  AtSign@6..7 "@"
+                  Word@7..10 "dem"
+                Whitespace@10..11 " "
+                String@11..14 "\"D\""
+                Newline@14..15 "\n"
+                Whitespace@15..17 "  "
+                Block@17..82
+                  Indent@17..17 ""
+                  StringField@17..34
+                    Word@17..29 "abbreviation"
+                    Whitespace@29..30 " "
+                    String@30..33 "\"D\""
+                    Newline@33..34 "\n"
+                  Whitespace@34..38 "    "
+                  ErrorNode@38..66
+                    Indent@38..38 ""
+                    Word@38..45 "website"
+                    Whitespace@45..46 " "
+                    Url@46..63 "https://x.example"
+                    Newline@63..64 "\n"
+                    Whitespace@64..66 "  "
+                    Dedent@66..66 ""
+                  MarkdownField@66..82
+                    Word@66..70 "note"
+                    Colon@70..71 ":"
+                    Newline@71..72 "\n"
+                    MarkdownBlock@72..82 "    Text.\n"
+                  Dedent@82..82 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn an_unexpected_block_is_skipped_to_its_own_dedent() {
+        check_errors(
+            "party @dem \"D\"\n  abbreviation \"D\"\n    a\n      b\n  website https://x.example\n",
+            &[unexpected_block(38, 9)],
+        );
+    }
+
+    #[test]
+    fn an_unexpected_block_can_end_two_blocks_at_once() {
+        check_errors(
+            "party @dem \"D\"\n  abbreviation \"D\"\n    a\nparty @rep \"R\"\n  abbreviation \"R\"\n",
+            &[unexpected_block(38, 1)],
+        );
+    }
+
+    #[test]
+    fn a_repeated_field_and_its_unexpected_block_are_both_reported() {
+        check_errors(
+            "party @dem \"D\"\n  abbreviation \"D\"\n  abbreviation \"E\"\n    a\n",
+            &[
+                SyntaxError {
+                    kind: SyntaxErrorKind::RepeatedField,
+                    offset: 36,
+                    len: 16,
+                    expected: Vec::new(),
+                },
+                unexpected_block(57, 1),
+            ],
+        );
     }
 
     #[test]

@@ -43,6 +43,10 @@ pub enum SyntaxErrorKind {
     /// The error spans the line and its block or body, if it has one. The parser discards the whole
     /// entry and continues with the next entry at the same level.
     UnexpectedEntry,
+    /// An indented block below a line that takes none, such as a field whose value is on its line.
+    ///
+    /// The error spans the block. The parser discards the block and keeps the line above it.
+    UnexpectedBlock,
 }
 
 impl SyntaxErrorKind {
@@ -59,6 +63,7 @@ impl SyntaxErrorKind {
             Self::MissingIdentifier => "missing-identifier",
             Self::MissingName => "missing-name",
             Self::UnexpectedEntry => "unexpected-entry",
+            Self::UnexpectedBlock => "unexpected-block",
         }
     }
 }
@@ -133,6 +138,10 @@ mod tests {
         assert_eq!(
             SyntaxErrorKind::UnexpectedEntry.spec_id(),
             "unexpected-entry"
+        );
+        assert_eq!(
+            SyntaxErrorKind::UnexpectedBlock.spec_id(),
+            "unexpected-block"
         );
     }
 
