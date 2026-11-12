@@ -23,6 +23,10 @@ description = "Run Prettier on the npm package"
 run = "npm run format"
 dir = "packages/oval"
 
+[tasks."fmt:mise"]
+description = "Format mise.toml"
+run = "mise fmt"
+
 [tasks.ci]
 description = "Validate the repository: formatting, lints, documentation, and versions"
 depends = ["ci:*"]
@@ -35,6 +39,10 @@ run = "cargo fmt --all --check"
 description = "Check formatting of the npm package"
 run = "npm run format:check"
 dir = "packages/oval"
+
+[tasks."ci:fmt-mise"]
+description = "Check formatting of mise.toml"
+run = "mise fmt --check"
 
 [tasks."ci:clippy"]
 description = "Lint the Rust crates"
