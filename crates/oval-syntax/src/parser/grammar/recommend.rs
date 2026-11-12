@@ -29,7 +29,7 @@ impl Parser<'_> {
             self.finish_node();
             self.end_of_line();
             if self.at(TokenKind::Indent) {
-                self.block(&RECOMMEND_FIELDS, Self::recommend_field);
+                self.block(&RECOMMEND_FIELDS, Self::no_stance_entry);
             }
         } else {
             if !self.at_line_end() {
@@ -67,13 +67,28 @@ impl Parser<'_> {
     }
 
     fn stance_entry(&mut self, seen: &mut Vec<Keyword>, has_stance: &mut bool) -> bool {
-        match self.current_keyword() {
-            Some(Keyword::Support) => self.stance(SyntaxKind::Support),
-            Some(Keyword::Oppose) => self.stance(SyntaxKind::Oppose),
-            _ => return self.recommend_field(seen),
-        }
+        let Some(kind) = self.stance_kind() else {
+            return self.recommend_field(seen);
+        };
+        self.stance(kind);
         *has_stance = true;
         true
+    }
+
+    fn no_stance_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
+        let Some(kind) = self.stance_kind() else {
+            return self.recommend_field(seen);
+        };
+        self.set_aside(SyntaxErrorKind::UnexpectedStance, |p| p.stance(kind));
+        true
+    }
+
+    fn stance_kind(&self) -> Option<SyntaxKind> {
+        match self.current_keyword()? {
+            Keyword::Support => Some(SyntaxKind::Support),
+            Keyword::Oppose => Some(SyntaxKind::Oppose),
+            _ => None,
+        }
     }
 
     fn stance(&mut self, kind: SyntaxKind) {
@@ -644,5 +659,101 @@ mod tests {
         .unwrap();
         assert_eq!(result.lexical_errors.len(), 1);
         assert_eq!(result.syntax_errors, [empty_recommendation()]);
+    }
+
+    fn unexpected_stance(offset: u32, len: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedStance,
+            offset,
+            len,
+            expected: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_stance_under_a_recommendation_without_one_is_set_aside() {
+        let text = in_contest(
+            "    recommend abstain\n      support @bsantos\n      justification:\n        J.\n",
+        );
+        check_errors(&text, &[unexpected_stance(66, 16)]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..115
+              Ballot@0..115
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..115
+                  Indent@16..16 ""
+                  Contest@16..115
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..37
+                      Word@31..37 "single"
+                    Newline@37..38 "\n"
+                    Whitespace@38..42 "    "
+                    Block@42..115
+                      Indent@42..42 ""
+                      ContestRecommend@42..115
+                        Word@42..51 "recommend"
+                        Whitespace@51..52 " "
+                        NoStance@52..59
+                          Word@52..59 "abstain"
+                        Newline@59..60 "\n"
+                        Whitespace@60..66 "      "
+                        Block@66..115
+                          Indent@66..66 ""
+                          ErrorNode@66..83
+                            Support@66..83
+                              Word@66..73 "support"
+                              Whitespace@73..74 " "
+                              Identifier@74..82
+                                AtSign@74..75 "@"
+                                Word@75..82 "bsantos"
+                              Newline@82..83 "\n"
+                          Whitespace@83..89 "      "
+                          MarkdownField@89..115
+                            Word@89..102 "justification"
+                            Colon@102..103 ":"
+                            Newline@103..104 "\n"
+                            MarkdownBlock@104..115 "        J.\n"
+                          Dedent@115..115 ""
+                      Dedent@115..115 ""
+                  Dedent@115..115 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn each_unexpected_stance_is_reported() {
+        check_errors(
+            &in_contest("    recommend no-position\n      oppose @c\n      support @a\n"),
+            &[unexpected_stance(70, 9), unexpected_stance(86, 10)],
+        );
+    }
+
+    #[test]
+    fn errors_inside_an_unexpected_stance_follow_it() {
+        check_errors(
+            &in_contest("    recommend abstain\n      support \"Jane\"\n"),
+            &[
+                unexpected_stance(66, 14),
+                missing_identifier(74),
+                unexpected_token(74, 6, true),
+            ],
+        );
     }
 }

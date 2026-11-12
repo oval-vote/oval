@@ -60,6 +60,12 @@ pub enum SyntaxErrorKind {
     ///
     /// The error spans the `recommend` keyword. The parser keeps the recommendation and its block.
     EmptyRecommendation,
+    /// A `support` or `oppose` line in the block of a contest's recommendation that has
+    /// `no-position` or `abstain`.
+    ///
+    /// The error spans the line. The parser parses the line, so that errors inside it are still
+    /// reported, but sets it aside.
+    UnexpectedStance,
     /// A line that begins with a token no entry of the enclosing block can begin with, such as
     /// `designation` inside a party.
     ///
@@ -100,6 +106,7 @@ impl SyntaxErrorKind {
             Self::RepeatedModifier => "repeated-modifier",
             Self::RepeatedFlag => "repeated-flag",
             Self::EmptyRecommendation => "empty-recommendation",
+            Self::UnexpectedStance => "unexpected-stance",
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
             Self::MissingBlock => "missing-block",
@@ -187,6 +194,10 @@ mod tests {
         assert_eq!(
             SyntaxErrorKind::EmptyRecommendation.spec_id(),
             "empty-recommendation"
+        );
+        assert_eq!(
+            SyntaxErrorKind::UnexpectedStance.spec_id(),
+            "unexpected-stance"
         );
         assert_eq!(
             SyntaxErrorKind::UnexpectedEntry.spec_id(),
