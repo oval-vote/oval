@@ -2,13 +2,18 @@ use crate::parser::Parser;
 use crate::{Keyword, SyntaxKind, TokenKind};
 
 impl Parser<'_> {
-    pub(super) fn guide_field(&mut self) -> bool {
-        match self.current_keyword() {
-            Some(Keyword::Guide | Keyword::Election) => {
-                self.value_field(SyntaxKind::StringField, TokenKind::String);
-            }
-            Some(Keyword::Date) => self.value_field(SyntaxKind::DateField, TokenKind::Date),
-            Some(Keyword::Note) => self.markdown_field(),
+    pub(super) fn guide_field(&mut self, seen: &mut Vec<Keyword>) -> bool {
+        let Some(keyword) = self.current_keyword() else {
+            return false;
+        };
+        match keyword {
+            Keyword::Guide | Keyword::Election => self.field_once(seen, keyword, |p| {
+                p.value_field(SyntaxKind::StringField, TokenKind::String);
+            }),
+            Keyword::Date => self.field_once(seen, keyword, |p| {
+                p.value_field(SyntaxKind::DateField, TokenKind::Date);
+            }),
+            Keyword::Note => self.field_once(seen, keyword, Self::markdown_field),
             _ => return false,
         }
         true
@@ -318,6 +323,101 @@ mod tests {
                     Newline@104..105 "\n"
                     MarkdownBlock@105..147 "  Written by the Franklin Civic Alliance.\n"
             "#]],
+        );
+    }
+
+    fn repeated(offset: u32, len: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::RepeatedField,
+            offset,
+            len,
+            expected: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_repeated_field_is_set_aside() {
+        let text = "guide \"A\"\nguide \"B\"\n";
+        assert_eq!(parse(text).unwrap().syntax_errors, [repeated(10, 9)]);
+        check(
+            text,
+            &expect![[r#"
+            Document@0..20
+              StringField@0..10
+                Word@0..5 "guide"
+                Whitespace@5..6 " "
+                String@6..9 "\"A\""
+                Newline@9..10 "\n"
+              ErrorNode@10..20
+                StringField@10..20
+                  Word@10..15 "guide"
+                  Whitespace@15..16 " "
+                  String@16..19 "\"B\""
+                  Newline@19..20 "\n"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn every_repeat_after_the_first_is_set_aside() {
+        assert_eq!(
+            parse("guide \"A\"\nguide \"B\"\nguide \"C\"\n")
+                .unwrap()
+                .syntax_errors,
+            [repeated(10, 9), repeated(20, 9)]
+        );
+    }
+
+    #[test]
+    fn errors_inside_a_repeated_field_follow_it() {
+        assert_eq!(
+            parse("date 2026-11-03\ndate \"x\"\n")
+                .unwrap()
+                .syntax_errors,
+            [repeated(16, 8), unexpected(21, 3, TokenKind::Date)]
+        );
+    }
+
+    #[test]
+    fn a_repeated_markdown_field_is_set_aside_with_its_body() {
+        let text = "note:\n  A.\nnote:\n  B.\n";
+        assert_eq!(parse(text).unwrap().syntax_errors, [repeated(11, 11)]);
+        check(
+            text,
+            &expect![[r#"
+            Document@0..22
+              MarkdownField@0..11
+                Word@0..4 "note"
+                Colon@4..5 ":"
+                Newline@5..6 "\n"
+                MarkdownBlock@6..11 "  A.\n"
+              ErrorNode@11..22
+                MarkdownField@11..22
+                  Word@11..15 "note"
+                  Colon@15..16 ":"
+                  Newline@16..17 "\n"
+                  MarkdownBlock@17..22 "  B.\n"
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_repeated_field_does_not_span_a_comment_after_it() {
+        assert_eq!(
+            parse("guide \"A\"\nguide \"B\"  # again\n")
+                .unwrap()
+                .syntax_errors,
+            [repeated(10, 9)]
+        );
+    }
+
+    #[test]
+    fn different_fields_are_not_repeats() {
+        assert_eq!(
+            parse("guide \"A\"\nelection \"B\"\ndate 2026-11-03\nnote:\n  C.\n")
+                .unwrap()
+                .syntax_errors,
+            []
         );
     }
 }

@@ -1,7 +1,33 @@
+use crate::lexer::to_u32;
 use crate::parser::Parser;
-use crate::{Expected, SyntaxErrorKind, SyntaxKind, TokenKind};
+use crate::{Expected, Keyword, SyntaxError, SyntaxErrorKind, SyntaxKind, TokenKind};
 
 impl Parser<'_> {
+    pub(super) fn field_once(
+        &mut self,
+        seen: &mut Vec<Keyword>,
+        keyword: Keyword,
+        field: impl FnOnce(&mut Self),
+    ) {
+        if !seen.contains(&keyword) {
+            seen.push(keyword);
+            field(self);
+            return;
+        }
+        let index = self.errors.len();
+        self.start_node(SyntaxKind::ErrorNode);
+        let start = self.offset;
+        field(self);
+        self.finish_node();
+        let error = SyntaxError {
+            kind: SyntaxErrorKind::RepeatedField,
+            offset: to_u32(start),
+            len: to_u32(self.line_end - start),
+            expected: Vec::new(),
+        };
+        self.errors.insert(index, error);
+    }
+
     pub(super) fn value_field(&mut self, node: SyntaxKind, value: TokenKind) {
         self.start_node(node);
         self.bump();

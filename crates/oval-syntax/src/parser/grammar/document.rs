@@ -7,7 +7,8 @@ impl Parser<'_> {
         if self.at_keyword(Keyword::Oval) {
             self.version_marker();
         }
-        while self.guide_field() {}
+        let mut seen = Vec::new();
+        while self.guide_field(&mut seen) {}
         while self.current().is_some() {
             self.bump();
         }

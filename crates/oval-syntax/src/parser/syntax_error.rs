@@ -21,6 +21,11 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits just after the line's terminator. The parser keeps the field
     /// with an empty body.
     MissingBody,
+    /// A field whose keyword already appeared in the same block, or at the document level.
+    ///
+    /// The error spans the second field, including its body. The parser parses the field in full,
+    /// so that errors inside it are still reported, but sets it aside, and the first one stands.
+    RepeatedField,
 }
 
 impl SyntaxErrorKind {
@@ -33,6 +38,7 @@ impl SyntaxErrorKind {
             Self::MissingValue => "missing-value",
             Self::UnexpectedToken => "unexpected-token",
             Self::MissingBody => "missing-body",
+            Self::RepeatedField => "repeated-field",
         }
     }
 }
@@ -98,6 +104,7 @@ mod tests {
             "unexpected-token"
         );
         assert_eq!(SyntaxErrorKind::MissingBody.spec_id(), "missing-body");
+        assert_eq!(SyntaxErrorKind::RepeatedField.spec_id(), "repeated-field");
     }
 
     #[test]
