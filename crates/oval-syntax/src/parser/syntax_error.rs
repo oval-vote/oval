@@ -44,6 +44,12 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits at the end of the line. The parser keeps the contest without
     /// a kind.
     MissingContestKind,
+    /// A contest modifier, such as `seats` or `all`, that already appeared after the same
+    /// contest's kind.
+    ///
+    /// The error spans the second modifier, including its number. The parser parses the modifier,
+    /// so that errors inside it are still reported, but sets it aside, and the first one stands.
+    RepeatedModifier,
     /// A line that begins with a token no entry of the enclosing block can begin with, such as
     /// `designation` inside a party.
     ///
@@ -81,6 +87,7 @@ impl SyntaxErrorKind {
             Self::MissingIdentifier => "missing-identifier",
             Self::MissingName => "missing-name",
             Self::MissingContestKind => "missing-contest-kind",
+            Self::RepeatedModifier => "repeated-modifier",
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
             Self::MissingBlock => "missing-block",
@@ -159,6 +166,10 @@ mod tests {
         assert_eq!(
             SyntaxErrorKind::MissingContestKind.spec_id(),
             "missing-contest-kind"
+        );
+        assert_eq!(
+            SyntaxErrorKind::RepeatedModifier.spec_id(),
+            "repeated-modifier"
         );
         assert_eq!(
             SyntaxErrorKind::UnexpectedEntry.spec_id(),

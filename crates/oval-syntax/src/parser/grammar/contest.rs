@@ -42,11 +42,19 @@ impl Parser<'_> {
             self.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
         }
         let accepts = contest_modifiers(kind);
+        let mut seen = Vec::new();
         while let Some(modifier) = self
             .current_keyword()
             .filter(|keyword| accepts.contains(keyword))
         {
-            self.contest_modifier(modifier);
+            if seen.contains(&modifier) {
+                self.set_aside(SyntaxErrorKind::RepeatedModifier, |p| {
+                    p.contest_modifier(modifier);
+                });
+            } else {
+                seen.push(modifier);
+                self.contest_modifier(modifier);
+            }
         }
         self.finish_node();
         if !self.at_line_end() {
@@ -561,6 +569,122 @@ mod tests {
                 44,
                 3,
                 vec![Expected::Token(TokenKind::Integer)],
+            )],
+        );
+    }
+
+    fn repeated_modifier(offset: u32, len: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::RepeatedModifier,
+            offset,
+            len,
+            expected: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_repeated_modifier_is_set_aside_with_its_number() {
+        let text = header("ranked max 6 max 4");
+        check_errors(&text, &[repeated_modifier(44, 5)]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..67
+              Ballot@0..67
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..67
+                  Indent@16..16 ""
+                  Contest@16..67
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..49
+                      Word@31..37 "ranked"
+                      Whitespace@37..38 " "
+                      RankedMax@38..43
+                        Word@38..41 "max"
+                        Whitespace@41..42 " "
+                        Integer@42..43 "6"
+                      Whitespace@43..44 " "
+                      ErrorNode@44..49
+                        RankedMax@44..49
+                          Word@44..47 "max"
+                          Whitespace@47..48 " "
+                          Integer@48..49 "4"
+                    Newline@49..50 "\n"
+                    Whitespace@50..54 "    "
+                    Block@54..67
+                      Indent@54..54 ""
+                      StringField@54..67
+                        Word@54..62 "subtitle"
+                        Whitespace@62..63 " "
+                        String@63..66 "\"S\""
+                        Newline@66..67 "\n"
+                      Dedent@67..67 ""
+                  Dedent@67..67 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_repeated_all_is_set_aside() {
+        check_errors(&header("ranked all all"), &[repeated_modifier(42, 3)]);
+    }
+
+    #[test]
+    fn each_repetition_is_reported() {
+        check_errors(
+            &header("ranked all all all"),
+            &[repeated_modifier(42, 3), repeated_modifier(46, 3)],
+        );
+    }
+
+    #[test]
+    fn modifiers_after_a_repeated_one_are_still_parsed() {
+        let text = header("ranked max 6 max 4 min 2");
+        check_errors(&text, &[repeated_modifier(44, 5)]);
+        assert_eq!(
+            modifier_nodes(&text),
+            [
+                SyntaxKind::RankedMax,
+                SyntaxKind::ErrorNode,
+                SyntaxKind::Minimum
+            ]
+        );
+    }
+
+    #[test]
+    fn errors_inside_a_repeated_modifier_follow_it() {
+        check_errors(
+            &header("single seats 2 seats"),
+            &[repeated_modifier(46, 5), missing_value(51)],
+        );
+    }
+
+    #[test]
+    fn a_modifier_the_kind_does_not_accept_is_not_also_repeated() {
+        check_errors(
+            &header("single max 5 max 6"),
+            &[unexpected_token(
+                38,
+                11,
+                vec![
+                    Expected::Keyword(Keyword::Seats),
+                    Expected::Token(TokenKind::Newline),
+                ],
             )],
         );
     }
