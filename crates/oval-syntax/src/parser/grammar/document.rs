@@ -9,6 +9,7 @@ impl Parser<'_> {
         }
         let mut seen = Vec::new();
         while self.guide_field(&mut seen) {}
+        while self.declaration() {}
         while self.current().is_some() {
             self.bump();
         }

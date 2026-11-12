@@ -52,6 +52,10 @@ pub enum SyntaxKind {
     DateField,
     /// A field whose value is a Markdown body, such as `note:` and the indented lines below it.
     MarkdownField,
+    /// An identifier, such as `@dem`, which names an entity.
+    Identifier,
+    /// A party declaration, such as `party @dem "Democratic"`.
+    Party,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -83,6 +87,8 @@ impl SyntaxKind {
         Self::StringField,
         Self::DateField,
         Self::MarkdownField,
+        Self::Identifier,
+        Self::Party,
         Self::ErrorNode,
     ];
 }

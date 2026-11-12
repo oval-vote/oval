@@ -26,6 +26,17 @@ pub enum SyntaxErrorKind {
     /// The error spans the second field, including its body. The parser parses the field in full,
     /// so that errors inside it are still reported, but sets it aside, and the first one stands.
     RepeatedField,
+    /// A line that ends, or has a string, where an identifier is required, or an `@` that is not
+    /// followed by a word.
+    ///
+    /// The error has no length. It sits where the identifier would begin, or just after an `@` that
+    /// has no word. The parser assumes the identifier and continues with the rest of the line.
+    MissingIdentifier,
+    /// A declaration whose identifier is followed by the end of the line instead of its name.
+    ///
+    /// The error has no length and sits at the end of the line. The parser keeps the declaration
+    /// without a name.
+    MissingName,
 }
 
 impl SyntaxErrorKind {
@@ -39,6 +50,8 @@ impl SyntaxErrorKind {
             Self::UnexpectedToken => "unexpected-token",
             Self::MissingBody => "missing-body",
             Self::RepeatedField => "repeated-field",
+            Self::MissingIdentifier => "missing-identifier",
+            Self::MissingName => "missing-name",
         }
     }
 }
@@ -105,6 +118,11 @@ mod tests {
         );
         assert_eq!(SyntaxErrorKind::MissingBody.spec_id(), "missing-body");
         assert_eq!(SyntaxErrorKind::RepeatedField.spec_id(), "repeated-field");
+        assert_eq!(
+            SyntaxErrorKind::MissingIdentifier.spec_id(),
+            "missing-identifier"
+        );
+        assert_eq!(SyntaxErrorKind::MissingName.spec_id(), "missing-name");
     }
 
     #[test]

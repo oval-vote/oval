@@ -130,7 +130,7 @@ impl<'t> Parser<'t> {
         }
         if !self.at_line_end() {
             self.skip_line(vec![Expected::Token(kind)]);
-        } else if !self.line_has_error() {
+        } else if !self.line_was_skipped && !self.line_has_error() {
             self.report(
                 missing,
                 self.line_end,

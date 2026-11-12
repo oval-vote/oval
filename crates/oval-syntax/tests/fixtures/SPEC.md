@@ -1691,10 +1691,10 @@ begin: after `ballot`, `contest`, `measure`, `party`, or `candidate`; after `par
 and after `support` or `oppose`, which require at least one choice, a reference or a `write-in`. It
 also occurs when `@` is not followed by a `Word`. Any other token in that position is an unexpected
 token. The error is reported as `missing-identifier` and is zero-length at the position where the
-identifier would begin. To recover, assume the missing token and continue with the rest of the line;
-after `support` or `oppose`, a `String` in the identifier's place is skipped with it, since it is
-not a second error. A name written there is usually a write-in missing its keyword: write
-`write-in "Name"`.
+identifier would begin, or, after an `@` with no `Word`, just after the `@`, where the `Word` would
+begin. To recover, assume the missing token and continue with the rest of the line; after `support`
+or `oppose`, a `String` in the identifier's place is skipped with it, since it is not a second
+error. A name written there is usually a write-in missing its keyword: write `write-in "Name"`.
 
 ```oval example
 party @dem "Democratic"
@@ -1705,6 +1705,12 @@ party "Democratic"
 ```
 
 The party is kept with its name and no identifier.
+
+```oval counter-example
+party @ "Democratic"
+```
+
+The error is just after the `@`. The party is kept with its name and an identifier with no word.
 
 #### Missing Name
 
