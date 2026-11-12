@@ -1,13 +1,30 @@
-//! Checks the lexer against the token sequences and errors in the specification's examples.
+//! Checks the lexer and parser against the specification's examples.
 //!
-//! TEMPORARY: this test and its copy of the specification in `fixtures/SPEC.md` exist to check the
-//! rewrite during development. Delete both before the rewrite is merged. Refresh the copy with
-//! `cp ../oval-spec/SPEC.md crates/oval-syntax/tests/fixtures/SPEC.md`.
+//! TEMPORARY: these tests and their copies of the specification in `fixtures/SPEC.md` and of its
+//! example guide in `fixtures/franklin.oval` exist to check the rewrite during development. Delete
+//! them before the rewrite is merged. Refresh the copies with
+//! `cp ../oval-spec/SPEC.md ../oval-spec/examples/franklin.oval crates/oval-syntax/tests/fixtures/`.
 
-use oval_syntax::{TokenKind, lex};
+use oval_syntax::{ParseResult, TokenKind, lex, parse};
 
 const SPEC: &str = include_str!("fixtures/SPEC.md");
 
+const FRANKLIN: &str = include_str!("fixtures/franklin.oval");
+
+const CONTEXTS: &[(&str, &str, usize)] = &[
+    ("document", "", 0),
+    ("ballot", "ballot @x \"X\"\n", 2),
+    ("section", "ballot @x \"X\"\n  section \"S\"\n", 4),
+    ("contest", "ballot @x \"X\"\n  contest @y \"Y\" single\n", 4),
+    ("measure", "ballot @x \"X\"\n  measure @y \"Y\"\n", 4),
+    ("party", "party @x \"X\"\n", 2),
+    ("candidate", "candidate @x \"X\"\n", 2),
+    (
+        "campaign",
+        "ballot @x \"X\"\n  contest @y \"Y\" single\n    campaign\n",
+        6,
+    ),
+];
 const NOT_YET_LEXED: &[&str] = &[];
 
 const NOT_YET_REPORTED: &[&str] = &[];
@@ -176,5 +193,145 @@ fn lexer_matches_the_specification_examples() {
         "{} of {checked} specification examples failed:\n\n{}",
         failures.len(),
         failures.join("\n\n"),
+    );
+}
+
+fn heading_before(spec: &str, line: usize) -> (&str, &str) {
+    let mut section = "";
+    let mut heading = "";
+    for text in spec.lines().take(line) {
+        if let Some(rest) = text.strip_prefix("### ") {
+            section = rest;
+        } else if let Some(rest) = text.strip_prefix("#### ") {
+            heading = rest;
+        }
+    }
+    (section, heading)
+}
+
+fn in_context(example: &str, prefix: &str, indent: usize) -> String {
+    let mut text = prefix.to_owned();
+    for line in example.lines() {
+        if !line.is_empty() {
+            text.push_str(&" ".repeat(indent));
+        }
+        text.push_str(line);
+        text.push('\n');
+    }
+    text
+}
+
+fn lexical_errors_are_elisions(text: &str, result: &ParseResult) -> bool {
+    result.lexical_errors.iter().all(|error| {
+        let start = error.offset as usize;
+        error.kind.spec_id() == "unexpected-character"
+            && &text[start..start + error.len as usize] == "."
+    })
+}
+
+fn describe(text: &str, result: &ParseResult) -> String {
+    let lexical: Vec<_> = result
+        .lexical_errors
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    let syntax: Vec<_> = result
+        .syntax_errors
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    format!("{text}  lexical errors: {lexical:?}\n  syntax errors: {syntax:?}")
+}
+
+#[test]
+fn parser_accepts_the_specification_examples() {
+    let mut checked = 0;
+    let mut failures = Vec::new();
+    for block in blocks(SPEC) {
+        if block.info != "oval example" {
+            continue;
+        }
+        checked += 1;
+        let accepted = CONTEXTS.iter().any(|(_, prefix, indent)| {
+            let text = in_context(&block.content, prefix, *indent);
+            let result = parse(&text).expect("the example is accepted");
+            lexical_errors_are_elisions(&text, &result)
+                && result
+                    .syntax_errors
+                    .iter()
+                    .all(|error| error.spec_id() == "missing-block")
+        });
+        if !accepted {
+            let result = parse(&block.content).expect("the example is accepted");
+            failures.push(format!(
+                "SPEC.md line {}, as a document:\n{}",
+                block.line,
+                describe(&block.content, &result),
+            ));
+        }
+    }
+    println!("parsed {checked} examples");
+    assert!(checked > 0, "no specification examples were parsed");
+    assert!(
+        failures.is_empty(),
+        "{} of {checked} specification examples have errors in every context:\n\n{}",
+        failures.len(),
+        failures.join("\n\n"),
+    );
+}
+
+#[test]
+fn parser_reports_the_error_of_each_syntax_counter_example() {
+    let mut checked = 0;
+    let mut failures = Vec::new();
+    for block in blocks(SPEC) {
+        let (section, heading) = heading_before(SPEC, block.line);
+        if block.info != "oval counter-example" || !section.starts_with("3.2.") {
+            continue;
+        }
+        checked += 1;
+        let expected = heading.to_lowercase().replace(' ', "-");
+        let reported = CONTEXTS.iter().any(|(_, prefix, indent)| {
+            let text = in_context(&block.content, prefix, *indent);
+            let result = parse(&text).expect("the counter-example is accepted");
+            let ids: Vec<&str> = result
+                .syntax_errors
+                .iter()
+                .map(oval_syntax::SyntaxError::spec_id)
+                .filter(|id| *id != "missing-block" || expected == "missing-block")
+                .collect();
+            let fits_context = if expected == "unexpected-entry" {
+                ids.iter().all(|id| *id == expected)
+            } else {
+                !ids.contains(&"unexpected-entry")
+            };
+            result.lexical_errors.is_empty() && ids.contains(&expected.as_str()) && fits_context
+        });
+        if !reported {
+            let result = parse(&block.content).expect("the counter-example is accepted");
+            failures.push(format!(
+                "SPEC.md line {}, expecting {expected}, as a document:\n{}",
+                block.line,
+                describe(&block.content, &result),
+            ));
+        }
+    }
+    println!("checked {checked} syntax counter-examples");
+    assert!(checked > 0, "no syntax counter-examples were checked");
+    assert!(
+        failures.is_empty(),
+        "{} of {checked} syntax counter-examples do not report their error:\n\n{}",
+        failures.len(),
+        failures.join("\n\n"),
+    );
+}
+
+#[test]
+fn parser_accepts_the_example_guide() {
+    let result = parse(FRANKLIN).expect("the example guide is accepted");
+    assert!(
+        result.lexical_errors.is_empty() && result.syntax_errors.is_empty(),
+        "{}",
+        describe("", &result),
     );
 }

@@ -1,0 +1,1439 @@
+# Franklin Voter Guide, November 2026. Every person, place, party, and measure in this file is
+# fictional. It exists to exercise every construct of the Oval format at the scale of a real
+# metropolitan guide: six root ballots, forty-four contests, twenty-eight measures.
+
+oval 1
+
+guide "Franklin Voter Guide"
+election "November 3, 2026 General Election"
+date 2026-11-03
+
+note:
+  Written by the Franklin Civic Alliance. We interviewed every candidate who agreed to meet with
+  us and read every measure in full. Where a board member had a conflict, they did not
+  participate in that recommendation and we say so in the contest.
+
+  Always double check the options printed on your own ballot.
+
+# ---------------------------------------------------------------- parties
+
+party @dem "Democratic"
+  abbreviation "D"
+party @gop "Republican"
+  abbreviation "R"
+party @green "Green"
+  abbreviation "G"
+party @lib "Libertarian"
+  abbreviation "LIB"
+party @pf "Peace and Freedom"
+  abbreviation "PF"
+
+# ------------------------------------------------------------- candidates
+# Only people who appear in more than one contest.
+
+candidate @dana-lombardi "Dana Lombardi"
+  designation "United States Senator"
+  party @dem
+  note:
+    Appointed in January 2025 to fill the vacancy left by Senator Hale's resignation. Previously
+    Secretary of State of Franklin.
+candidate @sofia-yilmaz "Sofia Yilmaz"
+  designation "Business Owner"
+  party @gop
+
+# ======================================================================
+ballot @federal "Federal Government"
+
+  section "Executive Offices"
+
+    contest @president "President and Vice President of the United States" single
+      subtitle "Vote for one ticket"
+      note:
+        The president and vice president run as a ticket. Your single vote elects both.
+
+      campaign incumbent
+        @hana-nakamura "Hana Nakamura" as "President"
+          party @dem
+        @hiro-eriksen "Hiro Eriksen" as "Vice President"
+          party @dem
+        website https://hananakamura2026.example
+      campaign
+        @yara-bergstrom "Yara Bergstrom" as "President"
+          party @gop
+        @omar-rowe "Omar Rowe" as "Vice President"
+          party @gop
+        website https://yarabergstrom2026.example
+      campaign
+        @victor-bergstrom "Victor Bergstrom" as "President"
+          party @green
+        @vera-mendez "Vera Mendez" as "Vice President"
+          party @green
+      campaign
+        @petra-patel "Petra Patel" as "President"
+          party @lib
+        @samir-osei "Samir Osei" as "Vice President"
+          party @lib
+      campaign
+        @petra-dominguez "Petra Dominguez" as "President"
+          party @pf
+        @quinn-guerrero "Quinn Guerrero" as "Vice President"
+          party @pf
+      campaign
+        @ada-fontaine "Ada Fontaine" as "President"
+          party @ind "Independence"
+            abbreviation "IND"
+        @camila-oyelaran "Camila Oyelaran" as "Vice President"
+          party @ind
+
+      recommend
+        support @hana-nakamura
+        justification:
+          Hana Nakamura's first term delivered the port funding Franklin has sought for a
+          decade. The challengers have not released a platform beyond a pledge to cut waste.
+
+  section "United States Senate"
+
+    contest @us-senate-special "United States Senator (Special Election)" single
+      subtitle "Unexpired term ending January 3, 2027"
+      tabulation "Plurality wins"
+      note:
+        This is the first of two Senate contests on your ballot. This one decides who holds the
+        seat for the final weeks of the current term. Vote in both.
+
+      campaign incumbent @dana-lombardi
+      campaign @sofia-yilmaz
+
+      recommend
+        support @dana-lombardi
+        justification:
+          See the full-term contest below. Our reasoning is the same, and splitting the vote
+          between the two contests would serve no purpose.
+
+    contest @us-senate-full "United States Senator" single
+      subtitle "Full term beginning January 3, 2027"
+      tabulation "Plurality wins"
+
+      campaign incumbent @dana-lombardi
+      campaign @sofia-yilmaz
+      campaign @kiran-thorne "Kiran Thorne"
+        designation "Nurse"
+        party @green
+
+      recommend
+        support @dana-lombardi
+        justification:
+          Dana Lombardi has used two years in the Senate to deliver the port funding Franklin
+          has sought for a decade. Sofia Yilmaz has not held office.
+
+  section "United States House of Representatives"
+
+    contest @us-house-16 "United States Representative, District 16" single
+      subtitle "Millbrook"
+
+      campaign @quinn-okafor "Quinn Okafor"
+        designation "Union Representative"
+        party @dem
+        website https://quinnokafor.example
+      campaign @talia-jensen "Talia Jensen"
+        designation "Civil Engineer"
+        party @gop
+
+      recommend
+        support @quinn-okafor
+        justification:
+          This is a close call. Quinn Okafor and Talia Jensen agree on most of the substance;
+          Quinn Okafor has the better track record of working across the aisle, which this seat
+          needs.
+
+    contest @us-house-12 "United States Representative, District 12" single
+      subtitle "Brookhaven Hills"
+
+      campaign @odalys-halvorsen "Odalys Halvorsen"
+        designation "Transit Planner"
+        party @dem
+        website https://odalyshalvorsen.example
+      campaign @marcus-ndiaye "Marcus Ndiaye"
+        designation "Environmental Scientist"
+        party @gop
+
+      recommend
+        support @odalys-halvorsen
+        justification:
+          Odalys Halvorsen ran the department that this office oversees and left it in better
+          shape than they found it.
+
+    contest @us-house-11 "United States Representative, District 11" single
+      subtitle "Ashford"
+
+      campaign incumbent @bram-mendez "Bram Mendez"
+        designation "Farmer"
+        party @dem
+        website https://brammendez.example
+      campaign @maeve-haddad "Maeve Haddad"
+        designation "Farmer"
+        party @gop
+
+      recommend
+        support @bram-mendez
+        justification:
+          Bram Mendez is the only candidate who answered our questionnaire in full. The others
+          declined to meet with us.
+
+# ======================================================================
+ballot @franklin "The State of Franklin"
+
+  section "State Assembly"
+
+    contest @assembly-14 "State Assembly, District 14" single
+      subtitle "Brookhaven Hills"
+
+      campaign incumbent @kiran-ueda "Kiran Ueda"
+        designation "Librarian"
+        party @dem
+        website https://kiranueda.example
+      campaign @elena-hossain "Elena Hossain"
+        designation "Parent and School Volunteer"
+        party @gop
+
+      recommend
+        support @kiran-ueda
+        justification:
+          Kiran Ueda has the clearest plan for the office and a record of delivering on it.
+          Elena Hossain has not said how the proposals would be paid for.
+
+    contest @assembly-17 "State Assembly, District 17" single
+      subtitle "Ashford"
+
+      campaign incumbent @wes-larsson "Wes Larsson"
+        designation "Pharmacist"
+        party @dem
+        website https://weslarsson.example
+      campaign @nadia-okonkwo "Nadia Okonkwo"
+        designation "Economist"
+        party @gop
+
+      recommend
+        support @wes-larsson
+        justification:
+          Wes Larsson has the clearest plan for the office and a record of delivering on it.
+          Nadia Okonkwo has not said how the proposals would be paid for.
+
+    contest @assembly-19 "State Assembly, District 19" single
+      subtitle "Ashford"
+
+      campaign @odalys-dominguez "Odalys Dominguez"
+        designation "Nurse"
+        party @dem
+        website https://odalysdominguez.example
+      campaign @uma-wojcik "Uma Wojcik"
+        designation "Economist"
+        party @gop
+
+      recommend
+        support @odalys-dominguez @uma-wojcik
+        justification:
+          Either is a fine choice. We did not reach consensus between them and would be happy
+          with both.
+
+    contest @assembly-23 "State Assembly, District 23" single
+      subtitle "Millbrook"
+
+      campaign incumbent @silas-osei "Silas Osei"
+        designation "Union Representative"
+        party @dem
+        website https://silasosei.example
+      campaign @yusuf-eriksen "Yusuf Eriksen"
+        designation "Transit Planner"
+        party @gop
+
+      recommend
+        support @silas-osei
+        justification:
+          Rank Silas Osei first. Yusuf Eriksen is acceptable as a second choice; the rest of the
+          field is not ready for this office.
+
+  section "State Senate"
+
+    contest @state-senate-7 "State Senate, District 7" single
+      subtitle "Brookhaven Hills"
+
+      campaign @isaac-walsh "Isaac Walsh"
+        designation "Union Representative"
+        party @dem
+        website https://isaacwalsh.example
+      campaign @omar-chaudhry "Omar Chaudhry"
+        designation "Environmental Scientist"
+        party @gop
+
+      recommend
+        support @isaac-walsh
+        justification:
+          Rank Isaac Walsh first. Omar Chaudhry is acceptable as a second choice; the rest of
+          the field is not ready for this office.
+
+    contest @state-senate-11 "State Senate, District 11" single
+      subtitle "Ashford"
+
+      campaign incumbent @silas-reyes "Silas Reyes"
+        designation "Software Engineer"
+        party @dem
+        website https://silasreyes.example
+      campaign @victor-ferreira "Victor Ferreira"
+        designation "Attorney"
+        party @gop
+
+      recommend
+        support @silas-reyes
+        justification:
+          Silas Reyes ran the department that this office oversees and left it in better shape
+          than they found it.
+
+    contest @state-senate-13 "State Senate, District 13" single
+      subtitle "Millbrook"
+
+      campaign incumbent @tamsin-ivanova "Tamsin Ivanova"
+        designation "Physician"
+        party @dem
+        website https://tamsinivanova.example
+      campaign @cedric-larsson "Cedric Larsson"
+        designation "Economist"
+        party @gop
+
+      recommend
+        support @tamsin-ivanova
+        justification:
+          We endorsed Cedric Larsson last cycle and were disappointed. Tamsin Ivanova has spent
+          four years on the relevant commission and knows the budget line by line.
+
+  section "Judicial"
+
+    contest @supreme-court-retention "Supreme Court Justice" retention
+      subtitle "Shall Justice Elena Villanueva be retained in office?"
+      tabulation "Majority yes to retain"
+
+      campaign incumbent @elena-villanueva "Elena Villanueva"
+        designation "Justice of the Supreme Court"
+
+      recommend
+        support @elena-villanueva
+        justification:
+          Retention elections are not the place to relitigate a single decision. The bar
+          evaluation is "well qualified" and the opinions are careful.
+
+  section "Statewide Propositions"
+    note:
+      Propositions 2 through 6 were placed by the legislature. Propositions 32 through 36 are
+      citizen initiatives.
+
+    measure @prop-2 "Proposition 2"
+      subtitle "Public school facilities bond"
+      description:
+        Shall the measure titled "Public school facilities bond" be adopted, authorizing the
+        actions described in the full text and amending the relevant code sections accordingly?
+      if_yes:
+        The public school facilities bond would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Citizen initiative (signature petition)"
+      tabulation "Simple majority"
+      fiscal_impact "$300 per parcel per year for 30 years"
+      supporters "Franklin Small Business Network", "Franklin Police Officers Association", "Riders United"
+      opponents "Franklin Realtors Association", "Riders United"
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+    measure @prop-3 "Proposition 3"
+      subtitle "Right to marry"
+      placement "Veto referendum"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "$96 per parcel per year for 15 years"
+      supporters "Transit Riders Alliance", "Riders United"
+      opponents none
+
+      recommend yes
+        justification:
+          This is a straightforward bond for infrastructure the district has deferred for a
+          decade. The repayment schedule is conservative and the oversight committee has real
+          teeth.
+
+    measure @prop-4 "Proposition 4"
+      subtitle "Climate and wildfire bond"
+      description:
+        Shall the measure titled "Climate and wildfire bond" be adopted, authorizing the actions
+        described in the full text and amending the relevant code sections accordingly?
+      if_yes:
+        The climate and wildfire bond would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Legislative referral"
+      tabulation "Requires 55%"
+      fiscal_impact "About $96 million a year in new revenue"
+
+      recommend yes
+        justification:
+          Two of our board members work for organizations that would receive funding under this
+          measure. They recused themselves and the remaining members were evenly split.
+
+    measure @prop-5 "Proposition 5"
+      subtitle "55% threshold for local housing bonds"
+      placement "Citizen initiative (signature petition)"
+      tabulation "Requires two-thirds of votes cast"
+      supporters "Sierra Club, Franklin Chapter", "Franklin Small Business Network", "Franklin Police Officers Association"
+      opponents "Franklin Nurses Union", "Franklin Teachers Association"
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+    measure @prop-6 "Proposition 6"
+      subtitle "End involuntary servitude in prisons"
+      description:
+        Shall the measure titled "End involuntary servitude in prisons" be adopted, authorizing
+        the actions described in the full text and amending the relevant code sections
+        accordingly?
+      if_yes:
+        The end involuntary servitude in prisons would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Placed by the District Board"
+      tabulation "Simple majority"
+      fiscal_impact "No direct fiscal effect"
+      supporters "Sierra Club, Franklin Chapter"
+      opponents none
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+    measure @prop-32 "Proposition 32"
+      subtitle "$18 minimum wage"
+      placement "Placed by the City Council"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "Authorizes $96 million in bonds, repaid by property taxes over 30 years"
+
+      recommend no-position
+        justification:
+          The mechanism here is the problem, not the goal. It sets no limits on what localities
+          may do in its place, and the cities most eager to use it have the worst records on the
+          underlying issue.
+
+          We would support a narrower version. Vote no on this one.
+
+    measure @prop-33 "Proposition 33"
+      subtitle "Repeal state rent-control preemption"
+      description:
+        Shall the measure titled "Repeal state rent-control preemption" be adopted, authorizing
+        the actions described in the full text and amending the relevant code sections
+        accordingly?
+      if_yes:
+        The repeal state rent-control preemption would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Placed by the District Board"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "$48 per parcel per year for 10 years"
+      supporters "Millbrook Neighborhood Council"
+      opponents "League of Women Voters of Franklin", "Sierra Club, Franklin Chapter"
+
+      recommend no
+        justification:
+          This is a straightforward bond for infrastructure the district has deferred for a
+          decade. The repayment schedule is conservative and the oversight committee has real
+          teeth.
+
+    measure @prop-34 "Proposition 34"
+      subtitle "Restrict spending of prescription drug revenue"
+      placement "Legislative referral"
+      tabulation "Simple majority"
+      supporters "Brookhaven Tenants Union", "Franklin Police Officers Association"
+      opponents none
+
+      recommend yes
+        justification:
+          The mechanism here is the problem, not the goal. It sets no limits on what localities
+          may do in its place, and the cities most eager to use it have the worst records on the
+          underlying issue.
+
+          We would support a narrower version. Vote no on this one.
+
+    measure @prop-35 "Proposition 35"
+      subtitle "Permanent managed care tax"
+      description:
+        Shall the measure titled "Permanent managed care tax" be adopted, authorizing the
+        actions described in the full text and amending the relevant code sections accordingly?
+      if_yes:
+        The permanent managed care tax would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Required by the City Charter"
+      tabulation "Requires 55%"
+      fiscal_impact "Authorizes $12 million in bonds, repaid by property taxes over 10 years"
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+    measure @prop-36 "Proposition 36"
+      subtitle "Felony charges for certain drug and theft crimes"
+      placement "Placed by the City Council"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "Authorizes $12 million in bonds, repaid by property taxes over 20 years"
+      supporters "Brookhaven Tenants Union", "Franklin Small Business Network", "Franklin Nurses Union"
+      opponents "Millbrook Neighborhood Council", "Franklin Small Business Network"
+
+      recommend no
+        justification:
+          Enshrines in the charter a right the courts have already recognized. Cheap, symbolic,
+          and worth doing.
+
+# ======================================================================
+ballot @ashford "City of Ashford"
+  eligibility "Registered voters of the City and County of Ashford"
+
+  section "Executive Offices"
+
+    contest @ashford-mayor "Mayor" ranked max 10
+      subtitle "Rank up to ten candidates"
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @theo-ferreira "Theo Ferreira"
+        designation "Transit Planner"
+        website https://theoferreira.example
+      campaign @rosa-dominguez "Rosa Dominguez"
+        designation "Small Business Owner"
+        website https://rosadominguez.example
+      campaign @desmond-eriksen "Desmond Eriksen"
+        designation "Nurse"
+      campaign @kwame-yilmaz "Kwame Yilmaz"
+        designation "Transit Planner"
+      campaign @kiran-haddad "Kiran Haddad"
+        designation "Teacher"
+      campaign @omar-ivanova "Omar Ivanova"
+        designation "Attorney"
+      campaign @ezra-petrov "Ezra Petrov"
+        designation "Public Defender"
+      campaign @rhea-rowe "Rhea Rowe"
+        designation "Public Defender"
+      campaign @wren-kowalczyk "Wren Kowalczyk"
+        designation "Small Business Owner"
+      campaign @sofia-rahimi "Sofia Rahimi"
+        designation "Small Business Owner"
+      campaign @nico-suzuki "Nico Suzuki"
+        designation "Environmental Scientist"
+      campaign @elena-zamora "Elena Zamora"
+        designation "Union Representative"
+      campaign withdrawn @silas-brennan "Silas Brennan"
+        designation "Civil Engineer"
+        note:
+          Withdrew after ballots were printed. A ranking for this candidate is skipped, but
+          wastes one of your rankings.
+
+      recommend
+        support @rosa-dominguez
+        support @theo-ferreira @desmond-eriksen
+        oppose @silas-brennan
+        justification:
+          Rosa Dominguez ran the department that this office oversees and left it in better
+          shape than they found it.
+        note:
+          Rank Theo Ferreira and Desmond Eriksen second and third in either order.
+
+    contest @ashford-da "District Attorney" single
+
+      campaign incumbent @lena-tanaka "Lena Tanaka"
+        designation "Union Representative"
+        website https://lenatanaka.example
+      campaign @luis-oyelaran "Luis Oyelaran"
+        designation "Pharmacist"
+
+      recommend
+        support @lena-tanaka @luis-oyelaran
+        justification:
+          Either is a fine choice. We did not reach consensus between them and would be happy
+          with both.
+
+    contest @ashford-city-attorney "City Attorney" single
+
+      campaign incumbent @yara-suzuki "Yara Suzuki"
+        designation "Librarian"
+        website https://yarasuzuki.example
+      campaign @ezra-sandoval "Ezra Sandoval"
+        designation "Environmental Scientist"
+
+      recommend
+        support @yara-suzuki
+        justification:
+          This is a close call. Yara Suzuki and Ezra Sandoval agree on most of the substance;
+          Yara Suzuki has the better track record of working across the aisle, which this seat
+          needs.
+
+    contest @ashford-sheriff "Sheriff" single
+
+      campaign incumbent @priya-fontaine "Priya Fontaine"
+        designation "Physician"
+        website https://priyafontaine.example
+      campaign @maeve-ueda "Maeve Ueda"
+        designation "Nonprofit Director"
+
+      recommend
+        support @priya-fontaine
+        justification:
+          Priya Fontaine ran the department that this office oversees and left it in better
+          shape than they found it.
+
+    contest @ashford-treasurer "Treasurer" single
+      note:
+        Uncontested. The incumbent is the only name on the ballot.
+
+      campaign incumbent @lila-mbeki "Lila Mbeki"
+        designation "Farmer"
+        website https://lilambeki.example
+
+      recommend
+        support @lila-mbeki
+        justification:
+          We endorsed ('', '') last cycle and were disappointed. Lila Mbeki has spent four years
+          on the relevant commission and knows the budget line by line.
+
+  section "Board of Supervisors"
+
+    contest @ashford-supervisor-1 "Board of Supervisors, District 1" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @felix-hossain "Felix Hossain"
+        designation "Attorney"
+        website https://felixhossain.example
+      campaign @farah-lindqvist "Farah Lindqvist"
+        designation "Pharmacist"
+        website https://farahlindqvist.example
+      campaign @hana-abernathy "Hana Abernathy"
+        designation "Retired Firefighter"
+
+      recommend
+        support @farah-lindqvist
+        support @felix-hossain @hana-abernathy
+        justification:
+          We endorsed Felix Hossain last cycle and were disappointed. Farah Lindqvist has spent
+          four years on the relevant commission and knows the budget line by line.
+        note:
+          Rank Felix Hossain and Hana Abernathy second and third in either order.
+
+    contest @ashford-supervisor-3 "Board of Supervisors, District 3" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @desmond-hossain "Desmond Hossain"
+        designation "Software Engineer"
+        website https://desmondhossain.example
+      campaign @tamsin-delacroix "Tamsin Delacroix"
+        designation "Community Organizer"
+        website https://tamsindelacroix.example
+      campaign @rhea-zamora "Rhea Zamora"
+        designation "Community Organizer"
+
+      recommend
+        support @tamsin-delacroix
+        support @desmond-hossain @rhea-zamora
+        justification:
+          We endorsed Desmond Hossain last cycle and were disappointed. Tamsin Delacroix has
+          spent four years on the relevant commission and knows the budget line by line.
+        note:
+          Rank Desmond Hossain and Rhea Zamora second and third in either order.
+
+    contest @ashford-supervisor-5 "Board of Supervisors, District 5" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @priya-abernathy "Priya Abernathy"
+        designation "Pharmacist"
+        website https://priyaabernathy.example
+      campaign @omar-haddad "Omar Haddad"
+        designation "Union Representative"
+        website https://omarhaddad.example
+      campaign @nico-kowalczyk "Nico Kowalczyk"
+        designation "Economist"
+      campaign @farah-ndiaye "Farah Ndiaye"
+        designation "Parent and School Volunteer"
+      campaign @farah-halvorsen "Farah Halvorsen"
+        designation "Pharmacist"
+
+      recommend
+        support @omar-haddad
+        support @priya-abernathy @nico-kowalczyk
+        justification:
+          This is a close call. Omar Haddad and Priya Abernathy agree on most of the substance;
+          Omar Haddad has the better track record of working across the aisle, which this seat
+          needs.
+        note:
+          Rank Priya Abernathy and Nico Kowalczyk second and third in either order.
+
+    contest @ashford-supervisor-7 "Board of Supervisors, District 7" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @tamsin-villanueva "Tamsin Villanueva"
+        designation "Retired Firefighter"
+        website https://tamsinvillanueva.example
+      campaign @quinn-oyelaran "Quinn Oyelaran"
+        designation "Nonprofit Director"
+        website https://quinnoyelaran.example
+      campaign @tamsin-rowe "Tamsin Rowe"
+        designation "Small Business Owner"
+      campaign @jun-thorne "Jun Thorne"
+        designation "Teacher"
+      campaign @cedric-walsh "Cedric Walsh"
+        designation "Pharmacist"
+
+      recommend
+        support @quinn-oyelaran
+        support @tamsin-villanueva @tamsin-rowe
+        justification:
+          Quinn Oyelaran ran the department that this office oversees and left it in better
+          shape than they found it.
+        note:
+          Rank Tamsin Villanueva and Tamsin Rowe second and third in either order.
+
+    contest @ashford-supervisor-9 "Board of Supervisors, District 9" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @omar-abernathy "Omar Abernathy"
+        designation "Community Organizer"
+        website https://omarabernathy.example
+      campaign @rhea-vance "Rhea Vance"
+        designation "Public Defender"
+        website https://rheavance.example
+      campaign @wes-walsh "Wes Walsh"
+        designation "Farmer"
+      campaign @iris-achebe "Iris Achebe"
+        designation "Librarian"
+      campaign @amara-ndiaye "Amara Ndiaye"
+        designation "Farmer"
+
+      recommend
+        support @rhea-vance
+        support @omar-abernathy @wes-walsh
+        justification:
+          This is a close call. Rhea Vance and Omar Abernathy agree on most of the substance;
+          Rhea Vance has the better track record of working across the aisle, which this seat
+          needs.
+        note:
+          Rank Omar Abernathy and Wes Walsh second and third in either order.
+
+    contest @ashford-supervisor-11 "Board of Supervisors, District 11" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @yara-larsson "Yara Larsson"
+        designation "Retired Firefighter"
+        website https://yaralarsson.example
+      campaign @jun-bergstrom "Jun Bergstrom"
+        designation "Librarian"
+        website https://junbergstrom.example
+      campaign @owen-chaudhry "Owen Chaudhry"
+        designation "Parent and School Volunteer"
+
+      recommend
+        support @jun-bergstrom
+        support @yara-larsson @owen-chaudhry
+        justification:
+          Rank Jun Bergstrom first. Yara Larsson is acceptable as a second choice; the rest of
+          the field is not ready for this office.
+        note:
+          Rank Yara Larsson and Owen Chaudhry second and third in either order.
+
+  section "Board of Education"
+
+    contest @ashford-board-of-education "Members of the Board of Education" multiple 4
+      subtitle "Vote for no more than 4"
+
+      campaign incumbent @jun-ivanova "Jun Ivanova"
+        designation "Civil Engineer"
+      campaign incumbent @uma-petrov "Uma Petrov"
+        designation "Urban Planner"
+      campaign @cedric-rowe "Cedric Rowe"
+      campaign @isaac-nakamura "Isaac Nakamura"
+        designation "Librarian"
+      campaign @priya-whitaker "Priya Whitaker"
+        designation "Teacher"
+      campaign @cedric-jensen "Cedric Jensen"
+      campaign @beatriz-osei "Beatriz Osei"
+        designation "Parent and School Volunteer"
+      campaign @marcus-mendez "Marcus Mendez"
+        designation "Civil Engineer"
+      campaign @silas-achebe "Silas Achebe"
+      campaign @hana-garza "Hana Garza"
+        designation "Community Organizer"
+      campaign @cedric-yilmaz "Cedric Yilmaz"
+        designation "Urban Planner"
+
+      recommend
+        support @jun-ivanova @uma-petrov @cedric-rowe @isaac-nakamura
+        justification:
+          Each of these candidates committed in writing to keeping the arts and athletics
+          budgets whole. The others did not respond to our questionnaire.
+
+  section "Community College Trustees"
+
+    contest @ashford-college-trustees "Community College Trustees" multiple 4
+      subtitle "Vote for no more than 4"
+
+      campaign incumbent @isaac-mbeki "Isaac Mbeki"
+        designation "Farmer"
+      campaign incumbent @ada-rahimi "Ada Rahimi"
+        designation "Librarian"
+      campaign @yusuf-patel "Yusuf Patel"
+      campaign @isaac-rahimi "Isaac Rahimi"
+        designation "Public Defender"
+      campaign @ada-castellano "Ada Castellano"
+        designation "Civil Engineer"
+      campaign @cedric-guerrero "Cedric Guerrero"
+      campaign @amara-kowalczyk "Amara Kowalczyk"
+        designation "Pharmacist"
+      campaign @dana-nakamura "Dana Nakamura"
+        designation "Physician"
+
+      recommend
+        support @isaac-mbeki @ada-rahimi @yusuf-patel
+        justification:
+          Each of these candidates committed in writing to keeping the arts and athletics
+          budgets whole. The others did not respond to our questionnaire.
+
+  section "Local Measures"
+
+    measure @ashford-prop-a "Proposition A"
+      subtitle "School improvement bond"
+      description:
+        Shall the measure titled "School improvement bond" be adopted, authorizing the actions
+        described in the full text and amending the relevant code sections accordingly?
+      if_yes:
+        The school improvement bond would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      tabulation "Simple majority"
+      fiscal_impact "$48 per parcel per year for 15 years"
+      supporters "Sierra Club, Franklin Chapter", "Franklin Teachers Association", "Franklin Realtors Association"
+      opponents "Franklin Realtors Association"
+
+      recommend yes
+        justification:
+          Two of our board members work for organizations that would receive funding under this
+          measure. They recused themselves and the remaining members were evenly split.
+
+    measure @ashford-prop-b "Proposition B"
+      subtitle "Health care, shelter, and street safety bond"
+      placement "Veto referendum"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "$48 per parcel per year for 20 years"
+
+      recommend yes
+        justification:
+          This is a straightforward bond for infrastructure the district has deferred for a
+          decade. The repayment schedule is conservative and the oversight committee has real
+          teeth.
+
+    measure @ashford-prop-c "Proposition C"
+      subtitle "Inspector general"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "About $48 million a year for 20 years"
+      supporters "Millbrook Neighborhood Council", "Franklin Nurses Union"
+      opponents none
+
+      recommend no-position
+        justification:
+          The mechanism here is the problem, not the goal. It sets no limits on what localities
+          may do in its place, and the cities most eager to use it have the worst records on the
+          underlying issue.
+
+          We would support a narrower version. Vote no on this one.
+
+    measure @ashford-prop-d "Proposition D"
+      subtitle "City commissions and mayoral authority"
+      description:
+        Shall the measure titled "City commissions and mayoral authority" be adopted,
+        authorizing the actions described in the full text and amending the relevant code
+        sections accordingly?
+      if_yes:
+        The city commissions and mayoral authority would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Placed by the City Council"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "No direct fiscal effect"
+      opponents "Franklin Taxpayers Association", "Franklin Police Officers Association"
+      note:
+        Propositions D and E are mutually exclusive. If both pass, the one with more votes
+        becomes law and the other is discarded.
+
+      recommend yes
+        justification:
+          This is a straightforward bond for infrastructure the district has deferred for a
+          decade. The repayment schedule is conservative and the oversight committee has real
+          teeth.
+
+    measure @ashford-prop-e "Proposition E"
+      subtitle "Commission streamlining task force"
+      tabulation "Simple majority"
+      fiscal_impact "Authorizes $140 million in bonds, repaid by property taxes over 10 years"
+      supporters "Franklin Housing Coalition"
+      note:
+        Propositions D and E are mutually exclusive. If both pass, the one with more votes
+        becomes law and the other is discarded.
+
+      recommend no
+        justification:
+          Enshrines in the charter a right the courts have already recognized. Cheap, symbolic,
+          and worth doing.
+
+    measure @ashford-prop-f "Proposition F"
+      subtitle "Deferred police retirement"
+      placement "Required by the City Charter"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "About $300 million a year in new revenue"
+      opponents none
+
+      recommend yes
+        justification:
+          This is a straightforward bond for infrastructure the district has deferred for a
+          decade. The repayment schedule is conservative and the oversight committee has real
+          teeth.
+
+    measure @ashford-prop-g "Proposition G"
+      subtitle "Rental subsidies for affordable housing"
+      description:
+        Shall the measure titled "Rental subsidies for affordable housing" be adopted,
+        authorizing the actions described in the full text and amending the relevant code
+        sections accordingly?
+      if_yes:
+        The rental subsidies for affordable housing would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      tabulation "Majority of all registered voters"
+      fiscal_impact "About $30 million a year in new revenue"
+      supporters "Franklin Teachers Association", "Franklin Small Business Network"
+      opponents "Franklin Nurses Union"
+
+      recommend yes
+        justification:
+          Consolidates six overlapping programs into one with a single budget. It should cut
+          overhead and make oversight possible for the first time.
+
+    measure @ashford-prop-h "Proposition H"
+      subtitle "Firefighter retirement age"
+      placement "Placed by the District Board"
+      tabulation "Requires 55%"
+      fiscal_impact "Authorizes $30 million in bonds, repaid by property taxes over 10 years"
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+    measure @ashford-prop-i "Proposition I"
+      subtitle "Retirement benefits for nurses and dispatchers"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "No direct fiscal effect"
+      supporters "Franklin Housing Coalition"
+      opponents none
+
+      recommend yes
+        justification:
+          This is a straightforward bond for infrastructure the district has deferred for a
+          decade. The repayment schedule is conservative and the oversight committee has real
+          teeth.
+
+    measure @ashford-prop-j "Proposition J"
+      subtitle "Children and youth fund consolidation"
+      description:
+        Shall the measure titled "Children and youth fund consolidation" be adopted, authorizing
+        the actions described in the full text and amending the relevant code sections
+        accordingly?
+      if_yes:
+        The children and youth fund consolidation would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Placed by the City Council"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "$48 per parcel per year for 20 years"
+      opponents "Franklin Realtors Association"
+
+      recommend yes
+        justification:
+          Brings the retirement age back to where it was in 2012. The staffing picture here is
+          nothing like the shortage elsewhere, and the health-risk argument is real.
+
+    measure @ashford-prop-k "Proposition K"
+      subtitle "Close the Upper Shore Highway to cars"
+      tabulation "Simple majority"
+      fiscal_impact "Authorizes $140 million in bonds, repaid by property taxes over 10 years"
+      supporters "Transit Riders Alliance", "Franklin Small Business Network", "Franklin Police Officers Association"
+
+      recommend yes
+        justification:
+          This creates a new office with no new powers and no clear mandate. It is redundant
+          with three existing bodies and adds a layer of coordination at best.
+
+    measure @ashford-prop-l "Proposition L"
+      subtitle "Ride-hail tax for transit"
+      placement "Placed by the City Council"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "About $300 million a year for 10 years"
+      opponents none
+
+      recommend no-position
+        justification:
+          A flat per-parcel tax is regressive, but the alternative is cutting the service
+          entirely, and the people who depend on it most are the ones a cut would hurt.
+
+    measure @ashford-prop-m "Proposition M"
+      subtitle "Business tax restructuring"
+      description:
+        Shall the measure titled "Business tax restructuring" be adopted, authorizing the
+        actions described in the full text and amending the relevant code sections accordingly?
+      if_yes:
+        The business tax restructuring would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      tabulation "Majority of all registered voters"
+      fiscal_impact "About $30 million a year for 15 years"
+      supporters "Franklin Small Business Network", "Transit Riders Alliance", "Franklin Teachers Association"
+      opponents "Franklin Nurses Union", "Franklin Taxpayers Association"
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+    measure @ashford-prop-n "Proposition N"
+      subtitle "First responder student loan forgiveness"
+      placement "Veto referendum"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "No direct fiscal effect"
+
+      recommend yes
+        justification:
+          Two of our board members work for organizations that would receive funding under this
+          measure. They recused themselves and the remaining members were evenly split.
+
+    measure @ashford-prop-o "Proposition O"
+      subtitle "Reproductive freedom"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "$300 per parcel per year for 30 years"
+      supporters "Franklin Nurses Union", "Sierra Club, Franklin Chapter", "Franklin Small Business Network"
+      opponents none
+
+      recommend yes
+        justification:
+          Brings the retirement age back to where it was in 2012. The staffing picture here is
+          nothing like the shortage elsewhere, and the health-risk argument is real.
+
+# ======================================================================
+ballot @brookhaven "City of Brookhaven"
+
+  section "Executive Offices"
+
+    contest @brookhaven-city-attorney "City Attorney" single
+
+      campaign @lena-brennan "Lena Brennan"
+        designation "Economist"
+        website https://lenabrennan.example
+      campaign @ezra-garza "Ezra Garza"
+        designation "Software Engineer"
+
+      recommend
+        support @lena-brennan
+        justification:
+          We endorsed Ezra Garza last cycle and were disappointed. Lena Brennan has spent four
+          years on the relevant commission and knows the budget line by line.
+
+  section "City Council"
+
+    contest @brookhaven-council-at-large "City Council, At-Large" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @ada-ndiaye "Ada Ndiaye"
+        designation "Farmer"
+        website https://adandiaye.example
+      campaign @talia-vance "Talia Vance"
+        designation "Retired Firefighter"
+        website https://taliavance.example
+      campaign @tamsin-kaur "Tamsin Kaur"
+        designation "Librarian"
+      campaign @anil-garza "Anil Garza"
+        designation "Parent and School Volunteer"
+      campaign @farah-haddad "Farah Haddad"
+        designation "Librarian"
+      campaign @lena-okonkwo "Lena Okonkwo"
+        designation "Attorney"
+      campaign @theo-mendez "Theo Mendez"
+        designation "Transit Planner"
+      campaign @isaac-petrov "Isaac Petrov"
+        designation "Transit Planner"
+      campaign @lila-nilsson "Lila Nilsson"
+        designation "Farmer"
+      campaign @cedric-reyes "Cedric Reyes"
+        designation "Environmental Scientist"
+
+      recommend
+        support @talia-vance
+        support @ada-ndiaye @tamsin-kaur
+        justification:
+          Talia Vance ran the department that this office oversees and left it in better shape
+          than they found it.
+        note:
+          Rank Ada Ndiaye and Tamsin Kaur second and third in either order.
+
+    contest @brookhaven-council-1 "City Council, District 1" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @sofia-nakamura "Sofia Nakamura"
+        designation "Urban Planner"
+        website https://sofianakamura.example
+      campaign @camila-sandoval "Camila Sandoval"
+        designation "Parent and School Volunteer"
+        website https://camilasandoval.example
+      campaign @mateo-pappas "Mateo Pappas"
+        designation "Attorney"
+      campaign @maeve-bergstrom "Maeve Bergstrom"
+        designation "Librarian"
+
+      recommend
+        support @camila-sandoval
+        support @sofia-nakamura @mateo-pappas
+        justification:
+          Camila Sandoval ran the department that this office oversees and left it in better
+          shape than they found it.
+        note:
+          Rank Sofia Nakamura and Mateo Pappas second and third in either order.
+
+    contest @brookhaven-council-3 "City Council, District 3" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @ezra-jablonski "Ezra Jablonski"
+        designation "Retired Firefighter"
+        website https://ezrajablonski.example
+      campaign @kiran-abernathy "Kiran Abernathy"
+        designation "Small Business Owner"
+        website https://kiranabernathy.example
+      campaign @kiran-ndiaye "Kiran Ndiaye"
+        designation "Physician"
+      campaign @desmond-pappas "Desmond Pappas"
+        designation "Union Representative"
+
+      recommend
+        support @kiran-abernathy
+        support @ezra-jablonski @kiran-ndiaye
+        justification:
+          We endorsed Ezra Jablonski last cycle and were disappointed. Kiran Abernathy has spent
+          four years on the relevant commission and knows the budget line by line.
+        note:
+          Rank Ezra Jablonski and Kiran Ndiaye second and third in either order.
+
+    contest @brookhaven-council-5 "City Council, District 5" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @silas-patel "Silas Patel"
+        designation "Farmer"
+        website https://silaspatel.example
+      campaign @petra-abernathy "Petra Abernathy"
+        designation "Software Engineer"
+        website https://petraabernathy.example
+      campaign @ezra-mendez "Ezra Mendez"
+        designation "Community Organizer"
+      campaign @tamsin-reyes "Tamsin Reyes"
+        designation "Small Business Owner"
+      campaign @farah-lombardi "Farah Lombardi"
+        designation "Nurse"
+
+      recommend
+        support @petra-abernathy
+        support @silas-patel @ezra-mendez
+        justification:
+          Rank Petra Abernathy first. Silas Patel is acceptable as a second choice; the rest of
+          the field is not ready for this office.
+        note:
+          Rank Silas Patel and Ezra Mendez second and third in either order.
+
+    contest @brookhaven-council-7 "City Council, District 7" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @vera-okonkwo "Vera Okonkwo"
+        designation "Farmer"
+        website https://veraokonkwo.example
+      campaign @bram-okonkwo "Bram Okonkwo"
+        designation "Software Engineer"
+        website https://bramokonkwo.example
+      campaign @lena-delacroix "Lena Delacroix"
+        designation "Physician"
+
+      recommend
+        support @bram-okonkwo
+        support @vera-okonkwo @lena-delacroix
+        justification:
+          Rank Bram Okonkwo first. Vera Okonkwo is acceptable as a second choice; the rest of
+          the field is not ready for this office.
+        note:
+          Rank Vera Okonkwo and Lena Delacroix second and third in either order.
+
+  section "Unified School District"
+
+    contest @brookhaven-school-1 "School Director, District 1" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @imani-petrov "Imani Petrov"
+        designation "Union Representative"
+        website https://imanipetrov.example
+      campaign @cedric-lombardi "Cedric Lombardi"
+        designation "Nurse"
+        website https://cedriclombardi.example
+
+      recommend
+        support @imani-petrov
+        justification:
+          Cedric Lombardi ran the department that this office oversees and left it in better
+          shape than they found it.
+
+    contest @brookhaven-school-3 "School Director, District 3" ranked
+      tabulation "Instant runoff; majority of continuing ballots wins"
+
+      campaign incumbent @bram-pappas "Bram Pappas"
+        designation "Parent and School Volunteer"
+        website https://brampappas.example
+      campaign @isaac-fontaine "Isaac Fontaine"
+        designation "Nurse"
+        website https://isaacfontaine.example
+
+      recommend
+        support @bram-pappas
+        justification:
+          Isaac Fontaine is the only candidate who answered our questionnaire in full. The
+          others declined to meet with us.
+
+  section "Recall Elections"
+    note:
+      Recalls are written as measures because Oval does not yet have a Recall entity. Each is a
+      yes-or-no question on removing the officeholder.
+
+    measure @brookhaven-recall-mayor "Recall of Mayor Rosa Wojcik"
+      subtitle "Shall the Mayor be removed from office?"
+      placement "Required by the City Charter"
+      tabulation "Requires 55%"
+
+      recommend no-position
+        justification:
+          Two of our board members work for organizations that would receive funding under this
+          measure. They recused themselves and the remaining members were evenly split.
+
+    measure @brookhaven-recall-da "Recall of District Attorney Dana Bergstrom"
+      subtitle "Shall the District Attorney be removed from office?"
+      placement "Placed by the District Board"
+      tabulation "Majority of all registered voters"
+      fiscal_impact "About $48 million a year in new revenue"
+      supporters "Franklin Nurses Union"
+      opponents "Franklin Nurses Union"
+
+      recommend no
+        justification:
+          We are sympathetic to the goal, but sentence-length deterrence has not worked anywhere
+          it has been tried, and the fiscal estimate does not include the custody costs.
+
+  section "Utility District"
+
+    contest @utility-ward-5 "Utility District Director, Ward 5" single
+
+      campaign @petra-kowalczyk "Petra Kowalczyk"
+        designation "Community Organizer"
+        website https://petrakowalczyk.example
+      campaign @isaac-osei "Isaac Osei"
+        designation "Civil Engineer"
+      campaign @iris-ferreira "Iris Ferreira"
+        designation "Economist"
+
+      recommend
+        support @petra-kowalczyk
+        justification:
+          Rank Petra Kowalczyk first. Isaac Osei is acceptable as a second choice; the rest of
+          the field is not ready for this office.
+
+    contest @utility-ward-6 "Utility District Director, Ward 6" single
+
+      campaign @uma-moreau "Uma Moreau"
+        designation "Union Representative"
+        website https://umamoreau.example
+      campaign @luis-mendez "Luis Mendez"
+        designation "Transit Planner"
+      campaign @iris-walsh "Iris Walsh"
+        designation "Civil Engineer"
+
+      recommend
+        support @uma-moreau
+        justification:
+          This is a close call. Uma Moreau and Luis Mendez agree on most of the substance; Uma
+          Moreau has the better track record of working across the aisle, which this seat needs.
+
+  section "Regional Park District"
+
+    contest @park-ward-2 "Park District Director, Ward 2" single
+
+      campaign @felix-suzuki "Felix Suzuki"
+        designation "Public Defender"
+        website https://felixsuzuki.example
+      campaign @rafael-ferreira "Rafael Ferreira"
+        designation "Economist"
+      campaign @yusuf-kaur "Yusuf Kaur"
+        designation "Librarian"
+      campaign @marcus-osei "Marcus Osei"
+        designation "Transit Planner"
+
+      recommend
+        support @felix-suzuki
+        justification:
+          This is a close call. Felix Suzuki and Rafael Ferreira agree on most of the substance;
+          Felix Suzuki has the better track record of working across the aisle, which this seat
+          needs.
+
+    contest @park-ward-4 "Park District Director, Ward 4" single
+
+      campaign @elena-tanaka "Elena Tanaka"
+        designation "Urban Planner"
+        website https://elenatanaka.example
+      campaign @noor-chaudhry "Noor Chaudhry"
+        designation "Civil Engineer"
+      campaign @iris-nilsson "Iris Nilsson"
+        designation "Nurse"
+      campaign @desmond-soto "Desmond Soto"
+        designation "Civil Engineer"
+
+      recommend
+        support @elena-tanaka
+        justification:
+          Elena Tanaka is the only candidate who answered our questionnaire in full. The others
+          declined to meet with us.
+
+# ======================================================================
+ballot @millbrook "City of Millbrook"
+
+  section "City Council"
+
+    contest @millbrook-council "City Council Members" multiple 4
+      subtitle "Vote for no more than 4"
+
+      campaign incumbent @vera-tanaka "Vera Tanaka"
+        designation "Transit Planner"
+      campaign incumbent @isaac-sandoval "Isaac Sandoval"
+        designation "Transit Planner"
+      campaign @theo-garza "Theo Garza"
+      campaign @jun-ferreira "Jun Ferreira"
+        designation "Small Business Owner"
+      campaign @maeve-sandoval "Maeve Sandoval"
+        designation "Farmer"
+      campaign @uma-patel "Uma Patel"
+      campaign @dana-iyer "Dana Iyer"
+        designation "Civil Engineer"
+      campaign @kiran-chaudhry "Kiran Chaudhry"
+        designation "Economist"
+      campaign @rafael-garza "Rafael Garza"
+
+      recommend
+        support @vera-tanaka @isaac-sandoval @theo-garza
+        justification:
+          Each of these candidates committed in writing to keeping the arts and athletics
+          budgets whole. The others did not respond to our questionnaire.
+
+  section "Unified School District"
+
+    contest @millbrook-school-board "School Board Members" multiple 3
+      subtitle "Vote for no more than 3"
+
+      campaign incumbent @maeve-nakamura "Maeve Nakamura"
+        designation "Environmental Scientist"
+      campaign incumbent @jordan-patel "Jordan Patel"
+        designation "Retired Firefighter"
+      campaign @samir-jensen "Samir Jensen"
+      campaign @wes-garza "Wes Garza"
+        designation "Economist"
+      campaign @vera-ivanova "Vera Ivanova"
+        designation "Public Defender"
+      campaign @owen-abernathy "Owen Abernathy"
+
+      recommend
+        support @maeve-nakamura @jordan-patel @samir-jensen
+        justification:
+          Each of these candidates committed in writing to keeping the arts and athletics
+          budgets whole. The others did not respond to our questionnaire.
+
+  section "Local Measure"
+
+    measure @millbrook-measure-d "Measure D"
+      subtitle "Transit center connector road"
+      description:
+        Shall the measure titled "Transit center connector road" be adopted, authorizing the
+        actions described in the full text and amending the relevant code sections accordingly?
+      if_yes:
+        The transit center connector road would take effect as described.
+      if_no:
+        Current law would remain unchanged.
+      placement "Placed by the District Board"
+      tabulation "Requires two-thirds of votes cast"
+      fiscal_impact "About $96 million a year for 15 years"
+      supporters "Riders United"
+      opponents none
+
+      recommend yes
+        justification:
+          The existing subsidy is not enough and this modest increase is a cheap fix. It will
+          not solve the underlying shortage, but it is better than nothing.
+
+# ======================================================================
+# Transit director districts cross city and county lines, so they are their own root.
+ballot @transit "Franklin Regional Transit Board of Directors"
+  eligibility "Transit districts cross city and county lines. Your sample ballot shows which district, if any, you vote in."
+  note:
+    The transit district does not fit inside any one city, so it is its own ballot here rather
+    than a sub-ballot of one of them.
+
+  contest @transit-district-5 "Transit Director, District 5" single
+    subtitle "Brookhaven"
+
+    campaign incumbent @kwame-halvorsen "Kwame Halvorsen"
+      designation "Librarian"
+      website https://kwamehalvorsen.example
+    campaign @desmond-moreau "Desmond Moreau"
+      designation "Physician"
+
+    recommend
+      support @kwame-halvorsen
+      justification:
+        We endorsed Desmond Moreau last cycle and were disappointed. Kwame Halvorsen has spent
+        four years on the relevant commission and knows the budget line by line.
+
+  contest @transit-district-7 "Transit Director, District 7" single
+    subtitle "Ashford and Brookhaven"
+
+    campaign @vera-patel "Vera Patel"
+      designation "Union Representative"
+      website https://verapatel.example
+    campaign @silas-villanueva "Silas Villanueva"
+      designation "Civil Engineer"
+
+    recommend
+      support @vera-patel
+      justification:
+        Vera Patel has the clearest plan for the office and a record of delivering on it. Silas
+        Villanueva has not said how the proposals would be paid for.
+
+  contest @transit-district-9 "Transit Director, District 9" single
+    subtitle "Ashford"
+
+    campaign @anil-osei "Anil Osei"
+      designation "Nurse"
+      website https://anilosei.example
+    campaign @hiro-garza "Hiro Garza"
+      designation "Urban Planner"
+
+    recommend
+      support @anil-osei
+      justification:
+        Anil Osei is the only candidate who answered our questionnaire in full. The others
+        declined to meet with us.
