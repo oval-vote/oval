@@ -1717,9 +1717,9 @@ The error is just after the `@`. The party is kept with its name and an identifi
 
 #### Missing Name
 
-Occurs when a declaration's identifier is followed by the end of the line instead of its name. The
-error is reported as `missing-name` and is zero-length at the end of the line. To recover, assume
-the missing token.
+Occurs when a declaration's identifier is followed by the end of the line instead of its name, or
+`section` is followed by the end of the line instead of its title. The error is reported as
+`missing-name` and is zero-length at the end of the line. To recover, assume the missing token.
 
 ```oval example
 measure @prop-a "Proposition A"
