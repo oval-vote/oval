@@ -1698,9 +1698,7 @@ and after `support` or `oppose`, which require at least one choice, a reference 
 also occurs when `@` is not followed by a `Word`. Any other token in that position is an unexpected
 token. The error is reported as `missing-identifier` and is zero-length at the position where the
 identifier would begin, or, after an `@` with no `Word`, just after the `@`, where the `Word` would
-begin. To recover, assume the missing token and continue with the rest of the line; after `support`
-or `oppose`, a `String` in the identifier's place is skipped with it, since it is not a second
-error. A name written there is usually a write-in missing its keyword: write `write-in "Name"`.
+begin. To recover, assume the missing token and continue with the rest of the line.
 
 ```oval example
 party @dem "Democratic"
@@ -1717,6 +1715,15 @@ party @ "Democratic"
 ```
 
 The error is just after the `@`. The party is kept with its name and an identifier with no word.
+
+```oval counter-example
+recommend
+  support "Jane Doe"
+```
+
+The error is just before the string. No choice begins with a `String`, so the string is then an
+unexpected token, and the rest of the line is skipped. A name written there is usually a write-in
+missing its keyword: write `support write-in "Jane Doe"`.
 
 #### Missing Name
 
@@ -1805,10 +1812,11 @@ The first ballot is kept with no items.
 
 #### Unexpected Block
 
-Occurs when a line that takes no block is followed by one: a field line other than a Markdown
-field's or a `party` field's, a `support` or `oppose` line, or a version marker. The error is
-reported as `unexpected-block` and spans the block. To recover, skip the entry, which here is the
-block alone; the line before it is kept.
+Occurs when a line that takes no block is followed by one: a field line other than a `party`
+field's, a `support` or `oppose` line, or a version marker. A Markdown field's line takes a body,
+which is not a block, so its indented lines are an unexpected block when the line does not end with
+`:` and the lexer opened no body. The error is reported as `unexpected-block` and spans the block.
+To recover, skip the entry, which here is the block alone; the line before it is kept.
 
 ```oval example
 candidate @cfox "Carl Fox"
@@ -1820,6 +1828,14 @@ candidate @cfox "Carl Fox"
   designation "Small Business Owner"
     website https://fox.example
 ```
+
+```oval counter-example
+note: Read both arguments
+  Then decide
+```
+
+The line does not end with `:`, so no body is opened. The text after the `:` is an unexpected token,
+and the indented line is an unexpected block.
 
 #### Unexpected Entry
 

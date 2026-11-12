@@ -115,6 +115,11 @@ pub enum SyntaxKind {
     /// A party in a party campaign, which refers to a party, such as `@dem`, or declares one in
     /// place, such as `@green "Green Party"`.
     PartyMember,
+    /// A contest's recommendation, such as `recommend` and the block of stances below it, or
+    /// `recommend no-position`.
+    ContestRecommend,
+    /// A recommendation's statement that it takes no stance, `no-position` or `abstain`.
+    NoStance,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -166,6 +171,8 @@ impl SyntaxKind {
         Self::Member,
         Self::MemberRole,
         Self::PartyMember,
+        Self::ContestRecommend,
+        Self::NoStance,
         Self::ErrorNode,
     ];
 }

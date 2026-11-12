@@ -8,11 +8,12 @@ const CONTEST_KINDS: [Expected; 4] = [
     Expected::Keyword(Keyword::Retention),
 ];
 
-const CONTEST_ENTRIES: [Expected; 4] = [
+const CONTEST_ENTRIES: [Expected; 5] = [
     Expected::Keyword(Keyword::Subtitle),
     Expected::Keyword(Keyword::Tabulation),
     Expected::Keyword(Keyword::Note),
     Expected::Keyword(Keyword::Campaign),
+    Expected::Keyword(Keyword::Recommend),
 ];
 
 impl Parser<'_> {
@@ -94,6 +95,7 @@ impl Parser<'_> {
             }
             (Keyword::Note, false) => self.field_once(seen, keyword, Self::markdown_field),
             (Keyword::Campaign, false) => self.campaign(),
+            (Keyword::Recommend, false) => self.contest_recommend(),
             _ => return false,
         }
         true
@@ -326,6 +328,7 @@ mod tests {
                     Expected::Keyword(Keyword::Tabulation),
                     Expected::Keyword(Keyword::Note),
                     Expected::Keyword(Keyword::Campaign),
+                    Expected::Keyword(Keyword::Recommend),
                 ],
             }],
         );

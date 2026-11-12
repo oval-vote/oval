@@ -488,6 +488,7 @@ mod tests {
                     Expected::Keyword(Keyword::Tabulation),
                     Expected::Keyword(Keyword::Note),
                     Expected::Keyword(Keyword::Campaign),
+                    Expected::Keyword(Keyword::Recommend),
                 ],
             }],
         );
