@@ -47,6 +47,11 @@ pub enum SyntaxErrorKind {
     ///
     /// The error spans the block. The parser discards the block and keeps the line above it.
     UnexpectedBlock,
+    /// A line that requires a block below it, such as a ballot's, but is not followed by one.
+    ///
+    /// The error has no length and sits just after the line's terminator. The parser keeps the
+    /// construct as if its block were empty.
+    MissingBlock,
 }
 
 impl SyntaxErrorKind {
@@ -64,6 +69,7 @@ impl SyntaxErrorKind {
             Self::MissingName => "missing-name",
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
+            Self::MissingBlock => "missing-block",
         }
     }
 }
@@ -143,6 +149,7 @@ mod tests {
             SyntaxErrorKind::UnexpectedBlock.spec_id(),
             "unexpected-block"
         );
+        assert_eq!(SyntaxErrorKind::MissingBlock.spec_id(), "missing-block");
     }
 
     #[test]

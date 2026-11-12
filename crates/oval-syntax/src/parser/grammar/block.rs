@@ -21,6 +21,25 @@ impl Parser<'_> {
         self.finish_node();
     }
 
+    pub(super) fn end_of_line_with_block(
+        &mut self,
+        accepts: &[Expected],
+        entry: impl FnMut(&mut Self, &mut Vec<Keyword>) -> bool,
+    ) {
+        let line_has_error = self.line_has_error();
+        self.end_of_line();
+        if self.at(TokenKind::Indent) {
+            self.block(accepts, entry);
+        } else if !line_has_error {
+            self.report(
+                SyntaxErrorKind::MissingBlock,
+                self.offset,
+                self.offset,
+                vec![Expected::Token(TokenKind::Indent)],
+            );
+        }
+    }
+
     fn skip_entry(&mut self, kind: SyntaxErrorKind, expected: Vec<Expected>) {
         self.start_node(SyntaxKind::ErrorNode);
         let start = self.offset;

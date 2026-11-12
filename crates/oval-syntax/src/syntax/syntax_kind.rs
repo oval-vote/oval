@@ -72,6 +72,8 @@ pub enum SyntaxKind {
     /// A party declared in place has a name, and may have a [`Block`](SyntaxKind::Block) of party
     /// fields below it. A reference has neither.
     PartyRef,
+    /// A ballot, such as `ballot @franklin "State of Franklin"` and the block below it.
+    Ballot,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -109,6 +111,7 @@ impl SyntaxKind {
         Self::Party,
         Self::Candidate,
         Self::PartyRef,
+        Self::Ballot,
         Self::ErrorNode,
     ];
 }

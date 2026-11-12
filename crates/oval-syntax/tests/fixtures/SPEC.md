@@ -1923,7 +1923,9 @@ contest @board "School Board" ranked max 6 max 4
 Occurs when a document-level entry appears after a group that must follow it has begun: a version
 marker after any other entry, a guide field after a top-level `party` or `candidate` declaration, or
 a guide field or a top-level declaration after the first root ballot. The error is reported as
-`misplaced-entry` and spans the entry. To recover, set the entry aside.
+`misplaced-entry` and spans the entry. To recover, set the entry aside. A misplaced guide field is
+not also a repeated field, even when an earlier entry has its keyword, since it is set aside either
+way.
 
 ```oval example
 oval 1
