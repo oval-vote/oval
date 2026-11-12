@@ -1,7 +1,7 @@
 use crate::Keyword;
 use crate::ast::{
-    AstNode, Campaign, ContestKind, Extensibility, Identifier, MarkdownField, Requirement,
-    StringField, StringLiteral, ast_node, support,
+    AstNode, Campaign, ContestKind, ContestRecommend, Extensibility, Identifier, MarkdownField,
+    Requirement, StringField, StringLiteral, ast_node, support,
 };
 
 ast_node! {
@@ -74,6 +74,14 @@ impl Contest {
 
     /// Returns the contest's campaigns, in ballot order.
     pub fn campaigns(&self) -> impl Iterator<Item = Campaign> + use<> {
+        support::block_children(self.syntax())
+    }
+
+    /// Returns the contest's recommendations, in the order written.
+    ///
+    /// A valid contest has exactly one. The parser accepts any number, so that validation can
+    /// report a contest with none or with more than one.
+    pub fn recommendations(&self) -> impl Iterator<Item = ContestRecommend> + use<> {
         support::block_children(self.syntax())
     }
 }
