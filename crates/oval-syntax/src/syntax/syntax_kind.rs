@@ -46,6 +46,40 @@ pub enum SyntaxKind {
     Document,
 }
 
+impl SyntaxKind {
+    pub(super) const ALL: [Self; SyntaxKind::Document as usize + 1] = [
+        Self::Word,
+        Self::String,
+        Self::Integer,
+        Self::Date,
+        Self::AtSign,
+        Self::Url,
+        Self::Colon,
+        Self::Comma,
+        Self::MarkdownBlock,
+        Self::Whitespace,
+        Self::Comment,
+        Self::ByteOrderMark,
+        Self::BlankLine,
+        Self::Newline,
+        Self::Indent,
+        Self::Dedent,
+        Self::Error,
+        Self::Document,
+    ];
+}
+
+const _: () = {
+    let mut i = 0;
+    while i < SyntaxKind::ALL.len() {
+        assert!(
+            SyntaxKind::ALL[i] as usize == i,
+            "SyntaxKind::ALL lists every kind in order"
+        );
+        i += 1;
+    }
+};
+
 impl From<TokenKind> for SyntaxKind {
     fn from(value: TokenKind) -> Self {
         match value {

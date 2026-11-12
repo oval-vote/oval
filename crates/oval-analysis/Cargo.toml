@@ -9,10 +9,5 @@ homepage.workspace = true
 authors.workspace = true
 publish.workspace = true
 
-[dependencies]
-oval-core.workspace = true
-oval-syntax.workspace = true
-serde.workspace = true
-
 [lints]
 workspace = true

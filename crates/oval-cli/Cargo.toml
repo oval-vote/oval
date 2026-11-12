@@ -13,16 +13,5 @@ publish.workspace = true
 name = "oval"
 path = "src/main.rs"
 
-[dependencies]
-clap.workspace = true
-oval-core.workspace = true
-oval-format.workspace = true
-oval-syntax.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
-
 [lints]
 workspace = true

@@ -57,5 +57,5 @@ mod syntax;
 mod token;
 
 pub use lexer::{InputRejection, LexResult, LexicalError, LexicalErrorKind, lex, lex_bytes};
-pub use syntax::SyntaxKind;
+pub use syntax::{OvalLanguage, SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 pub use token::{Token, TokenKind};
