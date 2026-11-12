@@ -1,7 +1,7 @@
 use crate::Keyword;
 use crate::ast::{
-    AstNode, Candidate, DateField, MarkdownField, Party, StringField, VersionMarker, ast_node,
-    support,
+    AstNode, Ballot, Candidate, DateField, MarkdownField, Party, StringField, VersionMarker,
+    ast_node, support,
 };
 
 ast_node! {
@@ -65,6 +65,13 @@ impl Document {
     ///
     /// A candidate declared inline, as a member of a campaign, is not among them.
     pub fn candidates(&self) -> impl Iterator<Item = Candidate> + use<> {
+        support::children(self.syntax())
+    }
+
+    /// Returns the root ballots, in the order written.
+    ///
+    /// Sub-ballots are not among them. Each is an item of the ballot that contains it.
+    pub fn ballots(&self) -> impl Iterator<Item = Ballot> + use<> {
         support::children(self.syntax())
     }
 }
@@ -212,5 +219,15 @@ mod tests {
         .document();
         assert_eq!(document.parties().count(), 0);
         assert_eq!(document.candidates().count(), 1);
+    }
+
+    #[test]
+    fn a_document_has_its_root_ballots_and_not_their_sub_ballots() {
+        let document = parse(
+            "ballot @a \"A\"\n  ballot @sub \"Sub\"\n    eligibility \"E\"\nballot @b \"B\"\n  eligibility \"E\"\n",
+        )
+        .unwrap()
+        .document();
+        assert_eq!(document.ballots().count(), 2);
     }
 }

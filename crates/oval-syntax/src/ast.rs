@@ -22,13 +22,19 @@
 
 mod ast_node;
 mod ast_token;
+mod ballot;
 mod candidate;
+mod contest;
 mod document;
+mod extensibility;
 mod fields;
 mod identifier;
 mod literals;
+mod measure;
 mod party;
 mod party_ref;
+mod requirement;
+mod section;
 mod support;
 mod version_marker;
 
@@ -36,11 +42,17 @@ pub use ast_node::AstNode;
 use ast_node::ast_node;
 pub use ast_token::AstToken;
 use ast_token::ast_token;
+pub use ballot::{Ballot, BallotItem};
 pub use candidate::Candidate;
+pub use contest::Contest;
 pub use document::Document;
+pub use extensibility::Extensibility;
 pub use fields::{DateField, MarkdownField, StringField, StringListField, UrlField};
 pub use identifier::Identifier;
 pub use literals::{DateLiteral, IntegerLiteral, MarkdownBody, StringLiteral, UrlLiteral};
+pub use measure::Measure;
 pub use party::Party;
 pub use party_ref::PartyRef;
+pub use requirement::Requirement;
+pub use section::{Section, SectionItem};
 pub use version_marker::VersionMarker;
