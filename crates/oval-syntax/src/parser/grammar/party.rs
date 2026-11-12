@@ -33,7 +33,7 @@ impl Parser<'_> {
         self.finish_node();
     }
 
-    fn party_block(&mut self) {
+    pub(super) fn party_block(&mut self) {
         if self.at(TokenKind::Indent) {
             self.block(&PARTY_FIELDS, Self::party_field);
         }

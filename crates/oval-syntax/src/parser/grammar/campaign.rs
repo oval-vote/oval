@@ -9,29 +9,64 @@ const CAMPAIGN_ENTRIES: [Expected; 5] = [
     Expected::Keyword(Keyword::Party),
 ];
 
+const PARTY_CAMPAIGN_ENTRIES: [Expected; 3] = [
+    Expected::Token(TokenKind::AtSign),
+    Expected::Keyword(Keyword::Website),
+    Expected::Keyword(Keyword::Note),
+];
+
 impl Parser<'_> {
     pub(super) fn campaign(&mut self) {
         self.start_node(SyntaxKind::Campaign);
         self.bump();
         self.flags();
+        if self.current_keyword() == Some(Keyword::Party) {
+            self.bump();
+            self.campaign_rest(
+                &[
+                    Expected::Token(TokenKind::AtSign),
+                    Expected::Token(TokenKind::Newline),
+                ],
+                Self::party_member,
+                &PARTY_CAMPAIGN_ENTRIES,
+                Self::party_campaign_entry,
+            );
+        } else {
+            self.campaign_rest(
+                &[
+                    Expected::Keyword(Keyword::Incumbent),
+                    Expected::Keyword(Keyword::Withdrawn),
+                    Expected::Keyword(Keyword::Party),
+                    Expected::Token(TokenKind::AtSign),
+                    Expected::Token(TokenKind::Newline),
+                ],
+                Self::member,
+                &CAMPAIGN_ENTRIES,
+                Self::campaign_entry,
+            );
+        }
+        self.finish_node();
+    }
+
+    fn campaign_rest(
+        &mut self,
+        expected: &[Expected],
+        member: fn(&mut Self),
+        accepts: &[Expected],
+        entry: fn(&mut Self, &mut Vec<Keyword>) -> bool,
+    ) {
         if self.at(TokenKind::AtSign) {
-            self.member();
+            member(self);
             self.end_of_line();
             if self.at(TokenKind::Indent) {
-                self.block(&CAMPAIGN_ENTRIES, Self::campaign_entry);
+                self.block(accepts, entry);
             }
         } else {
             if !self.at_line_end() {
-                self.skip_line(vec![
-                    Expected::Keyword(Keyword::Incumbent),
-                    Expected::Keyword(Keyword::Withdrawn),
-                    Expected::Token(TokenKind::AtSign),
-                    Expected::Token(TokenKind::Newline),
-                ]);
+                self.skip_line(expected.to_vec());
             }
-            self.end_of_line_with_block(&CAMPAIGN_ENTRIES, Self::campaign_entry);
+            self.end_of_line_with_block(accepts, entry);
         }
-        self.finish_node();
     }
 
     fn flags(&mut self) {
@@ -74,6 +109,30 @@ impl Parser<'_> {
         }
     }
 
+    fn party_member(&mut self) {
+        self.start_node(SyntaxKind::PartyMember);
+        self.party_member_line();
+        self.finish_node();
+    }
+
+    fn party_member_entry(&mut self) {
+        self.start_node(SyntaxKind::PartyMember);
+        self.party_member_line();
+        self.end_of_line();
+        self.party_block();
+        self.finish_node();
+    }
+
+    fn party_member_line(&mut self) {
+        self.identifier();
+        if !self.eat(TokenKind::String) && !self.at_line_end() {
+            self.skip_line(vec![
+                Expected::Token(TokenKind::String),
+                Expected::Token(TokenKind::Newline),
+            ]);
+        }
+    }
+
     fn member_role(&mut self) {
         self.start_node(SyntaxKind::MemberRole);
         self.bump();
@@ -93,6 +152,24 @@ impl Parser<'_> {
             return true;
         }
         self.candidate_field(seen)
+    }
+
+    fn party_campaign_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
+        if self.at(TokenKind::AtSign) {
+            self.party_member_entry();
+            return true;
+        }
+        let Some(keyword) = self.current_keyword() else {
+            return false;
+        };
+        match keyword {
+            Keyword::Website => self.field_once(seen, keyword, |p| {
+                p.value_field(SyntaxKind::UrlField, TokenKind::Url);
+            }),
+            Keyword::Note => self.field_once(seen, keyword, Self::markdown_field),
+            _ => return false,
+        }
+        true
     }
 }
 
@@ -329,6 +406,7 @@ mod tests {
                 vec![
                     Expected::Keyword(Keyword::Incumbent),
                     Expected::Keyword(Keyword::Withdrawn),
+                    Expected::Keyword(Keyword::Party),
                     Expected::Token(TokenKind::AtSign),
                     Expected::Token(TokenKind::Newline),
                 ],
@@ -579,6 +657,237 @@ mod tests {
                 SyntaxKind::ErrorNode,
                 SyntaxKind::Block
             ]
+        );
+    }
+
+    fn party_campaign_entries() -> Vec<Expected> {
+        vec![
+            Expected::Token(TokenKind::AtSign),
+            Expected::Keyword(Keyword::Website),
+            Expected::Keyword(Keyword::Note),
+        ]
+    }
+
+    #[test]
+    fn a_party_campaign_holds_party_members() {
+        let text = in_contest(
+            "    campaign party\n      @green \"Green Party\"\n        abbreviation \"G\"\n      @labour\n      website https://redgreen.example\n",
+        );
+        check_errors(&text, &[]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..162
+              Ballot@0..162
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..162
+                  Indent@16..16 ""
+                  Contest@16..162
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..37
+                      Word@31..37 "single"
+                    Newline@37..38 "\n"
+                    Whitespace@38..42 "    "
+                    Block@42..162
+                      Indent@42..42 ""
+                      Campaign@42..162
+                        Word@42..50 "campaign"
+                        Whitespace@50..51 " "
+                        Word@51..56 "party"
+                        Newline@56..57 "\n"
+                        Whitespace@57..63 "      "
+                        Block@63..162
+                          Indent@63..63 ""
+                          PartyMember@63..115
+                            Identifier@63..69
+                              AtSign@63..64 "@"
+                              Word@64..69 "green"
+                            Whitespace@69..70 " "
+                            String@70..83 "\"Green Party\""
+                            Newline@83..84 "\n"
+                            Whitespace@84..92 "        "
+                            Block@92..115
+                              Indent@92..92 ""
+                              StringField@92..109
+                                Word@92..104 "abbreviation"
+                                Whitespace@104..105 " "
+                                String@105..108 "\"G\""
+                                Newline@108..109 "\n"
+                              Whitespace@109..115 "      "
+                              Dedent@115..115 ""
+                          PartyMember@115..123
+                            Identifier@115..122
+                              AtSign@115..116 "@"
+                              Word@116..122 "labour"
+                            Newline@122..123 "\n"
+                          Whitespace@123..129 "      "
+                          UrlField@129..162
+                            Word@129..136 "website"
+                            Whitespace@136..137 " "
+                            Url@137..161 "https://redgreen.example"
+                            Newline@161..162 "\n"
+                          Dedent@162..162 ""
+                      Dedent@162..162 ""
+                  Dedent@162..162 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_party_campaign_can_have_one_member_on_its_line() {
+        let text = in_contest("    campaign incumbent party @dem\n");
+        check_errors(&text, &[]);
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::Campaign),
+            [SyntaxKind::Flag, SyntaxKind::PartyMember]
+        );
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::PartyMember),
+            [SyntaxKind::Identifier]
+        );
+    }
+
+    #[test]
+    fn a_one_line_party_campaign_takes_campaign_fields() {
+        check_errors(
+            &in_contest(
+                "    campaign party @green \"Green Party\"\n      website https://greens.example\n      note:\n        N.\n",
+            ),
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_party_member_takes_no_role() {
+        check_errors(
+            &in_contest("    campaign party @g \"G\" as \"X\"\n"),
+            &[unexpected_token(
+                64,
+                6,
+                vec![Expected::Token(TokenKind::Newline)],
+            )],
+        );
+        check_errors(
+            &in_contest("    campaign party @g as \"X\"\n"),
+            &[unexpected_token(
+                60,
+                6,
+                vec![
+                    Expected::Token(TokenKind::String),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_candidate_field_is_an_unexpected_entry_in_a_party_campaign() {
+        check_errors(
+            &in_contest("    campaign party @green \"Green Party\"\n      designation \"D\"\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedEntry,
+                offset: 84,
+                len: 15,
+                expected: party_campaign_entries(),
+            }],
+        );
+    }
+
+    #[test]
+    fn a_party_member_block_takes_party_fields() {
+        check_errors(
+            &in_contest("    campaign party\n      @g \"G\"\n        designation \"D\"\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedEntry,
+                offset: 78,
+                len: 15,
+                expected: vec![
+                    Expected::Keyword(Keyword::Abbreviation),
+                    Expected::Keyword(Keyword::Website),
+                    Expected::Keyword(Keyword::Note),
+                ],
+            }],
+        );
+    }
+
+    #[test]
+    fn a_party_reference_in_a_party_campaign_keeps_its_block() {
+        let text = in_contest("    campaign party\n      @dem\n        abbreviation \"D\"\n");
+        check_errors(&text, &[]);
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::PartyMember),
+            [SyntaxKind::Identifier, SyntaxKind::Block]
+        );
+    }
+
+    #[test]
+    fn a_party_campaign_without_a_member_is_missing_its_block() {
+        check_errors(
+            &in_contest("    campaign party\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::MissingBlock,
+                offset: 57,
+                len: 0,
+                expected: vec![Expected::Token(TokenKind::Indent)],
+            }],
+        );
+    }
+
+    #[test]
+    fn a_string_in_place_of_a_party_member_is_an_unexpected_token() {
+        let text = in_contest("    campaign party \"Greens\"\n      website https://g.example\n");
+        check_errors(
+            &text,
+            &[unexpected_token(
+                57,
+                8,
+                vec![
+                    Expected::Token(TokenKind::AtSign),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::Campaign),
+            [SyntaxKind::ErrorNode, SyntaxKind::Block]
+        );
+    }
+
+    #[test]
+    fn a_flag_after_party_skips_the_member_and_requires_a_block() {
+        check_errors(
+            &in_contest("    campaign party incumbent @dem\n"),
+            &[
+                unexpected_token(
+                    57,
+                    14,
+                    vec![
+                        Expected::Token(TokenKind::AtSign),
+                        Expected::Token(TokenKind::Newline),
+                    ],
+                ),
+                SyntaxError {
+                    kind: SyntaxErrorKind::MissingBlock,
+                    offset: 72,
+                    len: 0,
+                    expected: vec![Expected::Token(TokenKind::Indent)],
+                },
+            ],
         );
     }
 }

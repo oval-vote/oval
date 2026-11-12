@@ -98,6 +98,9 @@ pub enum SyntaxKind {
     RankedMax,
     /// A campaign in a contest, such as `campaign incumbent @bsantos "Beatriz Santos"` and the
     /// block below it.
+    ///
+    /// A party campaign, such as `campaign party @dem`, has the word `party` after its flags, and
+    /// its members are [`PartyMember`](SyntaxKind::PartyMember)s.
     Campaign,
     /// A campaign's flag, `incumbent` or `withdrawn`.
     Flag,
@@ -109,6 +112,9 @@ pub enum SyntaxKind {
     Member,
     /// A member's role on its campaign's ticket, such as `as "Governor"`.
     MemberRole,
+    /// A party in a party campaign, which refers to a party, such as `@dem`, or declares one in
+    /// place, such as `@green "Green Party"`.
+    PartyMember,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -159,6 +165,7 @@ impl SyntaxKind {
         Self::Flag,
         Self::Member,
         Self::MemberRole,
+        Self::PartyMember,
         Self::ErrorNode,
     ];
 }
