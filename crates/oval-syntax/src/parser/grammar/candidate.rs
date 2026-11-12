@@ -20,7 +20,7 @@ impl Parser<'_> {
         self.finish_node();
     }
 
-    fn candidate_field(&mut self, seen: &mut Vec<Keyword>) -> bool {
+    pub(super) fn candidate_field(&mut self, seen: &mut Vec<Keyword>) -> bool {
         let Some(keyword) = self.current_keyword() else {
             return false;
         };

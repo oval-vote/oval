@@ -96,6 +96,19 @@ pub enum SyntaxKind {
     /// A ranked contest's `max` modifier, such as `max 6`, which sets how many choices a voter may
     /// rank.
     RankedMax,
+    /// A campaign in a contest, such as `campaign incumbent @bsantos "Beatriz Santos"` and the
+    /// block below it.
+    Campaign,
+    /// A campaign's flag, `incumbent` or `withdrawn`.
+    Flag,
+    /// A candidate in a campaign, which refers to a candidate, such as `@jlee`, or declares one in
+    /// place, such as `@jlee "Jordan Lee"`.
+    ///
+    /// A member may give the candidate's role on the ticket in a
+    /// [`MemberRole`](SyntaxKind::MemberRole).
+    Member,
+    /// A member's role on its campaign's ticket, such as `as "Governor"`.
+    MemberRole,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -142,6 +155,10 @@ impl SyntaxKind {
         Self::Seats,
         Self::Minimum,
         Self::RankedMax,
+        Self::Campaign,
+        Self::Flag,
+        Self::Member,
+        Self::MemberRole,
         Self::ErrorNode,
     ];
 }
