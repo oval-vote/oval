@@ -22,17 +22,14 @@ impl Parser<'_> {
         self.start_node(SyntaxKind::PartyRef);
         self.bump();
         self.identifier();
-        let declares = self.eat(TokenKind::String);
-        if !declares && !self.at_line_end() {
+        if !self.eat(TokenKind::String) && !self.at_line_end() {
             self.skip_line(vec![
                 Expected::Token(TokenKind::String),
                 Expected::Token(TokenKind::Newline),
             ]);
         }
         self.end_of_line();
-        if declares {
-            self.party_block();
-        }
+        self.party_block();
         self.finish_node();
     }
 
@@ -63,7 +60,7 @@ impl Parser<'_> {
 #[cfg(test)]
 mod tests {
     use crate::parser::tests::check;
-    use crate::{Expected, Keyword, SyntaxError, SyntaxErrorKind, TokenKind, parse};
+    use crate::{Expected, Keyword, SyntaxError, SyntaxErrorKind, SyntaxKind, TokenKind, parse};
     use expect_test::expect;
 
     fn check_errors(text: &str, expected: &[SyntaxError]) {
@@ -436,14 +433,30 @@ mod tests {
     }
 
     #[test]
-    fn a_block_below_a_party_reference_is_unexpected() {
+    fn a_party_reference_keeps_a_block_below_it() {
+        let text = "candidate @c \"C\"\n  party @dem\n    abbreviation \"D\"\n";
+        check_errors(text, &[]);
+        let tree = parse(text).unwrap().syntax();
+        let party_ref = tree
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::PartyRef)
+            .expect("the candidate has a party field");
+        let children: Vec<_> = party_ref.children().map(|node| node.kind()).collect();
+        assert_eq!(children, [SyntaxKind::Identifier, SyntaxKind::Block]);
+    }
+
+    #[test]
+    fn a_party_reference_with_a_skipped_line_keeps_its_block() {
         check_errors(
-            "candidate @c \"C\"\n  party @dem\n    abbreviation \"D\"\n",
+            "candidate @c \"C\"\n  party @g 5\n    abbreviation \"G\"\n",
             &[SyntaxError {
-                kind: SyntaxErrorKind::UnexpectedBlock,
-                offset: 34,
-                len: 16,
-                expected: Vec::new(),
+                kind: SyntaxErrorKind::UnexpectedToken,
+                offset: 28,
+                len: 1,
+                expected: vec![
+                    Expected::Token(TokenKind::String),
+                    Expected::Token(TokenKind::Newline),
+                ],
             }],
         );
     }

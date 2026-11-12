@@ -70,7 +70,8 @@ pub enum SyntaxKind {
     /// such as `party @green "Green"`.
     ///
     /// A party declared in place has a name, and may have a [`Block`](SyntaxKind::Block) of party
-    /// fields below it. A reference has neither.
+    /// fields below it. A reference has no name. A block below a reference is kept in the tree, but
+    /// is invalid, since a reference has nothing to declare.
     PartyRef,
     /// A ballot, such as `ballot @franklin "State of Franklin"` and the block below it.
     Ballot,

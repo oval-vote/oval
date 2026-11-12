@@ -707,10 +707,7 @@ CandidateField :
 - PartyRef
 - `note` MarkdownBody
 
-PartyRef :
-
-- `party` Identifier Newline
-- `party` Identifier String Newline PartyBlock?
+PartyRef : `party` Identifier String? Newline PartyBlock?
 
 ```oval example
 candidate @nreyes "Nadia Reyes"
@@ -720,9 +717,9 @@ candidate @nreyes "Nadia Reyes"
     Appointed in January 2025 to fill a vacancy.
 ```
 
-`PartyRef`'s second form is an **inline party declaration**: `party @green "Green"` declares
-`@green` right here and makes it this candidate's party. It may be followed by a `PartyBlock`
-indented under it.
+A `PartyRef` with a name is an **inline party declaration**: `party @green "Green"` declares
+`@green` right here and makes it this candidate's party. A `PartyBlock` may be indented under a
+`PartyRef` **only when it is an inline declaration**; a reference has nothing to declare.
 
 A candidate may be declared at the top level, as above, or inline in a campaign. Declare at the top
 level when the person appears in more than one contest.
@@ -1803,7 +1800,7 @@ The first ballot is kept with no items.
 #### Unexpected Block
 
 Occurs when a line that takes no block is followed by one: a field line other than a Markdown
-field's, a `party` reference, a `support` or `oppose` line, or a version marker. The error is
+field's or a `party` field's, a `support` or `oppose` line, or a version marker. The error is
 reported as `unexpected-block` and spans the block. To recover, skip the entry, which here is the
 block alone; the line before it is kept.
 
@@ -2145,9 +2142,10 @@ The second counter-example names a party in a candidate campaign; write `campaig
 
 #### Block on a Reference
 
-Occurs when a member that is a reference, not an inline declaration, is followed by an indented
-block of candidate fields, or of party fields in a party campaign. A reference has nothing to
-declare. The error is reported as `block-on-reference` and spans the block.
+Occurs when a reference, not an inline declaration, is followed by an indented block: a campaign
+member followed by candidate fields, a party campaign member followed by party fields, or a `party`
+field followed by party fields. A reference has nothing to declare. The error is reported as
+`block-on-reference` and spans the block.
 
 ```oval example
 campaign
@@ -2159,6 +2157,12 @@ campaign
 campaign
   @dana-lombardi as "President"
     designation "United States Senator"
+```
+
+```oval counter-example
+candidate @nreyes "Nadia Reyes"
+  party @dem
+    abbreviation "D"
 ```
 
 #### Misplaced Candidate Field
@@ -3541,10 +3545,7 @@ CandidateField :
 - PartyRef
 - `note` MarkdownBody
 
-PartyRef :
-
-- `party` Identifier Newline
-- `party` Identifier String Newline PartyBlock?
+PartyRef : `party` Identifier String? Newline PartyBlock?
 
 Ballot : Requirement? Extensibility? `ballot` Identifier String Newline BallotBlock
 
