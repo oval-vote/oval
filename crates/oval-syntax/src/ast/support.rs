@@ -11,6 +11,21 @@ pub(super) fn children<N: AstNode>(node: &SyntaxNode) -> impl Iterator<Item = N>
     node.children().filter_map(N::cast)
 }
 
+pub(super) fn field<N: AstNode>(node: &SyntaxNode, keyword: Keyword) -> Option<N> {
+    children(node).find(|field: &N| self::keyword(field.syntax()) == Some(keyword))
+}
+
+pub(super) fn block_children<N: AstNode>(node: &SyntaxNode) -> impl Iterator<Item = N> + use<N> {
+    node.children()
+        .find(|child| child.kind() == SyntaxKind::Block)
+        .into_iter()
+        .flat_map(|block| children(&block))
+}
+
+pub(super) fn block_field<N: AstNode>(node: &SyntaxNode, keyword: Keyword) -> Option<N> {
+    block_children(node).find(|field: &N| self::keyword(field.syntax()) == Some(keyword))
+}
+
 pub(super) fn token<T: AstToken>(node: &SyntaxNode) -> Option<T> {
     tokens(node).next()
 }

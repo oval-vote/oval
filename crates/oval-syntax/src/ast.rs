@@ -22,10 +22,13 @@
 
 mod ast_node;
 mod ast_token;
+mod candidate;
 mod document;
 mod fields;
 mod identifier;
 mod literals;
+mod party;
+mod party_ref;
 mod support;
 mod version_marker;
 
@@ -33,8 +36,11 @@ pub use ast_node::AstNode;
 use ast_node::ast_node;
 pub use ast_token::AstToken;
 use ast_token::ast_token;
+pub use candidate::Candidate;
 pub use document::Document;
 pub use fields::{DateField, MarkdownField, StringField, StringListField, UrlField};
 pub use identifier::Identifier;
 pub use literals::{DateLiteral, IntegerLiteral, MarkdownBody, StringLiteral, UrlLiteral};
+pub use party::Party;
+pub use party_ref::PartyRef;
 pub use version_marker::VersionMarker;

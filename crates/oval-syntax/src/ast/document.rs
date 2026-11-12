@@ -1,6 +1,7 @@
 use crate::Keyword;
 use crate::ast::{
-    AstNode, DateField, MarkdownField, StringField, VersionMarker, ast_node, support,
+    AstNode, Candidate, DateField, MarkdownField, Party, StringField, VersionMarker, ast_node,
+    support,
 };
 
 ast_node! {
@@ -34,12 +35,12 @@ impl Document {
     ///
     /// A field written without a value is still returned, with no [`value`](StringField::value).
     pub fn guide(&self) -> Option<StringField> {
-        self.string_field(Keyword::Guide)
+        support::field(self.syntax(), Keyword::Guide)
     }
 
     /// Returns the `election` field, the election's name, or `None` if the document has none.
     pub fn election(&self) -> Option<StringField> {
-        self.string_field(Keyword::Election)
+        support::field(self.syntax(), Keyword::Election)
     }
 
     /// Returns the `date` field, the election's date, or `None` if the document has none.
@@ -52,8 +53,19 @@ impl Document {
         support::child(self.syntax())
     }
 
-    fn string_field(&self, keyword: Keyword) -> Option<StringField> {
-        support::children(self.syntax()).find(|field: &StringField| field.keyword() == keyword)
+    /// Returns the parties declared at the top level, in the order written.
+    ///
+    /// A party declared inline, in a candidate's `party` field or a party campaign, is not among
+    /// them.
+    pub fn parties(&self) -> impl Iterator<Item = Party> + use<> {
+        support::children(self.syntax())
+    }
+
+    /// Returns the candidates declared at the top level, in the order written.
+    ///
+    /// A candidate declared inline, as a member of a campaign, is not among them.
+    pub fn candidates(&self) -> impl Iterator<Item = Candidate> + use<> {
+        support::children(self.syntax())
     }
 }
 
@@ -166,5 +178,39 @@ mod tests {
             .unwrap()
             .document();
         assert_eq!(document.note(), None);
+    }
+
+    #[test]
+    fn a_document_has_its_declarations_in_order() {
+        let document =
+            parse("party @dem \"D\"\ncandidate @a \"A\"\nparty @rep \"R\"\ncandidate @b \"B\"\n")
+                .unwrap()
+                .document();
+        let parties: Vec<_> = document
+            .parties()
+            .filter_map(|party| party.identifier())
+            .collect();
+        let candidates: Vec<_> = document
+            .candidates()
+            .filter_map(|c| c.identifier())
+            .collect();
+        let names = |ids: Vec<crate::ast::Identifier>| -> Vec<String> {
+            ids.iter()
+                .filter_map(|id| id.name().map(|name| name.text().to_owned()))
+                .collect()
+        };
+        assert_eq!(names(parties), ["dem", "rep"]);
+        assert_eq!(names(candidates), ["a", "b"]);
+    }
+
+    #[test]
+    fn misplaced_and_inline_declarations_are_not_the_document_declarations() {
+        let document = parse(
+            "candidate @a \"A\"\n  party @green \"Green\"\nballot @b \"B\"\n  eligibility \"E\"\nparty @late \"L\"\n",
+        )
+        .unwrap()
+        .document();
+        assert_eq!(document.parties().count(), 0);
+        assert_eq!(document.candidates().count(), 1);
     }
 }
