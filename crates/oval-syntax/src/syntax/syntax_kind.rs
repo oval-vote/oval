@@ -74,6 +74,10 @@ pub enum SyntaxKind {
     PartyRef,
     /// A ballot, such as `ballot @franklin "State of Franklin"` and the block below it.
     Ballot,
+    /// A requirement before a construct's keyword, `required` or `optional`.
+    Requirement,
+    /// An extensibility before a construct's keyword, `extensible` or `exhaustive`.
+    Extensibility,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -112,6 +116,8 @@ impl SyntaxKind {
         Self::Candidate,
         Self::PartyRef,
         Self::Ballot,
+        Self::Requirement,
+        Self::Extensibility,
         Self::ErrorNode,
     ];
 }

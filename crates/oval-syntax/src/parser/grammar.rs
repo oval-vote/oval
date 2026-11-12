@@ -6,5 +6,6 @@ mod document;
 mod field;
 mod guide;
 mod identifier;
+mod modifiers;
 mod party;
 mod version_marker;

@@ -10,6 +10,7 @@ const BALLOT_ENTRIES: [Expected; 3] = [
 impl Parser<'_> {
     pub(super) fn ballot(&mut self) {
         self.start_node(SyntaxKind::Ballot);
+        self.modifiers();
         self.bump();
         self.identifier();
         self.expect(TokenKind::String, SyntaxErrorKind::MissingName);
@@ -18,15 +19,16 @@ impl Parser<'_> {
     }
 
     fn ballot_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
-        let Some(keyword) = self.current_keyword() else {
+        let head = self.entry_head();
+        let Some(keyword) = head.keyword else {
             return false;
         };
-        match keyword {
-            Keyword::Eligibility => self.field_once(seen, keyword, |p| {
+        match (keyword, head.has_modifiers()) {
+            (Keyword::Eligibility, false) => self.field_once(seen, keyword, |p| {
                 p.value_field(SyntaxKind::StringField, TokenKind::String);
             }),
-            Keyword::Note => self.field_once(seen, keyword, Self::markdown_field),
-            Keyword::Ballot => self.ballot(),
+            (Keyword::Note, false) => self.field_once(seen, keyword, Self::markdown_field),
+            (Keyword::Ballot, _) => self.ballot(),
             _ => return false,
         }
         true

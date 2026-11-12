@@ -87,7 +87,11 @@ impl<'t> Parser<'t> {
     }
 
     fn current_keyword(&self) -> Option<Keyword> {
-        let (token, offset) = self.peek()?;
+        self.nth_keyword(0)
+    }
+
+    fn nth_keyword(&self, n: usize) -> Option<Keyword> {
+        let (token, offset) = self.nth(n)?;
         if token.kind != TokenKind::Word {
             return None;
         }
@@ -99,10 +103,23 @@ impl<'t> Parser<'t> {
     }
 
     fn peek(&self) -> Option<(Token, usize)> {
+        self.nth(0)
+    }
+
+    fn nth(&self, mut n: usize) -> Option<(Token, usize)> {
         let mut offset = self.offset;
+        let mut line_is_empty = self.line_is_empty;
         for &token in &self.tokens[self.pos..] {
-            if !is_skipped(token, self.line_is_empty) {
-                return Some((token, offset));
+            if !is_skipped(token, line_is_empty) {
+                if n == 0 {
+                    return Some((token, offset));
+                }
+                n -= 1;
+                if ends_line(token) {
+                    line_is_empty = true;
+                } else if !token.is_layout() {
+                    line_is_empty = false;
+                }
             }
             offset += token.len as usize;
         }
@@ -465,6 +482,46 @@ mod tests {
         assert_eq!(parser("dates").current_keyword(), None);
         assert_eq!(parser("\"date\"").current_keyword(), None);
         assert_eq!(parser("").current_keyword(), None);
+    }
+
+    #[test]
+    fn nth_counts_only_tokens_the_parser_does_not_skip() {
+        let parser = parser("a  # aside\n\nb\n");
+        let kinds: Vec<_> = (0..4)
+            .map(|n| parser.nth(n).map(|(token, _)| token.kind))
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                Some(TokenKind::Word),
+                Some(TokenKind::Newline),
+                Some(TokenKind::Word),
+                Some(TokenKind::Newline),
+            ]
+        );
+        assert_eq!(parser.nth(4), None);
+    }
+
+    #[test]
+    fn nth_gives_the_offset_of_the_token() {
+        let parser = parser("# aside\none two");
+        assert_eq!(parser.nth(1).map(|(_, offset)| offset), Some(12));
+    }
+
+    #[test]
+    fn nth_skips_the_newline_of_a_line_of_only_error_tokens() {
+        let parser = parser("a\n\t\nb");
+        assert_eq!(
+            parser.nth(2).map(|(token, _)| token.kind),
+            Some(TokenKind::Word)
+        );
+    }
+
+    #[test]
+    fn nth_keyword_is_the_keyword_of_the_nth_token() {
+        let parser = parser("required ballot @a");
+        assert_eq!(parser.nth_keyword(1), Some(Keyword::Ballot));
+        assert_eq!(parser.nth_keyword(2), None);
     }
 
     #[test]

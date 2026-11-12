@@ -10,7 +10,7 @@ impl Parser<'_> {
         let mut seen = Vec::new();
         while self.guide_field(&mut seen) {}
         while self.declaration() {}
-        while self.at_keyword(Keyword::Ballot) {
+        while self.entry_head().keyword == Some(Keyword::Ballot) {
             self.ballot();
         }
         while self.current().is_some() {
