@@ -1640,10 +1640,13 @@ document's structure. A parser never needs a fallback error.
 The parser skips `Error` tokens from the lexer as it skips comments and whitespace, so a lexical
 error is the only diagnostic for the text it covers. On a line that contains an `Error` token, no
 missing-token error is reported, since what is missing may be the text the lexer rejected. A line
-whose only token the parser does not skip is its terminator is treated as blank.
+whose only tokens the parser does not skip are its terminator and layout tokens is treated as blank.
+Its `Indent` or `Dedent` still opens or closes a block, so a block may hold nothing but such lines.
+No syntax error is reported for such a block, whether or not the line before it takes one, since the
+lexical errors are the only diagnostics for its text.
 
 Error ranges are measured over the tokens the parser does not skip. The _end of a line_ is the end
-of the last token on it, other than its terminator, that the parser does not skip, so whitespace, a
+of the last token on it, other than a layout token, that the parser does not skip, so whitespace, a
 comment, or an `Error` token after that point is not part of the line. An error that spans part of a
 line, a line, an entry, or a block begins at the first token in it that the parser does not skip and
 ends at the end of its last line, and a recovery that discards or sets aside that text leaves what

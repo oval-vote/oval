@@ -13,6 +13,11 @@ impl Lexer<'_> {
     pub(in crate::lexer) fn comma(&mut self, start: usize) {
         self.single(TokenKind::Comma, ',', start);
     }
+
+    fn single(&mut self, kind: TokenKind, c: char, start: usize) {
+        self.bump(c);
+        self.push(kind, start);
+    }
 }
 
 #[cfg(test)]

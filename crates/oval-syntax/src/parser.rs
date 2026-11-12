@@ -239,14 +239,14 @@ impl<'t> Parser<'t> {
         );
         self.pos += 1;
         self.offset = end;
-        if !skipped && token.kind != TokenKind::Newline {
+        if !skipped && !token.is_layout() {
             self.line_end = end;
         }
         if ends_line(token) {
             self.line_start = self.pos;
             self.line_is_empty = true;
             self.line_was_skipped = false;
-        } else if !token.is_ignored() && !token.is_error() {
+        } else if !token.is_ignored() && !token.is_error() && !token.is_layout() {
             self.line_is_empty = false;
         }
     }
@@ -583,13 +583,37 @@ mod tests {
     }
 
     #[test]
-    fn a_line_that_opens_a_block_keeps_its_newline() {
+    fn a_line_that_opens_a_block_with_only_error_tokens_is_blank() {
         let mut parser = parser("a\n  \t\n");
         parser.bump();
         parser.bump();
         assert_eq!(parser.current(), Some(TokenKind::Indent));
         parser.bump();
-        assert_eq!(parser.current(), Some(TokenKind::Newline));
+        assert_eq!(parser.current(), Some(TokenKind::Dedent));
+    }
+
+    #[test]
+    fn a_line_that_closes_a_block_with_only_error_tokens_is_blank() {
+        let mut parser = parser("a\n  b\n\t\n");
+        for _ in 0..5 {
+            parser.bump();
+        }
+        assert_eq!(parser.current(), Some(TokenKind::Dedent));
+        parser.bump();
+        assert_eq!(parser.current(), None);
+    }
+
+    #[test]
+    fn layout_tokens_do_not_move_the_end_of_the_line() {
+        let mut parser = parser("a\n  b\nc");
+        parser.bump();
+        parser.bump();
+        parser.bump();
+        assert_eq!(parser.line_end, 1);
+        parser.bump();
+        parser.bump();
+        parser.bump();
+        assert_eq!(parser.line_end, 5);
     }
 
     #[test]

@@ -175,11 +175,6 @@ impl<'a> Lexer<'a> {
         self.push_error(LexicalErrorKind::UnexpectedCharacter, start);
     }
 
-    fn single(&mut self, kind: TokenKind, c: char, start: usize) {
-        self.bump(c);
-        self.push(kind, start);
-    }
-
     fn rest(&self) -> &str {
         &self.source[self.pos..]
     }
