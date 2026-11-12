@@ -95,10 +95,6 @@ impl<'t> Parser<'t> {
         Keyword::from_text(&self.text[offset..offset + token.len as usize])
     }
 
-    fn at_keyword(&self, keyword: Keyword) -> bool {
-        self.current_keyword() == Some(keyword)
-    }
-
     fn peek(&self) -> Option<(Token, usize)> {
         self.nth(0)
     }
@@ -192,6 +188,21 @@ impl<'t> Parser<'t> {
             self.line_end,
             expected,
         );
+    }
+
+    fn set_aside(&mut self, kind: SyntaxErrorKind, entry: impl FnOnce(&mut Self)) {
+        let index = self.errors.len();
+        self.start_node(SyntaxKind::ErrorNode);
+        let start = self.offset;
+        entry(self);
+        self.finish_node();
+        let error = SyntaxError {
+            kind,
+            offset: to_u32(start),
+            len: to_u32(self.line_end - start),
+            expected: Vec::new(),
+        };
+        self.errors.insert(index, error);
     }
 
     fn report(&mut self, kind: SyntaxErrorKind, start: usize, end: usize, expected: Vec<Expected>) {
@@ -521,13 +532,6 @@ mod tests {
         let parser = parser("required ballot @a");
         assert_eq!(parser.nth_keyword(1), Some(Keyword::Ballot));
         assert_eq!(parser.nth_keyword(2), None);
-    }
-
-    #[test]
-    fn at_keyword_looks_past_ignored_tokens() {
-        let parser = parser("# aside\noval 1\n");
-        assert!(parser.at_keyword(Keyword::Oval));
-        assert!(!parser.at_keyword(Keyword::Guide));
     }
 
     #[test]

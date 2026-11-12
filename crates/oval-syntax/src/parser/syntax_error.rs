@@ -52,6 +52,12 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits just after the line's terminator. The parser keeps the
     /// construct as if its block were empty.
     MissingBlock,
+    /// A document-level entry that appears after a group of entries that must follow it has
+    /// begun, such as a guide field after the first ballot, or a version marker after any entry.
+    ///
+    /// The error spans the entry, including its block or body. The parser parses the entry in full,
+    /// so that errors inside it are still reported, but sets it aside.
+    MisplacedEntry,
 }
 
 impl SyntaxErrorKind {
@@ -70,6 +76,7 @@ impl SyntaxErrorKind {
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
             Self::MissingBlock => "missing-block",
+            Self::MisplacedEntry => "misplaced-entry",
         }
     }
 }
@@ -150,6 +157,7 @@ mod tests {
             "unexpected-block"
         );
         assert_eq!(SyntaxErrorKind::MissingBlock.spec_id(), "missing-block");
+        assert_eq!(SyntaxErrorKind::MisplacedEntry.spec_id(), "misplaced-entry");
     }
 
     #[test]
