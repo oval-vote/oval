@@ -1,6 +1,8 @@
-use rowan::{GreenNodeBuilder, Language};
+mod token_parser;
 
-use crate::{InputRejection, OvalLanguage, SyntaxKind, SyntaxNode, lex};
+use token_parser::TokenParser;
+
+use crate::{InputRejection, SyntaxKind, SyntaxNode, lex};
 
 /// Parses an Oval document into a syntax tree.
 ///
@@ -23,20 +25,13 @@ use crate::{InputRejection, OvalLanguage, SyntaxKind, SyntaxNode, lex};
 /// # Ok::<(), oval_syntax::InputRejection>(())
 /// ```
 pub fn parse(text: &str) -> Result<SyntaxNode, InputRejection> {
-    let result = lex(text)?;
-    let mut builder = GreenNodeBuilder::new();
-    builder.start_node(OvalLanguage::kind_to_raw(SyntaxKind::Document));
-    let mut start = 0;
-    for token in result.tokens {
-        let end = start + token.len as usize;
-        builder.token(
-            OvalLanguage::kind_to_raw(token.kind.into()),
-            &text[start..end],
-        );
-        start = end;
+    let mut parser = TokenParser::new(text, lex(text)?.tokens);
+    parser.start_node(SyntaxKind::Document);
+    while parser.current().is_some() {
+        parser.bump();
     }
-    builder.finish_node();
-    Ok(SyntaxNode::new_root(builder.finish()))
+    parser.finish_node();
+    Ok(SyntaxNode::new_root(parser.finish()))
 }
 
 #[cfg(test)]
@@ -106,6 +101,33 @@ mod tests {
     #[test]
     fn the_tree_reproduces_line_terminators_and_a_byte_order_mark() {
         check_round_trip("\u{FEFF}a\r\n  b\rc\n\n# comment\n");
+    }
+
+    #[test]
+    fn ignored_tokens_at_the_end_are_inside_the_document() {
+        check(
+            "word\n\n# last\n",
+            &expect![[r##"
+                Document@0..13
+                  Word@0..4 "word"
+                  Newline@4..5 "\n"
+                  BlankLine@5..6 "\n"
+                  Comment@6..12 "# last"
+                  BlankLine@12..13 "\n"
+            "##]],
+        );
+    }
+
+    #[test]
+    fn a_document_of_only_ignored_tokens_keeps_them() {
+        check(
+            "# just a comment\n",
+            &expect![[r##"
+                Document@0..17
+                  Comment@0..16 "# just a comment"
+                  BlankLine@16..17 "\n"
+            "##]],
+        );
     }
 
     #[test]
