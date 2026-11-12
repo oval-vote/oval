@@ -1,7 +1,7 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const MEASURE_ENTRIES: [Expected; 8] = [
+const MEASURE_ENTRIES: [Expected; 10] = [
     Expected::Keyword(Keyword::Subtitle),
     Expected::Keyword(Keyword::Description),
     Expected::Keyword(Keyword::IfYes),
@@ -9,6 +9,8 @@ const MEASURE_ENTRIES: [Expected; 8] = [
     Expected::Keyword(Keyword::Placement),
     Expected::Keyword(Keyword::Tabulation),
     Expected::Keyword(Keyword::FiscalImpact),
+    Expected::Keyword(Keyword::Supporters),
+    Expected::Keyword(Keyword::Opponents),
     Expected::Keyword(Keyword::Note),
 ];
 
@@ -39,6 +41,9 @@ impl Parser<'_> {
             Keyword::Description | Keyword::IfYes | Keyword::IfNo | Keyword::Note => {
                 self.field_once(seen, keyword, Self::markdown_field);
             }
+            Keyword::Supporters | Keyword::Opponents => {
+                self.field_once(seen, keyword, Self::string_list_field);
+            }
             _ => return false,
         }
         true
@@ -64,6 +69,8 @@ mod tests {
             Expected::Keyword(Keyword::Placement),
             Expected::Keyword(Keyword::Tabulation),
             Expected::Keyword(Keyword::FiscalImpact),
+            Expected::Keyword(Keyword::Supporters),
+            Expected::Keyword(Keyword::Opponents),
             Expected::Keyword(Keyword::Note),
         ]
     }
@@ -215,5 +222,174 @@ mod tests {
                 expected: Vec::new(),
             }],
         );
+    }
+
+    fn in_measure(lines: &str) -> String {
+        format!("ballot @a \"A\"\n  measure @p \"P\"\n{lines}")
+    }
+
+    fn missing_value(offset: u32, expected: Vec<Expected>) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::MissingValue,
+            offset,
+            len: 0,
+            expected,
+        }
+    }
+
+    fn unexpected_token(offset: u32, len: u32, expected: Vec<Expected>) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedToken,
+            offset,
+            len,
+            expected,
+        }
+    }
+
+    fn string() -> Expected {
+        Expected::Token(TokenKind::String)
+    }
+
+    #[test]
+    fn a_string_list_is_strings_or_none() {
+        let text = in_measure("    supporters \"A\", \"B\"\n    opponents none\n");
+        check_errors(&text, &[]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..74
+              Ballot@0..74
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..74
+                  Indent@16..16 ""
+                  Measure@16..74
+                    Word@16..23 "measure"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "p"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"P\""
+                    Newline@30..31 "\n"
+                    Whitespace@31..35 "    "
+                    Block@35..74
+                      Indent@35..35 ""
+                      StringListField@35..55
+                        Word@35..45 "supporters"
+                        Whitespace@45..46 " "
+                        String@46..49 "\"A\""
+                        Comma@49..50 ","
+                        Whitespace@50..51 " "
+                        String@51..54 "\"B\""
+                        Newline@54..55 "\n"
+                      Whitespace@55..59 "    "
+                      StringListField@59..74
+                        Word@59..68 "opponents"
+                        Whitespace@68..69 " "
+                        Word@69..73 "none"
+                        Newline@73..74 "\n"
+                      Dedent@74..74 ""
+                  Dedent@74..74 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_string_list_can_hold_one_string() {
+        check_errors(&in_measure("    supporters \"A\"\n"), &[]);
+    }
+
+    #[test]
+    fn a_string_list_without_a_value_is_missing_its_value() {
+        check_errors(
+            &in_measure("    supporters\n"),
+            &[missing_value(
+                45,
+                vec![string(), Expected::Keyword(Keyword::NoneValue)],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_comma_at_the_end_of_the_line_is_missing_a_value() {
+        check_errors(
+            &in_measure("    supporters \"A\",\n"),
+            &[missing_value(50, vec![string()])],
+        );
+    }
+
+    #[test]
+    fn strings_without_a_comma_are_an_unexpected_token() {
+        check_errors(
+            &in_measure("    supporters \"A\" \"B\"\n"),
+            &[unexpected_token(
+                50,
+                3,
+                vec![
+                    Expected::Token(TokenKind::Comma),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+    }
+
+    #[test]
+    fn none_ends_the_list() {
+        check_errors(
+            &in_measure("    supporters none, \"A\"\n"),
+            &[unexpected_token(
+                50,
+                5,
+                vec![Expected::Token(TokenKind::Newline)],
+            )],
+        );
+    }
+
+    #[test]
+    fn none_is_not_a_string_in_a_list() {
+        check_errors(
+            &in_measure("    supporters \"A\", none\n"),
+            &[unexpected_token(51, 4, vec![string()])],
+        );
+    }
+
+    #[test]
+    fn a_value_of_the_wrong_kind_is_an_unexpected_token() {
+        check_errors(
+            &in_measure("    supporters 5\n"),
+            &[unexpected_token(
+                46,
+                1,
+                vec![string(), Expected::Keyword(Keyword::NoneValue)],
+            )],
+        );
+    }
+
+    #[test]
+    fn a_repeated_string_list_field_is_set_aside() {
+        check_errors(
+            &in_measure("    opponents none\n    opponents \"X\"\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::RepeatedField,
+                offset: 54,
+                len: 13,
+                expected: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn a_missing_string_is_not_reported_where_an_error_token_is() {
+        let result = parse(&in_measure("    supporters \"A\", ~\n")).unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(result.syntax_errors, []);
     }
 }

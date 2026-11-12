@@ -24,6 +24,36 @@ impl Parser<'_> {
         self.finish_node();
     }
 
+    pub(super) fn string_list_field(&mut self) {
+        self.start_node(SyntaxKind::StringListField);
+        self.bump();
+        if self.current_keyword() == Some(Keyword::NoneValue) {
+            self.bump();
+        } else if self.eat(TokenKind::String) {
+            while self.eat(TokenKind::Comma) {
+                if !self.expect(TokenKind::String, SyntaxErrorKind::MissingValue) {
+                    break;
+                }
+            }
+            if !self.at_line_end() {
+                self.skip_line(vec![
+                    Expected::Token(TokenKind::Comma),
+                    Expected::Token(TokenKind::Newline),
+                ]);
+            }
+        } else {
+            self.recover_missing(
+                SyntaxErrorKind::MissingValue,
+                vec![
+                    Expected::Token(TokenKind::String),
+                    Expected::Keyword(Keyword::NoneValue),
+                ],
+            );
+        }
+        self.end_of_line();
+        self.finish_node();
+    }
+
     pub(super) fn markdown_field(&mut self) {
         self.start_node(SyntaxKind::MarkdownField);
         self.bump();

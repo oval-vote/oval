@@ -54,6 +54,10 @@ pub enum SyntaxKind {
     UrlField,
     /// A field whose value is a Markdown body, such as `note:` and the indented lines below it.
     MarkdownField,
+    /// A field whose value is a list of strings separated by commas, such as
+    /// `supporters "Franklin Housing Coalition", "Franklin Labor Federation"`, or the word `none`
+    /// for a list known to be empty.
+    StringListField,
     /// The indented lines below a header line, from its [`Indent`](SyntaxKind::Indent) to its
     /// [`Dedent`](SyntaxKind::Dedent).
     ///
@@ -168,6 +172,7 @@ impl SyntaxKind {
         Self::DateField,
         Self::UrlField,
         Self::MarkdownField,
+        Self::StringListField,
         Self::Block,
         Self::Identifier,
         Self::Party,
