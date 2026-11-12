@@ -3,8 +3,9 @@ use crate::SyntaxKind;
 /// The Oval language, for use as the type parameter of rowan's syntax tree types.
 ///
 /// `OvalLanguage` has no values. It exists only to tell rowan that the kinds in an Oval syntax tree
-/// are [`SyntaxKind`]s. Use the [`SyntaxNode`], [`SyntaxToken`], and [`SyntaxElement`] aliases
-/// rather than naming it directly.
+/// are [`SyntaxKind`]s. Use the [`SyntaxNode`](crate::SyntaxNode),
+/// [`SyntaxToken`](crate::SyntaxToken), and [`SyntaxElement`](crate::SyntaxElement) aliases rather
+/// than naming it directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum OvalLanguage {}
 
@@ -22,21 +23,6 @@ impl rowan::Language for OvalLanguage {
         rowan::SyntaxKind(kind as u16)
     }
 }
-
-/// A node in an Oval syntax tree, such as a whole document.
-///
-/// A node knows its parent and its position in the document, and its text is the text of every
-/// token inside it.
-pub type SyntaxNode = rowan::SyntaxNode<OvalLanguage>;
-
-/// A token in an Oval syntax tree, which is a leaf of the tree.
-///
-/// Every token the lexer produces is in the tree, including whitespace, comments, and errors, so
-/// the tokens of a tree reproduce its document exactly.
-pub type SyntaxToken = rowan::SyntaxToken<OvalLanguage>;
-
-/// Either a [`SyntaxNode`] or a [`SyntaxToken`], such as one child of a node.
-pub type SyntaxElement = rowan::SyntaxElement<OvalLanguage>;
 
 #[cfg(test)]
 mod tests {
