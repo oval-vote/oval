@@ -154,10 +154,11 @@ mod tests {
                     Whitespace@5..6 " "
                     String@6..9 "\"G\""
                     Newline@9..10 "\n"
-                  Word@10..14 "oval"
-                  Whitespace@14..15 " "
-                  Integer@15..16 "1"
-                  Newline@16..17 "\n"
+                  VersionMarker@10..17
+                    Word@10..14 "oval"
+                    Whitespace@14..15 " "
+                    Integer@15..16 "1"
+                    Newline@16..17 "\n"
             "#]],
         );
     }
@@ -167,12 +168,13 @@ mod tests {
         check(
             "Oval 1\n",
             &expect![[r#"
-            Document@0..7
-              Word@0..4 "Oval"
-              Whitespace@4..5 " "
-              Integer@5..6 "1"
-              Newline@6..7 "\n"
-        "#]],
+                Document@0..7
+                  ErrorNode@0..7
+                    Word@0..4 "Oval"
+                    Whitespace@4..5 " "
+                    Integer@5..6 "1"
+                    Newline@6..7 "\n"
+            "#]],
         );
     }
 

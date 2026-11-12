@@ -16,9 +16,6 @@ use crate::{InputRejection, Keyword, LexResult, OvalLanguage, SyntaxKind, Token,
 /// stops at an error. The tree is complete even when the document has lexical or syntax errors,
 /// which the [`ParseResult`] reports alongside it.
 ///
-/// Only the version marker is parsed so far. Every other token is a direct child of the
-/// [`Document`](crate::SyntaxKind::Document) node.
-///
 /// # Errors
 ///
 /// Returns an [`InputRejection`] if `text` cannot be lexed at all. See [`lex`].
@@ -339,13 +336,13 @@ mod tests {
 
     #[test]
     fn lexical_errors_are_reported_alongside_the_tree() {
-        let text = "subtitle\t\"G\"\n";
+        let text = "guide\t\"G\"\n";
         let result = parse(text).unwrap();
         assert_eq!(
             result.lexical_errors,
             [LexicalError {
                 kind: LexicalErrorKind::IllegalTab,
-                offset: 8,
+                offset: 5,
                 len: 1,
             }]
         );
@@ -365,12 +362,13 @@ mod tests {
                     String@6..9 "\"G\""
                     Newline@9..10 "\n"
                   Whitespace@10..12 "  "
-                  Indent@12..12 ""
-                  Word@12..16 "note"
-                  Colon@16..17 ":"
-                  Newline@17..18 "\n"
-                  MarkdownBlock@18..28 "    Text.\n"
-                  Dedent@28..28 ""
+                  ErrorNode@12..28
+                    Indent@12..12 ""
+                    Word@12..16 "note"
+                    Colon@16..17 ":"
+                    Newline@17..18 "\n"
+                    MarkdownBlock@18..28 "    Text.\n"
+                    Dedent@28..28 ""
             "#]],
         );
     }
@@ -408,8 +406,9 @@ mod tests {
             "word\n\n# last\n",
             &expect![[r##"
                 Document@0..13
-                  Word@0..4 "word"
-                  Newline@4..5 "\n"
+                  ErrorNode@0..5
+                    Word@0..4 "word"
+                    Newline@4..5 "\n"
                   BlankLine@5..6 "\n"
                   Comment@6..12 "# last"
                   BlankLine@12..13 "\n"

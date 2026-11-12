@@ -5,10 +5,20 @@ impl Parser<'_> {
     pub(super) fn block(
         &mut self,
         accepts: &[Expected],
-        mut entry: impl FnMut(&mut Self, &mut Vec<Keyword>) -> bool,
+        entry: impl FnMut(&mut Self, &mut Vec<Keyword>) -> bool,
     ) {
         self.start_node(SyntaxKind::Block);
         self.bump();
+        self.entries(accepts, entry);
+        self.eat(TokenKind::Dedent);
+        self.finish_node();
+    }
+
+    pub(super) fn entries(
+        &mut self,
+        accepts: &[Expected],
+        mut entry: impl FnMut(&mut Self, &mut Vec<Keyword>) -> bool,
+    ) {
         let mut seen = Vec::new();
         while !self.at(TokenKind::Dedent) && self.current().is_some() {
             if self.at(TokenKind::Indent) {
@@ -17,8 +27,6 @@ impl Parser<'_> {
                 self.skip_entry(SyntaxErrorKind::UnexpectedEntry, accepts.to_vec());
             }
         }
-        self.eat(TokenKind::Dedent);
-        self.finish_node();
     }
 
     pub(super) fn end_of_line_with_block(

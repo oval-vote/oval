@@ -157,12 +157,13 @@ mod tests {
         check(
             "Guide \"G\"\n",
             &expect![[r#"
-            Document@0..10
-              Word@0..5 "Guide"
-              Whitespace@5..6 " "
-              String@6..9 "\"G\""
-              Newline@9..10 "\n"
-        "#]],
+                Document@0..10
+                  ErrorNode@0..10
+                    Word@0..5 "Guide"
+                    Whitespace@5..6 " "
+                    String@6..9 "\"G\""
+                    Newline@9..10 "\n"
+            "#]],
         );
     }
 
