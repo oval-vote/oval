@@ -195,22 +195,28 @@ impl<'t> Parser<'t> {
         let start = self.offset;
         entry(self);
         self.finish_node();
-        let error = SyntaxError {
-            kind,
-            offset: to_u32(start),
-            len: to_u32(self.line_end - start),
-            expected: Vec::new(),
-        };
-        self.errors.insert(index, error);
+        self.insert_error(index, kind, start, self.line_end, Vec::new());
     }
 
     fn report(&mut self, kind: SyntaxErrorKind, start: usize, end: usize, expected: Vec<Expected>) {
-        self.errors.push(SyntaxError {
+        self.insert_error(self.errors.len(), kind, start, end, expected);
+    }
+
+    fn insert_error(
+        &mut self,
+        index: usize,
+        kind: SyntaxErrorKind,
+        start: usize,
+        end: usize,
+        expected: Vec<Expected>,
+    ) {
+        let error = SyntaxError {
             kind,
             offset: to_u32(start),
             len: to_u32(end - start),
             expected,
-        });
+        };
+        self.errors.insert(index, error);
     }
 
     fn error_token_ahead(&self) -> bool {

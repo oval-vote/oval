@@ -7,9 +7,17 @@ impl Parser<'_> {
         accepts: &[Expected],
         entry: impl FnMut(&mut Self, &mut Vec<Keyword>) -> bool,
     ) {
+        self.open_block();
+        self.entries(accepts, entry);
+        self.close_block();
+    }
+
+    pub(super) fn open_block(&mut self) {
         self.start_node(SyntaxKind::Block);
         self.bump();
-        self.entries(accepts, entry);
+    }
+
+    pub(super) fn close_block(&mut self) {
         self.eat(TokenKind::Dedent);
         self.finish_node();
     }
@@ -38,13 +46,17 @@ impl Parser<'_> {
         if self.at(TokenKind::Indent) {
             self.block(accepts, entry);
         } else {
-            self.report(
-                SyntaxErrorKind::MissingBlock,
-                self.offset,
-                self.offset,
-                vec![Expected::Token(TokenKind::Indent)],
-            );
+            self.missing_block();
         }
+    }
+
+    pub(super) fn missing_block(&mut self) {
+        self.report(
+            SyntaxErrorKind::MissingBlock,
+            self.offset,
+            self.offset,
+            vec![Expected::Token(TokenKind::Indent)],
+        );
     }
 
     fn skip_entry(&mut self, kind: SyntaxErrorKind, expected: Vec<Expected>) {

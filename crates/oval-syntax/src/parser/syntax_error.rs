@@ -55,6 +55,11 @@ pub enum SyntaxErrorKind {
     ///
     /// The error spans the second flag. The parser sets it aside, and the first one stands.
     RepeatedFlag,
+    /// A contest's recommendation with no `no-position` or `abstain` whose block ends without a
+    /// `support` or `oppose` line.
+    ///
+    /// The error spans the `recommend` keyword. The parser keeps the recommendation and its block.
+    EmptyRecommendation,
     /// A line that begins with a token no entry of the enclosing block can begin with, such as
     /// `designation` inside a party.
     ///
@@ -94,6 +99,7 @@ impl SyntaxErrorKind {
             Self::MissingContestKind => "missing-contest-kind",
             Self::RepeatedModifier => "repeated-modifier",
             Self::RepeatedFlag => "repeated-flag",
+            Self::EmptyRecommendation => "empty-recommendation",
             Self::UnexpectedEntry => "unexpected-entry",
             Self::UnexpectedBlock => "unexpected-block",
             Self::MissingBlock => "missing-block",
@@ -178,6 +184,10 @@ mod tests {
             "repeated-modifier"
         );
         assert_eq!(SyntaxErrorKind::RepeatedFlag.spec_id(), "repeated-flag");
+        assert_eq!(
+            SyntaxErrorKind::EmptyRecommendation.spec_id(),
+            "empty-recommendation"
+        );
         assert_eq!(
             SyntaxErrorKind::UnexpectedEntry.spec_id(),
             "unexpected-entry"

@@ -1,5 +1,5 @@
 use crate::parser::Parser;
-use crate::{Expected, Keyword, SyntaxKind, TokenKind};
+use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
 const STANCE_ENTRIES: [Expected; 4] = [
     Expected::Keyword(Keyword::Support),
@@ -16,7 +16,10 @@ const RECOMMEND_FIELDS: [Expected; 2] = [
 impl Parser<'_> {
     pub(super) fn contest_recommend(&mut self) {
         self.start_node(SyntaxKind::ContestRecommend);
+        let keyword_start = self.offset;
         self.bump();
+        let keyword_end = self.offset;
+        let index = self.errors.len();
         if matches!(
             self.current_keyword(),
             Some(Keyword::NoPosition | Keyword::Abstain)
@@ -36,17 +39,40 @@ impl Parser<'_> {
                     Expected::Token(TokenKind::Newline),
                 ]);
             }
-            self.end_of_line_with_block(&STANCE_ENTRIES, Self::stance_entry);
+            self.end_of_line();
+            if self.at(TokenKind::Indent) {
+                let mut has_stance = false;
+                self.open_block();
+                self.entries(&STANCE_ENTRIES, |p, seen| {
+                    p.stance_entry(seen, &mut has_stance)
+                });
+                if !has_stance && !self.error_token_ahead() {
+                    self.insert_error(
+                        index,
+                        SyntaxErrorKind::EmptyRecommendation,
+                        keyword_start,
+                        keyword_end,
+                        vec![
+                            Expected::Keyword(Keyword::Support),
+                            Expected::Keyword(Keyword::Oppose),
+                        ],
+                    );
+                }
+                self.close_block();
+            } else {
+                self.missing_block();
+            }
         }
         self.finish_node();
     }
 
-    fn stance_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
+    fn stance_entry(&mut self, seen: &mut Vec<Keyword>, has_stance: &mut bool) -> bool {
         match self.current_keyword() {
             Some(Keyword::Support) => self.stance(SyntaxKind::Support),
             Some(Keyword::Oppose) => self.stance(SyntaxKind::Oppose),
             _ => return self.recommend_field(seen),
         }
+        *has_stance = true;
         true
     }
 
@@ -523,5 +549,100 @@ mod tests {
         let result = parse(&in_contest("    recommend\n      support ~\n")).unwrap();
         assert_eq!(result.lexical_errors.len(), 1);
         assert_eq!(result.syntax_errors, []);
+    }
+
+    fn empty_recommendation() -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::EmptyRecommendation,
+            offset: 42,
+            len: 9,
+            expected: vec![
+                Expected::Keyword(Keyword::Support),
+                Expected::Keyword(Keyword::Oppose),
+            ],
+        }
+    }
+
+    #[test]
+    fn a_block_without_a_stance_is_an_empty_recommendation() {
+        let text = in_contest("    recommend\n      justification:\n        J.\n");
+        check_errors(&text, &[empty_recommendation()]);
+        assert_eq!(recommend_child_nodes(&text), [SyntaxKind::Block]);
+    }
+
+    #[test]
+    fn an_empty_recommendation_comes_before_errors_in_its_block() {
+        check_errors(
+            &in_contest("    recommend\n      subtitle \"S\"\n"),
+            &[
+                empty_recommendation(),
+                SyntaxError {
+                    kind: SyntaxErrorKind::UnexpectedEntry,
+                    offset: 58,
+                    len: 12,
+                    expected: vec![
+                        Expected::Keyword(Keyword::Support),
+                        Expected::Keyword(Keyword::Oppose),
+                        Expected::Keyword(Keyword::Justification),
+                        Expected::Keyword(Keyword::Note),
+                    ],
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn an_empty_recommendation_comes_before_errors_on_its_line() {
+        check_errors(
+            &in_contest("    recommend yes\n      justification:\n        J.\n"),
+            &[
+                empty_recommendation(),
+                SyntaxError {
+                    kind: SyntaxErrorKind::UnexpectedToken,
+                    offset: 52,
+                    len: 3,
+                    expected: vec![
+                        Expected::Keyword(Keyword::NoPosition),
+                        Expected::Keyword(Keyword::Abstain),
+                        Expected::Token(TokenKind::Newline),
+                    ],
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn an_oppose_line_is_a_stance() {
+        check_errors(&in_contest("    recommend\n      oppose @c\n"), &[]);
+    }
+
+    #[test]
+    fn a_stance_line_with_an_error_is_still_a_stance() {
+        check_errors(
+            &in_contest("    recommend\n      support 5\n"),
+            &[unexpected_token(66, 1, false)],
+        );
+    }
+
+    #[test]
+    fn an_empty_recommendation_is_not_reported_where_an_error_token_ends_the_block() {
+        for lines in [
+            "    recommend\n      justification:\n        J.\n      ~\n",
+            "    recommend\n      ~\n",
+        ] {
+            let result = parse(&in_contest(lines)).unwrap();
+            assert_eq!(result.lexical_errors.len(), 1, "{lines:?}");
+            assert_eq!(result.syntax_errors, [], "{lines:?}");
+        }
+    }
+
+    #[test]
+    fn an_error_token_earlier_in_the_block_does_not_hide_an_empty_recommendation() {
+        let result = parse(&in_contest(
+            "    recommend\n      ~\n      justification:\n        J.\n",
+        ))
+        .unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(result.syntax_errors, [empty_recommendation()]);
     }
 }
