@@ -50,8 +50,16 @@ pub enum SyntaxKind {
     StringField,
     /// A field whose value is a date, such as `date 2026-11-03`.
     DateField,
+    /// A field whose value is a URL, such as `website https://dems.example`.
+    UrlField,
     /// A field whose value is a Markdown body, such as `note:` and the indented lines below it.
     MarkdownField,
+    /// The indented lines below a header line, from its [`Indent`](SyntaxKind::Indent) to its
+    /// [`Dedent`](SyntaxKind::Dedent).
+    ///
+    /// Which fields and children a block holds depends on the node that contains it, such as the
+    /// fields of a [`Party`](SyntaxKind::Party).
+    Block,
     /// An identifier, such as `@dem`, which names an entity.
     Identifier,
     /// A party declaration, such as `party @dem "Democratic"`.
@@ -86,7 +94,9 @@ impl SyntaxKind {
         Self::VersionMarker,
         Self::StringField,
         Self::DateField,
+        Self::UrlField,
         Self::MarkdownField,
+        Self::Block,
         Self::Identifier,
         Self::Party,
         Self::ErrorNode,
