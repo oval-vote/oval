@@ -16,6 +16,11 @@ pub enum SyntaxErrorKind {
     /// The error spans from that token to the end of the line. The parser discards those tokens,
     /// keeps what it parsed before them, and continues on the next line.
     UnexpectedToken,
+    /// A Markdown field's line that ends with `:` without an indented body below it.
+    ///
+    /// The error has no length and sits just after the line's terminator. The parser keeps the field
+    /// with an empty body.
+    MissingBody,
 }
 
 impl SyntaxErrorKind {
@@ -27,6 +32,7 @@ impl SyntaxErrorKind {
         match self {
             Self::MissingValue => "missing-value",
             Self::UnexpectedToken => "unexpected-token",
+            Self::MissingBody => "missing-body",
         }
     }
 }
@@ -91,6 +97,7 @@ mod tests {
             SyntaxErrorKind::UnexpectedToken.spec_id(),
             "unexpected-token"
         );
+        assert_eq!(SyntaxErrorKind::MissingBody.spec_id(), "missing-body");
     }
 
     #[test]

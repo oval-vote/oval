@@ -1616,9 +1616,11 @@ or reject a document may stop at the first error on the terms Section 3.1 gives.
 recoveries, named here and referred to by each error below:
 
 - **Skip the line.** The tokens from the unexpected one to the end of the line are discarded. The
-  construct keeps whatever was parsed before them, and parsing continues on the next line.
-- **Skip the entry.** The entire entry is discarded, including its block. Parsing continues with the
-  next entry at the same level.
+  construct keeps whatever was parsed before them, and parsing continues on the next line. A
+  `MarkdownBlock` after the line belongs to it, since the line's `:` opened the body, so it is
+  discarded with the line and is not a separate error.
+- **Skip the entry.** The entire entry is discarded, including its block or body. Parsing continues
+  with the next entry at the same level.
 - **Assume the missing token.** Nothing is discarded. Parsing continues as if the token were
   present; the construct is kept with nothing in that position, and validation treats it as absent.
 - **Set the entry aside.** The entry is parsed in full, so that errors inside it are still reported,
@@ -1673,6 +1675,14 @@ subtitle "Vote for one" "Pick one"  # which wording?
 
 The error spans only the second string. The comment after it is not part of the line's range, so it
 is neither reported nor discarded.
+
+```oval counter-example
+guide "Franklin Voter Guide":
+  Written by the Franklin Civic Alliance.
+```
+
+The `:` is the unexpected token. The `guide` field keeps its name, and the body after the line is
+discarded with it rather than reported again.
 
 #### Missing Identifier
 

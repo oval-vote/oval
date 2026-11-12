@@ -59,6 +59,7 @@ struct Parser<'t> {
     line_start: usize,
     line_is_empty: bool,
     line_end: usize,
+    line_was_skipped: bool,
 }
 
 impl<'t> Parser<'t> {
@@ -73,6 +74,7 @@ impl<'t> Parser<'t> {
             line_start: 0,
             line_is_empty: true,
             line_end: 0,
+            line_was_skipped: false,
         }
     }
 
@@ -140,10 +142,26 @@ impl<'t> Parser<'t> {
     }
 
     fn end_of_line(&mut self) {
+        if self.finish_line() {
+            self.discard_body();
+        }
+    }
+
+    fn finish_line(&mut self) -> bool {
         if !self.at_line_end() {
             self.skip_line(vec![Expected::Token(TokenKind::Newline)]);
         }
+        let was_skipped = self.line_was_skipped;
         self.eat(TokenKind::Newline);
+        was_skipped
+    }
+
+    fn discard_body(&mut self) {
+        if self.at(TokenKind::MarkdownBlock) {
+            self.start_node(SyntaxKind::ErrorNode);
+            self.bump();
+            self.finish_node();
+        }
     }
 
     fn skip_line(&mut self, expected: Vec<Expected>) {
@@ -153,6 +171,7 @@ impl<'t> Parser<'t> {
             self.bump();
         }
         self.finish_node();
+        self.line_was_skipped = true;
         self.report(
             SyntaxErrorKind::UnexpectedToken,
             start,
@@ -226,6 +245,7 @@ impl<'t> Parser<'t> {
         if ends_line(token) {
             self.line_start = self.pos;
             self.line_is_empty = true;
+            self.line_was_skipped = false;
         } else if !token.is_ignored() && !token.is_error() {
             self.line_is_empty = false;
         }

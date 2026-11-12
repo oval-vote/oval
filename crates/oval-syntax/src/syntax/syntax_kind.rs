@@ -50,6 +50,8 @@ pub enum SyntaxKind {
     StringField,
     /// A field whose value is a date, such as `date 2026-11-03`.
     DateField,
+    /// A field whose value is a Markdown body, such as `note:` and the indented lines below it.
+    MarkdownField,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -80,6 +82,7 @@ impl SyntaxKind {
         Self::VersionMarker,
         Self::StringField,
         Self::DateField,
+        Self::MarkdownField,
         Self::ErrorNode,
     ];
 }
