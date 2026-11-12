@@ -108,4 +108,160 @@ fn to_u32(n: usize) -> u32 {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use crate::TokenKind;
+
+    use LexicalErrorKind::{UnexpectedCharacter, UnterminatedString};
+    use TokenKind::{Error, Newline, Whitespace};
+
+    pub(super) fn check_lexer(text: &str, tokens: &[(TokenKind, &str)], errors: &[LexicalError]) {
+        let result = lex(text).expect("the text is accepted");
+        let mut pos = 0;
+        let mut actual = Vec::new();
+        for token in &result.tokens {
+            let len = token.len as usize;
+            actual.push((token.kind, &text[pos..pos + len]));
+            pos += len;
+        }
+        assert_eq!(actual, tokens, "tokens of {text:?}");
+        assert_eq!(pos, text.len(), "the tokens of {text:?} do not cover it");
+        assert_eq!(result.errors, errors, "errors of {text:?}");
+    }
+
+    pub(super) fn error(kind: LexicalErrorKind, offset: u32, len: u32) -> LexicalError {
+        LexicalError { kind, offset, len }
+    }
+
+    #[test]
+    fn empty_input_has_no_tokens() {
+        check_lexer("", &[], &[]);
+    }
+
+    #[test]
+    fn nul_rejects_the_whole_document() {
+        assert_eq!(lex("a\0b"), Err(InputRejection::NulCharacter { offset: 1 }));
+    }
+
+    #[test]
+    fn rejection_reports_the_first_nul() {
+        assert_eq!(
+            lex("ab\0\0"),
+            Err(InputRejection::NulCharacter { offset: 2 })
+        );
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn offsets_past_u32_max_are_too_large() {
+        let max = usize::try_from(u32::MAX).unwrap();
+        assert_eq!(to_offset(max), Ok(u32::MAX));
+        assert_eq!(to_offset(max + 1), Err(InputRejection::TooLarge));
+    }
+
+    #[test]
+    fn bytes_are_lexed_like_the_text_they_decode_to() {
+        assert_eq!(lex_bytes("-é_".as_bytes()), lex("-é_"));
+    }
+
+    #[test]
+    fn invalid_utf8_rejects_the_whole_document() {
+        assert_eq!(
+            lex_bytes(b"ab\xffc"),
+            Err(InputRejection::InvalidUtf8 { offset: 2 })
+        );
+    }
+
+    #[test]
+    fn truncated_sequence_is_invalid_utf8() {
+        assert_eq!(
+            lex_bytes(b"a\xc3"),
+            Err(InputRejection::InvalidUtf8 { offset: 1 })
+        );
+    }
+
+    #[test]
+    fn encoded_surrogate_is_invalid_utf8() {
+        assert_eq!(
+            lex_bytes(b"\xed\xa0\x80"),
+            Err(InputRejection::InvalidUtf8 { offset: 0 })
+        );
+    }
+
+    #[test]
+    fn nul_in_bytes_rejects_the_whole_document() {
+        assert_eq!(
+            lex_bytes(b"a\0"),
+            Err(InputRejection::NulCharacter { offset: 1 })
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_is_reported_before_nul() {
+        assert_eq!(
+            lex_bytes(b"\0\xff"),
+            Err(InputRejection::InvalidUtf8 { offset: 1 })
+        );
+    }
+
+    #[test]
+    fn errors_are_reported_in_source_order() {
+        check_lexer(
+            "- \"x",
+            &[
+                (Error, "-"),
+                (Whitespace, " "),
+                (Error, "\"x"),
+                (Newline, ""),
+            ],
+            &[
+                error(UnexpectedCharacter, 0, 1),
+                error(UnterminatedString, 2, 2),
+            ],
+        );
+    }
+
+    #[test]
+    fn every_error_token_has_one_error_spanning_it() {
+        for text in ["-é_", "a \"b\nc", "\u{FEFF}\u{FEFF}@-x", "# ok\n\"\\"] {
+            let result = lex(text).unwrap();
+            let mut pos = 0;
+            let mut spans = Vec::new();
+            for token in &result.tokens {
+                if token.kind == Error {
+                    spans.push((pos, token.len));
+                }
+                pos += token.len;
+            }
+            let reported: Vec<(u32, u32)> = result
+                .errors
+                .iter()
+                .map(|error| (error.offset, error.len))
+                .collect();
+            assert_eq!(reported, spans, "input: {text:?}");
+        }
+    }
+
+    #[test]
+    fn token_lengths_cover_the_input() {
+        for text in [
+            "",
+            "-é_",
+            "ballot @city \"City\"\n",
+            "  # comment\r\n",
+            "日本語",
+            "\u{FEFF}oval 1",
+            "  a   b \t  ",
+            "contest @mayor \"Mayor\" single\n  campaign @bsantos\n",
+            "a \"b \\\" c\" \"unterminated\n\"x\\",
+        ] {
+            let total: usize = lex(text)
+                .unwrap()
+                .tokens
+                .iter()
+                .map(|token| token.len as usize)
+                .sum();
+            assert_eq!(total, text.len(), "input: {text:?}");
+        }
+    }
+}

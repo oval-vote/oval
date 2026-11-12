@@ -1,5 +1,11 @@
+mod ignored;
 mod layout;
 mod markdown;
+mod number;
+mod punctuator;
+mod string;
+mod url;
+mod word;
 
 use super::to_u32;
 use crate::{LexResult, LexicalError, LexicalErrorKind, Token, TokenKind};
@@ -64,124 +70,6 @@ impl<'a> Cursor<'a> {
         LexResult {
             tokens: self.tokens,
             errors: self.errors,
-        }
-    }
-
-    fn byte_order_mark(&mut self, start: usize) {
-        self.bump(BYTE_ORDER_MARK);
-        self.push(TokenKind::ByteOrderMark, start);
-        // The first line's indentation is counted after the byte order mark.
-        self.line_start = self.pos;
-    }
-
-    fn whitespace(&mut self, start: usize) {
-        self.eat_while(|c| c == ' ');
-        self.push(TokenKind::Whitespace, start);
-    }
-
-    fn illegal_tab(&mut self, start: usize) {
-        self.eat_while(|c| c == '\t');
-        self.push_error(LexicalErrorKind::IllegalTab, start);
-    }
-
-    fn comment(&mut self, start: usize) {
-        self.eat_while(|c| !is_line_terminator(c));
-        self.push(TokenKind::Comment, start);
-    }
-
-    fn line_terminator(&mut self, c: char, start: usize) {
-        self.bump(c);
-        if c == '\r' && self.peek() == Some('\n') {
-            self.bump('\n');
-        }
-        let kind = if self.line_has_tokens {
-            self.body_opener = self.line_ends_with_colon.then_some(self.line_indentation);
-            TokenKind::Newline
-        } else {
-            TokenKind::BlankLine
-        };
-        self.push(kind, start);
-        self.line_has_tokens = false;
-        self.line_start = self.pos;
-    }
-
-    fn at_sign(&mut self, start: usize) {
-        self.single(TokenKind::AtSign, '@', start);
-    }
-
-    fn colon(&mut self, start: usize) {
-        self.single(TokenKind::Colon, ':', start);
-    }
-
-    fn comma(&mut self, start: usize) {
-        self.single(TokenKind::Comma, ',', start);
-    }
-
-    fn string(&mut self, start: usize) {
-        self.bump('"');
-        let mut invalid_escapes = Vec::new();
-        let terminated = loop {
-            match self.peek() {
-                Some('"') => {
-                    self.bump('"');
-                    break true;
-                }
-                Some('\\') => {
-                    let escape_start = self.pos;
-                    self.bump('\\');
-                    if let Some(c) = self.peek()
-                        && !is_line_terminator(c)
-                    {
-                        self.bump(c);
-                        if !matches!(c, '"' | '\\') {
-                            invalid_escapes.push((escape_start, self.pos));
-                        }
-                    }
-                }
-                Some(c) if !is_line_terminator(c) => self.bump(c),
-                _ => break false,
-            }
-        };
-        if terminated {
-            for (escape_start, escape_end) in invalid_escapes {
-                self.report(LexicalErrorKind::InvalidEscape, escape_start, escape_end);
-            }
-            self.push(TokenKind::String, start);
-        } else {
-            self.push_error(LexicalErrorKind::UnterminatedString, start);
-        }
-    }
-
-    fn number(&mut self, start: usize) {
-        self.eat_while(|c| is_word_char(c) || c == '.');
-        let text = &self.source[start..self.pos];
-        if text.bytes().all(|b| b.is_ascii_digit()) {
-            self.push(TokenKind::Integer, start);
-        } else if is_date_shaped(text) {
-            self.push(TokenKind::Date, start);
-        } else {
-            self.push_error(LexicalErrorKind::MalformedNumber, start);
-        }
-    }
-
-    fn word(&mut self, start: usize) {
-        self.eat_while(is_word_char);
-        self.push(TokenKind::Word, start);
-    }
-
-    fn at_url(&self) -> bool {
-        self.rest().starts_with("http://") || self.rest().starts_with("https://")
-    }
-
-    fn url(&mut self, start: usize) {
-        self.eat_while(|c| c != ':');
-        self.pos += "://".len();
-        let path_start = self.pos;
-        self.eat_while(|c| !matches!(c, ' ' | '\t') && !is_line_terminator(c));
-        if self.pos == path_start {
-            self.push_error(LexicalErrorKind::MalformedUrl, start);
-        } else {
-            self.push(TokenKind::Url, start);
         }
     }
 
@@ -258,4 +146,25 @@ fn is_date_shaped(text: &str) -> bool {
                 b.is_ascii_digit()
             }
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::LexicalErrorKind::UnexpectedCharacter;
+    use crate::TokenKind::{Error, Newline};
+    use crate::lexer::tests::{check_lexer, error};
+
+    #[test]
+    fn each_unexpected_character_is_its_own_error_token() {
+        // "é" is one character but two bytes in UTF-8.
+        check_lexer(
+            "-é_",
+            &[(Error, "-"), (Error, "é"), (Error, "_"), (Newline, "")],
+            &[
+                error(UnexpectedCharacter, 0, 1),
+                error(UnexpectedCharacter, 1, 2),
+                error(UnexpectedCharacter, 3, 1),
+            ],
+        );
+    }
 }
