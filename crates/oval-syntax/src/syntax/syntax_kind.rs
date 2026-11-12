@@ -64,6 +64,8 @@ pub enum SyntaxKind {
     Identifier,
     /// A party declaration, such as `party @dem "Democratic"`.
     Party,
+    /// A candidate declaration, such as `candidate @nreyes "Nadia Reyes"`.
+    Candidate,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -99,6 +101,7 @@ impl SyntaxKind {
         Self::Block,
         Self::Identifier,
         Self::Party,
+        Self::Candidate,
         Self::ErrorNode,
     ];
 }

@@ -5,6 +5,7 @@ impl Parser<'_> {
     pub(super) fn declaration(&mut self) -> bool {
         match self.current_keyword() {
             Some(Keyword::Party) => self.party(),
+            Some(Keyword::Candidate) => self.candidate(),
             _ => return false,
         }
         true

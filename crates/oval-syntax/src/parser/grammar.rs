@@ -1,4 +1,5 @@
 mod block;
+mod candidate;
 mod declaration;
 mod document;
 mod field;
