@@ -1,16 +1,16 @@
-use super::CharCursor;
 use crate::TokenKind;
+use crate::lexer::Lexer;
 
-impl CharCursor<'_> {
-    pub(super) fn at_sign(&mut self, start: usize) {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn at_sign(&mut self, start: usize) {
         self.single(TokenKind::AtSign, '@', start);
     }
 
-    pub(super) fn colon(&mut self, start: usize) {
+    pub(in crate::lexer) fn colon(&mut self, start: usize) {
         self.single(TokenKind::Colon, ':', start);
     }
 
-    pub(super) fn comma(&mut self, start: usize) {
+    pub(in crate::lexer) fn comma(&mut self, start: usize) {
         self.single(TokenKind::Comma, ',', start);
     }
 }

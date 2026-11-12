@@ -1,8 +1,8 @@
-use super::TokenCursor;
+use crate::parser::Parser;
 use crate::{Keyword, SyntaxKind};
 
-impl TokenCursor<'_> {
-    pub(crate) fn document(&mut self) {
+impl Parser<'_> {
+    pub(in crate::parser) fn document(&mut self) {
         self.start_node_here(SyntaxKind::Document);
         if self.at_keyword(Keyword::Oval) {
             self.version_marker();

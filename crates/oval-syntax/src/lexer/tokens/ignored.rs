@@ -1,24 +1,24 @@
-use super::{BYTE_ORDER_MARK, CharCursor, is_line_terminator};
+use crate::lexer::{BYTE_ORDER_MARK, Lexer, is_line_terminator};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl CharCursor<'_> {
-    pub(super) fn byte_order_mark(&mut self, start: usize) {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn byte_order_mark(&mut self, start: usize) {
         self.bump(BYTE_ORDER_MARK);
         self.push(TokenKind::ByteOrderMark, start);
         self.line_start = self.pos;
     }
 
-    pub(super) fn whitespace(&mut self, start: usize) {
+    pub(in crate::lexer) fn whitespace(&mut self, start: usize) {
         self.eat_while(|c| c == ' ');
         self.push(TokenKind::Whitespace, start);
     }
 
-    pub(super) fn illegal_tab(&mut self, start: usize) {
+    pub(in crate::lexer) fn illegal_tab(&mut self, start: usize) {
         self.eat_while(|c| c == '\t');
         self.push_error(LexicalErrorKind::IllegalTab, start);
     }
 
-    pub(super) fn comment(&mut self, start: usize) {
+    pub(in crate::lexer) fn comment(&mut self, start: usize) {
         self.eat_while(|c| !is_line_terminator(c));
         self.push(TokenKind::Comment, start);
     }

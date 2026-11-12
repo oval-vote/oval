@@ -1,8 +1,8 @@
-use super::{CharCursor, is_line_terminator};
+use crate::lexer::{Lexer, is_line_terminator};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl CharCursor<'_> {
-    pub(super) fn string(&mut self, start: usize) {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn string(&mut self, start: usize) {
         self.bump('"');
         let mut invalid_escapes = Vec::new();
         let terminated = loop {

@@ -1,13 +1,14 @@
+mod grammar;
 mod parse_result;
 mod syntax_error;
-mod token_cursor;
-
-use token_cursor::TokenCursor;
 
 pub use parse_result::ParseResult;
 pub use syntax_error::{Expected, SyntaxError, SyntaxErrorKind};
 
-use crate::{InputRejection, LexResult, lex};
+use rowan::{GreenNode, GreenNodeBuilder, Language};
+
+use crate::lexer::to_u32;
+use crate::{InputRejection, Keyword, LexResult, OvalLanguage, SyntaxKind, Token, TokenKind, lex};
 
 /// Parses an Oval document into a syntax tree.
 ///
@@ -38,9 +39,9 @@ use crate::{InputRejection, LexResult, lex};
 /// ```
 pub fn parse(text: &str) -> Result<ParseResult, InputRejection> {
     let LexResult { tokens, errors } = lex(text)?;
-    let mut cursor = TokenCursor::new(text, tokens);
-    cursor.document();
-    let (green, syntax_errors) = cursor.finish();
+    let mut parser = Parser::new(text, tokens);
+    parser.document();
+    let (green, syntax_errors) = parser.finish();
     Ok(ParseResult {
         green,
         lexical_errors: errors,
@@ -48,10 +49,161 @@ pub fn parse(text: &str) -> Result<ParseResult, InputRejection> {
     })
 }
 
+struct Parser<'t> {
+    text: &'t str,
+    tokens: Vec<Token>,
+    pos: usize,
+    offset: usize,
+    builder: GreenNodeBuilder<'static>,
+    errors: Vec<SyntaxError>,
+    line_start: usize,
+    line_is_empty: bool,
+}
+
+impl<'t> Parser<'t> {
+    fn new(text: &'t str, tokens: Vec<Token>) -> Self {
+        Parser {
+            text,
+            tokens,
+            pos: 0,
+            offset: 0,
+            builder: GreenNodeBuilder::new(),
+            errors: Vec::new(),
+            line_start: 0,
+            line_is_empty: true,
+        }
+    }
+
+    fn current(&self) -> Option<TokenKind> {
+        self.peek().map(|(token, _)| token.kind)
+    }
+
+    fn at(&self, kind: TokenKind) -> bool {
+        self.current() == Some(kind)
+    }
+
+    fn at_keyword(&self, keyword: Keyword) -> bool {
+        self.peek().is_some_and(|(token, offset)| {
+            token.kind == TokenKind::Word
+                && &self.text[offset..offset + token.len as usize] == keyword.text()
+        })
+    }
+
+    fn peek(&self) -> Option<(Token, usize)> {
+        let mut offset = self.offset;
+        for &token in &self.tokens[self.pos..] {
+            if !is_skipped(token, self.line_is_empty) {
+                return Some((token, offset));
+            }
+            offset += token.len as usize;
+        }
+        None
+    }
+
+    fn at_line_end(&self) -> bool {
+        matches!(
+            self.current(),
+            None | Some(TokenKind::Newline | TokenKind::Indent | TokenKind::Dedent)
+        )
+    }
+
+    fn eat(&mut self, kind: TokenKind) -> bool {
+        let at = self.at(kind);
+        if at {
+            self.bump();
+        }
+        at
+    }
+
+    fn expect(&mut self, kind: TokenKind, missing: SyntaxErrorKind) -> bool {
+        if self.eat(kind) {
+            return true;
+        }
+        if self.at_line_end() && !self.line_has_error() {
+            let offset = self.peek().map_or(self.text.len(), |(_, offset)| offset);
+            self.errors.push(SyntaxError {
+                kind: missing,
+                offset: to_u32(offset),
+                len: 0,
+                expected: vec![Expected::Token(kind)],
+            });
+        }
+        false
+    }
+
+    fn line_has_error(&self) -> bool {
+        self.tokens[self.line_start..]
+            .iter()
+            .take_while(|token| !ends_line(**token))
+            .any(|token| token.is_error())
+    }
+
+    fn bump(&mut self) {
+        self.eat_skipped();
+        let token = *self
+            .tokens
+            .get(self.pos)
+            .expect("bump is only called before the end of input");
+        self.add_token(token);
+    }
+
+    fn start_node(&mut self, kind: SyntaxKind) {
+        self.eat_skipped();
+        self.start_node_here(kind);
+    }
+
+    fn start_node_here(&mut self, kind: SyntaxKind) {
+        self.builder.start_node(OvalLanguage::kind_to_raw(kind));
+    }
+
+    fn finish_node(&mut self) {
+        self.builder.finish_node();
+    }
+
+    fn finish(self) -> (GreenNode, Vec<SyntaxError>) {
+        (self.builder.finish(), self.errors)
+    }
+
+    fn eat_skipped(&mut self) {
+        while let Some(token) = self.tokens.get(self.pos).copied()
+            && is_skipped(token, self.line_is_empty)
+        {
+            self.add_token(token);
+        }
+    }
+
+    fn add_token(&mut self, token: Token) {
+        let end = self.offset + token.len as usize;
+        self.builder.token(
+            OvalLanguage::kind_to_raw(token.kind.into()),
+            &self.text[self.offset..end],
+        );
+        self.pos += 1;
+        self.offset = end;
+        if ends_line(token) {
+            self.line_start = self.pos;
+            self.line_is_empty = true;
+        } else if !token.is_ignored() && !token.is_error() {
+            self.line_is_empty = false;
+        }
+    }
+}
+
+fn is_skipped(token: Token, line_is_empty: bool) -> bool {
+    token.is_ignored() || token.is_error() || (token.kind == TokenKind::Newline && line_is_empty)
+}
+
+fn ends_line(token: Token) -> bool {
+    matches!(
+        token.kind,
+        TokenKind::Newline | TokenKind::BlankLine | TokenKind::MarkdownBlock
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{LexicalError, LexicalErrorKind, SyntaxKind};
+    use crate::{LexicalError, LexicalErrorKind, SyntaxNode};
     use expect_test::{Expect, expect};
 
     pub(super) fn check(text: &str, expected: &Expect) {
@@ -174,5 +326,174 @@ mod tests {
             parse("a\0b"),
             Err(InputRejection::NulCharacter { offset: 1 })
         );
+    }
+
+    fn parser(text: &str) -> Parser<'_> {
+        let mut parser = Parser::new(text, lex(text).unwrap().tokens);
+        parser.start_node_here(SyntaxKind::Document);
+        parser
+    }
+
+    fn tree(mut parser: Parser<'_>) -> SyntaxNode {
+        parser.finish_node();
+        SyntaxNode::new_root(parser.finish().0)
+    }
+
+    fn missing_integer(offset: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::MissingValue,
+            offset,
+            len: 0,
+            expected: vec![Expected::Token(TokenKind::Integer)],
+        }
+    }
+
+    #[test]
+    fn current_looks_past_ignored_tokens_without_taking_them() {
+        let parser = parser("  # aside\n\nword\n");
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        assert_eq!(tree(parser).to_string(), "");
+    }
+
+    #[test]
+    fn at_keyword_looks_past_ignored_tokens() {
+        let parser = parser("# aside\noval 1\n");
+        assert!(parser.at_keyword(Keyword::Oval));
+        assert!(!parser.at_keyword(Keyword::Guide));
+    }
+
+    #[test]
+    fn start_node_puts_ignored_tokens_before_the_node() {
+        let mut parser = parser("# aside\noval");
+        parser.start_node(SyntaxKind::VersionMarker);
+        parser.bump();
+        parser.finish_node();
+        expect![[r##"
+            Document@0..12
+              Comment@0..7 "# aside"
+              BlankLine@7..8 "\n"
+              VersionMarker@8..12
+                Word@8..12 "oval"
+        "##]]
+        .assert_eq(&format!("{:#?}", tree(parser)));
+    }
+
+    #[test]
+    fn eat_skipped_takes_ignored_tokens_up_to_the_next_real_one() {
+        let mut parser = parser("# aside\nword");
+        parser.eat_skipped();
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        assert_eq!(tree(parser).to_string(), "# aside\n");
+    }
+
+    #[test]
+    fn current_does_not_skip_layout_tokens() {
+        let mut parser = parser("a\n  b\n");
+        parser.bump();
+        assert_eq!(parser.current(), Some(TokenKind::Newline));
+        parser.bump();
+        assert_eq!(parser.current(), Some(TokenKind::Indent));
+    }
+
+    #[test]
+    fn current_is_none_at_the_end_of_input() {
+        let mut parser = parser("word");
+        parser.bump();
+        parser.bump();
+        assert_eq!(parser.current(), None);
+    }
+
+    #[test]
+    fn bump_adds_the_token_after_any_ignored_tokens() {
+        let mut parser = parser("# aside\nword");
+        parser.bump();
+        assert_eq!(tree(parser).to_string(), "# aside\nword");
+    }
+
+    #[test]
+    #[should_panic(expected = "bump is only called before the end of input")]
+    fn bump_at_the_end_of_input_panics() {
+        let mut parser = parser("");
+        parser.bump();
+    }
+
+    #[test]
+    fn expect_takes_the_token_when_it_is_there() {
+        let mut parser = parser("1\n");
+        assert!(parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(parser.current(), Some(TokenKind::Newline));
+        assert_eq!(parser.errors, []);
+    }
+
+    #[test]
+    fn expect_reports_a_missing_token_at_the_end_of_the_line() {
+        let mut parser = parser("oval  \n");
+        parser.bump();
+        assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(parser.errors, [missing_integer(6)]);
+    }
+
+    #[test]
+    fn expect_reports_a_missing_token_at_the_end_of_input() {
+        let mut parser = parser("");
+        assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(parser.errors, [missing_integer(0)]);
+    }
+
+    #[test]
+    fn expect_reports_nothing_when_another_token_is_there() {
+        let mut parser = parser("x\n");
+        assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        assert_eq!(parser.errors, []);
+    }
+
+    #[test]
+    fn current_skips_error_tokens() {
+        let parser = parser("\t~word\n");
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+    }
+
+    #[test]
+    fn a_line_of_only_error_tokens_is_skipped_like_a_blank_line() {
+        let mut parser = parser("\t\nword\n");
+        assert_eq!(parser.current(), Some(TokenKind::Word));
+        parser.bump();
+        assert_eq!(tree(parser).to_string(), "\t\nword");
+    }
+
+    #[test]
+    fn a_line_with_another_token_keeps_its_newline() {
+        let mut parser = parser("a\t\n");
+        parser.bump();
+        assert_eq!(parser.current(), Some(TokenKind::Newline));
+    }
+
+    #[test]
+    fn a_line_that_opens_a_block_keeps_its_newline() {
+        let mut parser = parser("a\n  \t\n");
+        parser.bump();
+        parser.bump();
+        assert_eq!(parser.current(), Some(TokenKind::Indent));
+        parser.bump();
+        assert_eq!(parser.current(), Some(TokenKind::Newline));
+    }
+
+    #[test]
+    fn expect_reports_nothing_on_a_line_with_an_error_token() {
+        for text in ["oval 1x\n", "oval\t\n", "oval ~\n"] {
+            let mut parser = parser(text);
+            parser.bump();
+            assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+            assert_eq!(parser.errors, [], "{text:?}");
+        }
+    }
+
+    #[test]
+    fn an_error_token_on_an_earlier_line_does_not_stop_a_report() {
+        let mut parser = parser("~\noval\n");
+        parser.bump();
+        assert!(!parser.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(parser.errors, [missing_integer(6)]);
     }
 }

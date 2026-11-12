@@ -1,8 +1,8 @@
-use super::{CharCursor, is_word_char};
 use crate::TokenKind;
+use crate::lexer::{Lexer, is_word_char};
 
-impl CharCursor<'_> {
-    pub(super) fn word(&mut self, start: usize) {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn word(&mut self, start: usize) {
         self.eat_while(is_word_char);
         self.push(TokenKind::Word, start);
     }

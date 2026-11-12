@@ -1,12 +1,12 @@
-use super::{BYTE_ORDER_MARK, CharCursor};
+use crate::lexer::{BYTE_ORDER_MARK, Lexer};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl CharCursor<'_> {
-    pub(super) fn starts_ignored_token(&self, c: char) -> bool {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn starts_ignored_token(&self, c: char) -> bool {
         matches!(c, ' ' | '#' | '\n' | '\r') || (c == BYTE_ORDER_MARK && self.pos == 0)
     }
 
-    pub(super) fn line_terminator(&mut self, c: char, start: usize) {
+    pub(in crate::lexer) fn line_terminator(&mut self, c: char, start: usize) {
         self.bump(c);
         if c == '\r' && self.peek() == Some('\n') {
             self.bump('\n');
@@ -22,7 +22,7 @@ impl CharCursor<'_> {
         self.line_start = self.pos;
     }
 
-    pub(super) fn begin_line(&mut self, start: usize) {
+    pub(in crate::lexer) fn begin_line(&mut self, start: usize) {
         let indentation = start - self.line_start;
         self.line_indentation = indentation;
         if indentation > self.current_indentation() {
@@ -39,7 +39,7 @@ impl CharCursor<'_> {
         }
     }
 
-    pub(super) fn end_input(&mut self) {
+    pub(in crate::lexer) fn end_input(&mut self) {
         if self.line_has_tokens {
             self.push(TokenKind::Newline, self.pos);
         }

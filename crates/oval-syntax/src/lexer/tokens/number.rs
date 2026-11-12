@@ -1,8 +1,8 @@
-use super::{CharCursor, is_date_shaped, is_word_char};
+use crate::lexer::{Lexer, is_date_shaped, is_word_char};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl CharCursor<'_> {
-    pub(super) fn number(&mut self, start: usize) {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn number(&mut self, start: usize) {
         self.eat_while(|c| is_word_char(c) || c == '.');
         let text = &self.source[start..self.pos];
         if text.bytes().all(|b| b.is_ascii_digit()) {

@@ -1,12 +1,12 @@
-use super::{CharCursor, is_line_terminator};
+use crate::lexer::{Lexer, is_line_terminator};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl CharCursor<'_> {
-    pub(super) fn at_url(&self) -> bool {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn at_url(&self) -> bool {
         self.rest().starts_with("http://") || self.rest().starts_with("https://")
     }
 
-    pub(super) fn url(&mut self, start: usize) {
+    pub(in crate::lexer) fn url(&mut self, start: usize) {
         self.eat_while(|c| c != ':');
         self.pos += "://".len();
         let path_start = self.pos;

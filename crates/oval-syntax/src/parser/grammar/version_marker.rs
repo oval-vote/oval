@@ -1,7 +1,7 @@
-use super::TokenCursor;
+use crate::parser::Parser;
 use crate::{SyntaxErrorKind, SyntaxKind, TokenKind};
 
-impl TokenCursor<'_> {
+impl Parser<'_> {
     pub(super) fn version_marker(&mut self) {
         self.start_node(SyntaxKind::VersionMarker);
         self.bump();

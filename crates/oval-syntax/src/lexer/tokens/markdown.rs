@@ -1,8 +1,8 @@
-use super::{CharCursor, is_line_terminator};
 use crate::TokenKind;
+use crate::lexer::{Lexer, is_line_terminator};
 
-impl CharCursor<'_> {
-    pub(super) fn markdown_block(&mut self, start: usize) -> bool {
+impl Lexer<'_> {
+    pub(in crate::lexer) fn markdown_block(&mut self, start: usize) -> bool {
         let Some(opener) = self.body_opener else {
             return false;
         };
