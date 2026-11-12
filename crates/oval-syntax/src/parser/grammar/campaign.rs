@@ -1,7 +1,8 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const CAMPAIGN_ENTRIES: [Expected; 4] = [
+const CAMPAIGN_ENTRIES: [Expected; 5] = [
+    Expected::Token(TokenKind::AtSign),
     Expected::Keyword(Keyword::Website),
     Expected::Keyword(Keyword::Note),
     Expected::Keyword(Keyword::Designation),
@@ -46,6 +47,19 @@ impl Parser<'_> {
 
     fn member(&mut self) {
         self.start_node(SyntaxKind::Member);
+        self.member_line();
+        self.finish_node();
+    }
+
+    fn member_entry(&mut self) {
+        self.start_node(SyntaxKind::Member);
+        self.member_line();
+        self.end_of_line();
+        self.candidate_block();
+        self.finish_node();
+    }
+
+    fn member_line(&mut self) {
         self.identifier();
         let mut expected = Vec::new();
         if !self.eat(TokenKind::String) {
@@ -58,7 +72,6 @@ impl Parser<'_> {
             expected.push(Expected::Token(TokenKind::Newline));
             self.skip_line(expected);
         }
-        self.finish_node();
     }
 
     fn member_role(&mut self) {
@@ -69,6 +82,10 @@ impl Parser<'_> {
     }
 
     fn campaign_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
+        if self.at(TokenKind::AtSign) {
+            self.member_entry();
+            return true;
+        }
         if self.current_keyword() == Some(Keyword::Website) {
             self.field_once(seen, Keyword::Website, |p| {
                 p.value_field(SyntaxKind::UrlField, TokenKind::Url);
@@ -360,6 +377,7 @@ mod tests {
                 offset: 64,
                 len: 12,
                 expected: vec![
+                    Expected::Token(TokenKind::AtSign),
                     Expected::Keyword(Keyword::Website),
                     Expected::Keyword(Keyword::Note),
                     Expected::Keyword(Keyword::Designation),
@@ -384,6 +402,183 @@ mod tests {
                     Expected::Keyword(Keyword::Campaign),
                 ],
             }],
+        );
+    }
+
+    #[test]
+    fn members_are_lines_in_the_block() {
+        let text = in_contest(
+            "    campaign incumbent\n      @jlee \"Jordan Lee\" as \"Governor\"\n        designation \"Governor\"\n      @mpatel as \"Lieutenant Governor\"\n      website https://lee.example\n",
+        );
+        check_errors(&text, &[]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..204
+              Ballot@0..204
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..204
+                  Indent@16..16 ""
+                  Contest@16..204
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..37
+                      Word@31..37 "single"
+                    Newline@37..38 "\n"
+                    Whitespace@38..42 "    "
+                    Block@42..204
+                      Indent@42..42 ""
+                      Campaign@42..204
+                        Word@42..50 "campaign"
+                        Whitespace@50..51 " "
+                        Flag@51..60
+                          Word@51..60 "incumbent"
+                        Newline@60..61 "\n"
+                        Whitespace@61..67 "      "
+                        Block@67..204
+                          Indent@67..67 ""
+                          Member@67..137
+                            Identifier@67..72
+                              AtSign@67..68 "@"
+                              Word@68..72 "jlee"
+                            Whitespace@72..73 " "
+                            String@73..85 "\"Jordan Lee\""
+                            Whitespace@85..86 " "
+                            MemberRole@86..99
+                              Word@86..88 "as"
+                              Whitespace@88..89 " "
+                              String@89..99 "\"Governor\""
+                            Newline@99..100 "\n"
+                            Whitespace@100..108 "        "
+                            Block@108..137
+                              Indent@108..108 ""
+                              StringField@108..131
+                                Word@108..119 "designation"
+                                Whitespace@119..120 " "
+                                String@120..130 "\"Governor\""
+                                Newline@130..131 "\n"
+                              Whitespace@131..137 "      "
+                              Dedent@137..137 ""
+                          Member@137..170
+                            Identifier@137..144
+                              AtSign@137..138 "@"
+                              Word@138..144 "mpatel"
+                            Whitespace@144..145 " "
+                            MemberRole@145..169
+                              Word@145..147 "as"
+                              Whitespace@147..148 " "
+                              String@148..169 "\"Lieutenant Governor\""
+                            Newline@169..170 "\n"
+                          Whitespace@170..176 "      "
+                          UrlField@176..204
+                            Word@176..183 "website"
+                            Whitespace@183..184 " "
+                            Url@184..203 "https://lee.example"
+                            Newline@203..204 "\n"
+                          Dedent@204..204 ""
+                      Dedent@204..204 ""
+                  Dedent@204..204 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_member_line_can_follow_a_one_line_member() {
+        check_errors(&in_contest("    campaign @a \"A\"\n      @b \"B\"\n"), &[]);
+    }
+
+    #[test]
+    fn a_reference_keeps_a_block_below_it() {
+        let text = in_contest("    campaign\n      @a as \"P\"\n        designation \"D\"\n");
+        check_errors(&text, &[]);
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::Member),
+            [
+                SyntaxKind::Identifier,
+                SyntaxKind::MemberRole,
+                SyntaxKind::Block
+            ]
+        );
+    }
+
+    #[test]
+    fn a_member_block_takes_candidate_fields() {
+        check_errors(
+            &in_contest("    campaign\n      @a \"A\"\n        website https://a.example\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedEntry,
+                offset: 72,
+                len: 25,
+                expected: vec![
+                    Expected::Keyword(Keyword::Designation),
+                    Expected::Keyword(Keyword::Party),
+                    Expected::Keyword(Keyword::Note),
+                ],
+            }],
+        );
+    }
+
+    #[test]
+    fn a_repeated_field_in_a_member_block_is_set_aside() {
+        check_errors(
+            &in_contest(
+                "    campaign\n      @a \"A\"\n        designation \"D\"\n        designation \"E\"\n",
+            ),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::RepeatedField,
+                offset: 96,
+                len: 15,
+                expected: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn each_member_block_tracks_its_own_fields() {
+        check_errors(
+            &in_contest(
+                "    campaign\n      @a \"A\"\n        designation \"D\"\n      @b \"B\"\n        designation \"E\"\n      designation \"F\"\n",
+            ),
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_member_line_with_a_stray_token_keeps_its_block() {
+        let text = in_contest("    campaign\n      @a 5\n        designation \"D\"\n");
+        check_errors(
+            &text,
+            &[unexpected_token(
+                60,
+                1,
+                vec![
+                    Expected::Token(TokenKind::String),
+                    Expected::Keyword(Keyword::As),
+                    Expected::Token(TokenKind::Newline),
+                ],
+            )],
+        );
+        assert_eq!(
+            child_nodes(&text, SyntaxKind::Member),
+            [
+                SyntaxKind::Identifier,
+                SyntaxKind::ErrorNode,
+                SyntaxKind::Block
+            ]
         );
     }
 }

@@ -14,10 +14,14 @@ impl Parser<'_> {
         self.identifier();
         self.expect(TokenKind::String, SyntaxErrorKind::MissingName);
         self.end_of_line();
+        self.candidate_block();
+        self.finish_node();
+    }
+
+    pub(super) fn candidate_block(&mut self) {
         if self.at(TokenKind::Indent) {
             self.block(&CANDIDATE_FIELDS, Self::candidate_field);
         }
-        self.finish_node();
     }
 
     pub(super) fn candidate_field(&mut self, seen: &mut Vec<Keyword>) -> bool {
