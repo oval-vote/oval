@@ -120,6 +120,20 @@ pub enum SyntaxKind {
     ContestRecommend,
     /// A recommendation's statement that it takes no stance, `no-position` or `abstain`.
     NoStance,
+    /// A `support` line in a recommendation, such as `support @aokafor @bsantos`, which is one tier
+    /// of choices.
+    ///
+    /// Each choice is an [`Identifier`](SyntaxKind::Identifier), which names a campaign by one of
+    /// its members, or a [`WriteIn`](SyntaxKind::WriteIn).
+    Support,
+    /// An `oppose` line in a recommendation, such as `oppose @cfox`, which lists the choices the
+    /// recommendation advises against.
+    ///
+    /// Its choices are written as in a [`Support`](SyntaxKind::Support) line.
+    Oppose,
+    /// A write-in choice, `write-in` and the name to write in, if it has one, such as
+    /// `write-in "Jane Doe"`.
+    WriteIn,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -173,6 +187,9 @@ impl SyntaxKind {
         Self::PartyMember,
         Self::ContestRecommend,
         Self::NoStance,
+        Self::Support,
+        Self::Oppose,
+        Self::WriteIn,
         Self::ErrorNode,
     ];
 }

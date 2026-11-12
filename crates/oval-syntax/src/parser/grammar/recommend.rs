@@ -1,6 +1,13 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxKind, TokenKind};
 
+const STANCE_ENTRIES: [Expected; 4] = [
+    Expected::Keyword(Keyword::Support),
+    Expected::Keyword(Keyword::Oppose),
+    Expected::Keyword(Keyword::Justification),
+    Expected::Keyword(Keyword::Note),
+];
+
 const RECOMMEND_FIELDS: [Expected; 2] = [
     Expected::Keyword(Keyword::Justification),
     Expected::Keyword(Keyword::Note),
@@ -29,9 +36,51 @@ impl Parser<'_> {
                     Expected::Token(TokenKind::Newline),
                 ]);
             }
-            self.end_of_line_with_block(&RECOMMEND_FIELDS, Self::recommend_field);
+            self.end_of_line_with_block(&STANCE_ENTRIES, Self::stance_entry);
         }
         self.finish_node();
+    }
+
+    fn stance_entry(&mut self, seen: &mut Vec<Keyword>) -> bool {
+        match self.current_keyword() {
+            Some(Keyword::Support) => self.stance(SyntaxKind::Support),
+            Some(Keyword::Oppose) => self.stance(SyntaxKind::Oppose),
+            _ => return self.recommend_field(seen),
+        }
+        true
+    }
+
+    fn stance(&mut self, kind: SyntaxKind) {
+        self.start_node(kind);
+        self.bump();
+        let mut has_choice = false;
+        while self.at(TokenKind::AtSign) || self.current_keyword() == Some(Keyword::WriteIn) {
+            self.choice();
+            has_choice = true;
+        }
+        if !self.at_line_end() {
+            let mut expected = vec![
+                Expected::Token(TokenKind::AtSign),
+                Expected::Keyword(Keyword::WriteIn),
+            ];
+            if has_choice {
+                expected.push(Expected::Token(TokenKind::Newline));
+            }
+            self.skip_line(expected);
+        }
+        self.end_of_line();
+        self.finish_node();
+    }
+
+    fn choice(&mut self) {
+        if self.at(TokenKind::AtSign) {
+            self.identifier();
+        } else {
+            self.start_node(SyntaxKind::WriteIn);
+            self.bump();
+            self.eat(TokenKind::String);
+            self.finish_node();
+        }
     }
 
     fn recommend_field(&mut self, seen: &mut Vec<Keyword>) -> bool {
@@ -240,6 +289,194 @@ mod tests {
                     Expected::Keyword(Keyword::Note),
                     Expected::Keyword(Keyword::Campaign),
                     Expected::Keyword(Keyword::Recommend),
+                ],
+            }],
+        );
+    }
+
+    fn stance_child_nodes(text: &str) -> Vec<SyntaxKind> {
+        let tree = parse(text).unwrap().syntax();
+        let stance = tree
+            .descendants()
+            .find(|node| matches!(node.kind(), SyntaxKind::Support | SyntaxKind::Oppose))
+            .expect("the recommendation has a stance");
+        stance.children().map(|node| node.kind()).collect()
+    }
+
+    fn unexpected_token(offset: u32, len: u32, newline: bool) -> SyntaxError {
+        let mut expected = vec![
+            Expected::Token(TokenKind::AtSign),
+            Expected::Keyword(Keyword::WriteIn),
+        ];
+        if newline {
+            expected.push(Expected::Token(TokenKind::Newline));
+        }
+        SyntaxError {
+            kind: SyntaxErrorKind::UnexpectedToken,
+            offset,
+            len,
+            expected,
+        }
+    }
+
+    #[test]
+    fn stances_are_lines_in_the_block() {
+        let text = in_contest(
+            "    recommend\n      support @aokafor\n      support @bsantos write-in \"Hiro Eriksen\"\n      oppose @cfox write-in\n      justification:\n        J.\n",
+        );
+        check_errors(&text, &[]);
+        check(
+            &text,
+            &expect![[r#"
+            Document@0..182
+              Ballot@0..182
+                Word@0..6 "ballot"
+                Whitespace@6..7 " "
+                Identifier@7..9
+                  AtSign@7..8 "@"
+                  Word@8..9 "a"
+                Whitespace@9..10 " "
+                String@10..13 "\"A\""
+                Newline@13..14 "\n"
+                Whitespace@14..16 "  "
+                Block@16..182
+                  Indent@16..16 ""
+                  Contest@16..182
+                    Word@16..23 "contest"
+                    Whitespace@23..24 " "
+                    Identifier@24..26
+                      AtSign@24..25 "@"
+                      Word@25..26 "m"
+                    Whitespace@26..27 " "
+                    String@27..30 "\"M\""
+                    Whitespace@30..31 " "
+                    ContestKind@31..37
+                      Word@31..37 "single"
+                    Newline@37..38 "\n"
+                    Whitespace@38..42 "    "
+                    Block@42..182
+                      Indent@42..42 ""
+                      ContestRecommend@42..182
+                        Word@42..51 "recommend"
+                        Newline@51..52 "\n"
+                        Whitespace@52..58 "      "
+                        Block@58..182
+                          Indent@58..58 ""
+                          Support@58..75
+                            Word@58..65 "support"
+                            Whitespace@65..66 " "
+                            Identifier@66..74
+                              AtSign@66..67 "@"
+                              Word@67..74 "aokafor"
+                            Newline@74..75 "\n"
+                          Whitespace@75..81 "      "
+                          Support@81..122
+                            Word@81..88 "support"
+                            Whitespace@88..89 " "
+                            Identifier@89..97
+                              AtSign@89..90 "@"
+                              Word@90..97 "bsantos"
+                            Whitespace@97..98 " "
+                            WriteIn@98..121
+                              Word@98..106 "write-in"
+                              Whitespace@106..107 " "
+                              String@107..121 "\"Hiro Eriksen\""
+                            Newline@121..122 "\n"
+                          Whitespace@122..128 "      "
+                          Oppose@128..150
+                            Word@128..134 "oppose"
+                            Whitespace@134..135 " "
+                            Identifier@135..140
+                              AtSign@135..136 "@"
+                              Word@136..140 "cfox"
+                            Whitespace@140..141 " "
+                            WriteIn@141..149
+                              Word@141..149 "write-in"
+                            Newline@149..150 "\n"
+                          Whitespace@150..156 "      "
+                          MarkdownField@156..182
+                            Word@156..169 "justification"
+                            Colon@169..170 ":"
+                            Newline@170..171 "\n"
+                            MarkdownBlock@171..182 "        J.\n"
+                          Dedent@182..182 ""
+                      Dedent@182..182 ""
+                  Dedent@182..182 ""
+        "#]],
+        );
+    }
+
+    #[test]
+    fn a_stance_holds_references_and_write_ins() {
+        let text = in_contest("    recommend\n      support @a @b write-in \"X\" write-in\n");
+        check_errors(&text, &[]);
+        assert_eq!(
+            stance_child_nodes(&text),
+            [
+                SyntaxKind::Identifier,
+                SyntaxKind::Identifier,
+                SyntaxKind::WriteIn,
+                SyntaxKind::WriteIn
+            ]
+        );
+    }
+
+    #[test]
+    fn stances_and_fields_are_in_any_order() {
+        check_errors(
+            &in_contest(
+                "    recommend\n      justification:\n        J.\n      oppose @c\n      support @a\n      oppose @d\n",
+            ),
+            &[],
+        );
+    }
+
+    #[test]
+    fn a_token_after_a_choice_is_an_unexpected_token() {
+        check_errors(
+            &in_contest("    recommend\n      support @a 5\n"),
+            &[unexpected_token(69, 1, true)],
+        );
+        check_errors(
+            &in_contest("    recommend\n      support @a \"A\"\n"),
+            &[unexpected_token(69, 3, true)],
+        );
+    }
+
+    #[test]
+    fn a_token_in_place_of_the_first_choice_is_an_unexpected_token() {
+        check_errors(
+            &in_contest("    recommend\n      oppose 5\n"),
+            &[unexpected_token(65, 1, false)],
+        );
+    }
+
+    #[test]
+    fn a_block_below_a_stance_is_unexpected() {
+        check_errors(
+            &in_contest("    recommend\n      support @a\n        justification:\n          J.\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedBlock,
+                offset: 77,
+                len: 28,
+                expected: Vec::new(),
+            }],
+        );
+    }
+
+    #[test]
+    fn a_contest_field_is_an_unexpected_entry_among_stances() {
+        check_errors(
+            &in_contest("    recommend\n      support @a\n      subtitle \"S\"\n"),
+            &[SyntaxError {
+                kind: SyntaxErrorKind::UnexpectedEntry,
+                offset: 75,
+                len: 12,
+                expected: vec![
+                    Expected::Keyword(Keyword::Support),
+                    Expected::Keyword(Keyword::Oppose),
+                    Expected::Keyword(Keyword::Justification),
+                    Expected::Keyword(Keyword::Note),
                 ],
             }],
         );
