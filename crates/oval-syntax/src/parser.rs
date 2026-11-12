@@ -42,6 +42,12 @@ pub fn parse(text: &str) -> Result<SyntaxNode, InputRejection> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use expect_test::{Expect, expect};
+
+    fn check(text: &str, expected: &Expect) {
+        let tree = parse(text).expect("the text is accepted");
+        expected.assert_eq(&format!("{tree:#?}"));
+    }
 
     fn check_round_trip(text: &str) {
         let tree = parse(text).expect("the text is accepted");
@@ -56,15 +62,23 @@ mod tests {
 
     #[test]
     fn every_token_is_a_child_of_the_document() {
-        let text = "guide \"G\"\n  note:\n    Text.\n";
-        let tree = parse(text).unwrap();
-        let tokens = lex(text).unwrap().tokens;
-        let children: Vec<SyntaxKind> = tree
-            .children_with_tokens()
-            .map(|child| child.kind())
-            .collect();
-        let expected: Vec<SyntaxKind> = tokens.iter().map(|token| token.kind.into()).collect();
-        assert_eq!(children, expected);
+        check(
+            "guide \"G\"\n  note:\n    Text.\n",
+            &expect![[r#"
+                Document@0..28
+                  Word@0..5 "guide"
+                  Whitespace@5..6 " "
+                  String@6..9 "\"G\""
+                  Newline@9..10 "\n"
+                  Whitespace@10..12 "  "
+                  Indent@12..12 ""
+                  Word@12..16 "note"
+                  Colon@16..17 ":"
+                  Newline@17..18 "\n"
+                  MarkdownBlock@18..28 "    Text.\n"
+                  Dedent@28..28 ""
+            "#]],
+        );
     }
 
     #[test]

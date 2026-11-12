@@ -12,6 +12,7 @@ authors = ["Varun Santhanam"]
 publish = false
 
 [workspace.dependencies]
+expect-test = "1.5"
 rowan = "0.17"
 wasm-bindgen = "0.2"
 
