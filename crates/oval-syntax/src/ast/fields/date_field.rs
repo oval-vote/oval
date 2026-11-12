@@ -5,14 +5,8 @@ ast_node! {
     /// A field whose value is a date, such as `date 2026-11-03`.
     ///
     /// ```
-    /// use oval_syntax::ast::{AstNode, DateField};
-    ///
     /// let result = oval_syntax::parse("date 2026-11-03\n")?;
-    /// let date = result
-    ///     .syntax()
-    ///     .descendants()
-    ///     .find_map(DateField::cast)
-    ///     .expect("the document has a date field");
+    /// let date = result.document().date().expect("the document has a date field");
     /// let value = date.value().expect("the field has a value");
     /// assert_eq!((value.year(), value.month(), value.day()), (2026, 11, 3));
     /// # Ok::<(), oval_syntax::InputRejection>(())

@@ -5,14 +5,8 @@ ast_node! {
     /// A field whose value is a Markdown body, such as `note:` and the indented lines below it.
     ///
     /// ```
-    /// use oval_syntax::ast::{AstNode, MarkdownField};
-    ///
     /// let result = oval_syntax::parse("note:\n  Check your *own* ballot.\n")?;
-    /// let note = result
-    ///     .syntax()
-    ///     .descendants()
-    ///     .find_map(MarkdownField::cast)
-    ///     .expect("the document has a note");
+    /// let note = result.document().note().expect("the document has a note");
     /// let body = note.body().expect("the note has a body");
     /// assert_eq!(body.value(), "Check your *own* ballot.");
     /// # Ok::<(), oval_syntax::InputRejection>(())

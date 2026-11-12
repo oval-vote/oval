@@ -1,7 +1,15 @@
 use rowan::NodeOrToken;
 
-use super::AstToken;
+use super::{AstNode, AstToken};
 use crate::{Keyword, SyntaxKind, SyntaxNode, SyntaxToken};
+
+pub(super) fn child<N: AstNode>(node: &SyntaxNode) -> Option<N> {
+    children(node).next()
+}
+
+pub(super) fn children<N: AstNode>(node: &SyntaxNode) -> impl Iterator<Item = N> + use<N> {
+    node.children().filter_map(N::cast)
+}
 
 pub(super) fn token<T: AstToken>(node: &SyntaxNode) -> Option<T> {
     tokens(node).next()

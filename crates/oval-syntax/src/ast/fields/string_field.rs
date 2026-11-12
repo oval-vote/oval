@@ -5,14 +5,8 @@ ast_node! {
     /// A field whose value is a string, such as `guide "Franklin Voter Guide"`.
     ///
     /// ```
-    /// use oval_syntax::ast::{AstNode, StringField};
-    ///
     /// let result = oval_syntax::parse("guide \"Franklin Voter Guide\"\n")?;
-    /// let guide = result
-    ///     .syntax()
-    ///     .descendants()
-    ///     .find_map(StringField::cast)
-    ///     .expect("the document has a guide field");
+    /// let guide = result.document().guide().expect("the document has a guide field");
     /// let value = guide.value().expect("the field has a value");
     /// assert_eq!(value.value(), "Franklin Voter Guide");
     /// # Ok::<(), oval_syntax::InputRejection>(())

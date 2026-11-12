@@ -27,6 +27,7 @@ mod fields;
 mod identifier;
 mod literals;
 mod support;
+mod version_marker;
 
 pub use ast_node::AstNode;
 use ast_node::ast_node;
@@ -36,3 +37,4 @@ pub use document::Document;
 pub use fields::{DateField, MarkdownField, StringField, StringListField, UrlField};
 pub use identifier::Identifier;
 pub use literals::{DateLiteral, IntegerLiteral, MarkdownBody, StringLiteral, UrlLiteral};
+pub use version_marker::VersionMarker;
