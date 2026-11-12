@@ -1,7 +1,7 @@
-use super::Cursor;
+use super::CharCursor;
 use crate::TokenKind;
 
-impl Cursor<'_> {
+impl CharCursor<'_> {
     pub(super) fn at_sign(&mut self, start: usize) {
         self.single(TokenKind::AtSign, '@', start);
     }

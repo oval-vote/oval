@@ -1,9 +1,9 @@
-mod cursor;
+mod char_cursor;
 mod input_rejection;
 mod lex_result;
 mod lexical_error;
 
-use cursor::Cursor;
+use char_cursor::CharCursor;
 
 pub use input_rejection::InputRejection;
 pub use lex_result::LexResult;
@@ -62,7 +62,7 @@ pub fn lex(text: &str) -> Result<LexResult, InputRejection> {
             offset: to_offset(offset)?,
         });
     }
-    Ok(Cursor::new(text).run())
+    Ok(CharCursor::new(text).run())
 }
 
 /// Splits an Oval document given as raw bytes into tokens.
@@ -103,7 +103,7 @@ fn to_offset(n: usize) -> Result<u32, InputRejection> {
     u32::try_from(n).map_err(|_| InputRejection::TooLarge)
 }
 
-fn to_u32(n: usize) -> u32 {
+pub(crate) fn to_u32(n: usize) -> u32 {
     u32::try_from(n).expect("lex rejects text longer than u32::MAX bytes")
 }
 

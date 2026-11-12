@@ -1,7 +1,7 @@
-use super::{BYTE_ORDER_MARK, Cursor, is_line_terminator};
+use super::{BYTE_ORDER_MARK, CharCursor, is_line_terminator};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl Cursor<'_> {
+impl CharCursor<'_> {
     pub(super) fn byte_order_mark(&mut self, start: usize) {
         self.bump(BYTE_ORDER_MARK);
         self.push(TokenKind::ByteOrderMark, start);

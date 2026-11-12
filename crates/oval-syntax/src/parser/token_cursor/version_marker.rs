@@ -1,11 +1,11 @@
-use super::TokenParser;
-use crate::{SyntaxKind, TokenKind};
+use super::TokenCursor;
+use crate::{SyntaxErrorKind, SyntaxKind, TokenKind};
 
-impl TokenParser<'_> {
+impl TokenCursor<'_> {
     pub(super) fn version_marker(&mut self) {
         self.start_node(SyntaxKind::VersionMarker);
         self.bump();
-        self.eat(TokenKind::Integer);
+        self.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue);
         self.eat(TokenKind::Newline);
         self.finish_node();
     }
@@ -14,7 +14,42 @@ impl TokenParser<'_> {
 #[cfg(test)]
 mod tests {
     use crate::parser::tests::check;
+    use crate::{Expected, SyntaxError, SyntaxErrorKind, TokenKind, parse};
     use expect_test::expect;
+
+    fn check_errors(text: &str, expected: &[SyntaxError]) {
+        assert_eq!(parse(text).unwrap().syntax_errors, expected, "{text:?}");
+    }
+
+    fn missing_version(offset: u32) -> SyntaxError {
+        SyntaxError {
+            kind: SyntaxErrorKind::MissingValue,
+            offset,
+            len: 0,
+            expected: vec![Expected::Token(TokenKind::Integer)],
+        }
+    }
+
+    #[test]
+    fn a_complete_marker_has_no_errors() {
+        check_errors("oval 1\n", &[]);
+    }
+
+    #[test]
+    fn a_marker_without_a_version_is_missing_a_value() {
+        check_errors("oval\n", &[missing_version(4)]);
+    }
+
+    #[test]
+    fn a_missing_version_is_reported_at_the_end_of_the_line() {
+        check_errors("oval   \n", &[missing_version(7)]);
+        check_errors("oval  # version?\n", &[missing_version(16)]);
+    }
+
+    #[test]
+    fn a_marker_without_a_version_at_the_end_of_input_is_missing_a_value() {
+        check_errors("oval", &[missing_version(4)]);
+    }
 
     #[test]
     fn a_version_marker_is_a_node() {

@@ -12,7 +12,7 @@ use crate::{LexResult, LexicalError, LexicalErrorKind, Token, TokenKind};
 
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
-pub(super) struct Cursor<'a> {
+pub(super) struct CharCursor<'a> {
     source: &'a str,
     pos: usize,
     tokens: Vec<Token>,
@@ -25,9 +25,9 @@ pub(super) struct Cursor<'a> {
     body_opener: Option<usize>,
 }
 
-impl<'a> Cursor<'a> {
+impl<'a> CharCursor<'a> {
     pub(super) fn new(source: &'a str) -> Self {
-        Cursor {
+        CharCursor {
             source,
             pos: 0,
             tokens: Vec::new(),

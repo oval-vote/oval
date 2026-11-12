@@ -1,7 +1,7 @@
-use super::{BYTE_ORDER_MARK, Cursor};
+use super::{BYTE_ORDER_MARK, CharCursor};
 use crate::{LexicalErrorKind, TokenKind};
 
-impl Cursor<'_> {
+impl CharCursor<'_> {
     pub(super) fn starts_ignored_token(&self, c: char) -> bool {
         matches!(c, ' ' | '#' | '\n' | '\r') || (c == BYTE_ORDER_MARK && self.pos == 0)
     }

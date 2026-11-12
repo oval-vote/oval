@@ -1,8 +1,8 @@
 mod parse_result;
 mod syntax_error;
-mod token_parser;
+mod token_cursor;
 
-use token_parser::TokenParser;
+use token_cursor::TokenCursor;
 
 pub use parse_result::ParseResult;
 pub use syntax_error::{Expected, SyntaxError, SyntaxErrorKind};
@@ -38,12 +38,13 @@ use crate::{InputRejection, LexResult, lex};
 /// ```
 pub fn parse(text: &str) -> Result<ParseResult, InputRejection> {
     let LexResult { tokens, errors } = lex(text)?;
-    let mut parser = TokenParser::new(text, tokens);
-    parser.document();
+    let mut cursor = TokenCursor::new(text, tokens);
+    cursor.document();
+    let (green, syntax_errors) = cursor.finish();
     Ok(ParseResult {
-        green: parser.finish(),
+        green,
         lexical_errors: errors,
-        syntax_errors: Vec::new(),
+        syntax_errors,
     })
 }
 

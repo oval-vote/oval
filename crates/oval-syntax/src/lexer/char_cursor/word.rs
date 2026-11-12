@@ -1,7 +1,7 @@
-use super::{Cursor, is_word_char};
+use super::{CharCursor, is_word_char};
 use crate::TokenKind;
 
-impl Cursor<'_> {
+impl CharCursor<'_> {
     pub(super) fn word(&mut self, start: usize) {
         self.eat_while(is_word_char);
         self.push(TokenKind::Word, start);
