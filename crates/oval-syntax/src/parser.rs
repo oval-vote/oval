@@ -1,6 +1,9 @@
+mod syntax_error;
 mod token_parser;
 
 use token_parser::TokenParser;
+
+pub use syntax_error::{Expected, SyntaxError, SyntaxErrorKind};
 
 use crate::{InputRejection, SyntaxNode, lex};
 

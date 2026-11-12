@@ -3,7 +3,7 @@ mod version_marker;
 
 use rowan::{GreenNode, GreenNodeBuilder, Language};
 
-use crate::{OvalLanguage, SyntaxKind, Token, TokenKind};
+use crate::{Keyword, OvalLanguage, SyntaxKind, Token, TokenKind};
 
 pub(super) struct TokenParser<'t> {
     text: &'t str,
@@ -37,10 +37,10 @@ impl<'t> TokenParser<'t> {
         self.current() == Some(kind)
     }
 
-    fn at_keyword(&mut self, keyword: &str) -> bool {
+    fn at_keyword(&mut self, keyword: Keyword) -> bool {
         self.at(TokenKind::Word) && {
             let len = self.tokens[self.pos].len as usize;
-            &self.text[self.offset..self.offset + len] == keyword
+            &self.text[self.offset..self.offset + len] == keyword.text()
         }
     }
 

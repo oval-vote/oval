@@ -1,9 +1,11 @@
+mod keyword;
 mod oval_language;
 mod syntax_element;
 mod syntax_kind;
 mod syntax_node;
 mod syntax_token;
 
+pub use keyword::Keyword;
 pub use oval_language::OvalLanguage;
 pub use syntax_element::SyntaxElement;
 pub use syntax_kind::SyntaxKind;
