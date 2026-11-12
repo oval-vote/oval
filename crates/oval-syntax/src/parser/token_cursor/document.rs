@@ -10,7 +10,7 @@ impl TokenCursor<'_> {
         while self.current().is_some() {
             self.bump();
         }
-        self.skip_ignored();
+        self.eat_skipped();
         self.finish_node();
     }
 }

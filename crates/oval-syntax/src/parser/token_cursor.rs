@@ -15,6 +15,8 @@ pub(super) struct TokenCursor<'t> {
     offset: usize,
     builder: GreenNodeBuilder<'static>,
     errors: Vec<SyntaxError>,
+    line_start: usize,
+    line_is_empty: bool,
 }
 
 impl<'t> TokenCursor<'t> {
@@ -26,6 +28,8 @@ impl<'t> TokenCursor<'t> {
             offset: 0,
             builder: GreenNodeBuilder::new(),
             errors: Vec::new(),
+            line_start: 0,
+            line_is_empty: true,
         }
     }
 
@@ -47,7 +51,7 @@ impl<'t> TokenCursor<'t> {
     fn peek(&self) -> Option<(Token, usize)> {
         let mut offset = self.offset;
         for &token in &self.tokens[self.pos..] {
-            if !token.is_ignored() {
+            if !is_skipped(token, self.line_is_empty) {
                 return Some((token, offset));
             }
             offset += token.len as usize;
@@ -74,7 +78,7 @@ impl<'t> TokenCursor<'t> {
         if self.eat(kind) {
             return true;
         }
-        if self.at_line_end() {
+        if self.at_line_end() && !self.line_has_error() {
             let offset = self.peek().map_or(self.text.len(), |(_, offset)| offset);
             self.errors.push(SyntaxError {
                 kind: missing,
@@ -86,8 +90,15 @@ impl<'t> TokenCursor<'t> {
         false
     }
 
+    fn line_has_error(&self) -> bool {
+        self.tokens[self.line_start..]
+            .iter()
+            .take_while(|token| !ends_line(**token))
+            .any(|token| token.is_error())
+    }
+
     pub(super) fn bump(&mut self) {
-        self.skip_ignored();
+        self.eat_skipped();
         let token = *self
             .tokens
             .get(self.pos)
@@ -96,7 +107,7 @@ impl<'t> TokenCursor<'t> {
     }
 
     pub(super) fn start_node(&mut self, kind: SyntaxKind) {
-        self.skip_ignored();
+        self.eat_skipped();
         self.start_node_here(kind);
     }
 
@@ -112,9 +123,9 @@ impl<'t> TokenCursor<'t> {
         (self.builder.finish(), self.errors)
     }
 
-    fn skip_ignored(&mut self) {
+    fn eat_skipped(&mut self) {
         while let Some(token) = self.tokens.get(self.pos).copied()
-            && token.is_ignored()
+            && is_skipped(token, self.line_is_empty)
         {
             self.add_token(token);
         }
@@ -128,7 +139,24 @@ impl<'t> TokenCursor<'t> {
         );
         self.pos += 1;
         self.offset = end;
+        if ends_line(token) {
+            self.line_start = self.pos;
+            self.line_is_empty = true;
+        } else if !token.is_ignored() && !token.is_error() {
+            self.line_is_empty = false;
+        }
     }
+}
+
+fn is_skipped(token: Token, line_is_empty: bool) -> bool {
+    token.is_ignored() || token.is_error() || (token.kind == TokenKind::Newline && line_is_empty)
+}
+
+fn ends_line(token: Token) -> bool {
+    matches!(
+        token.kind,
+        TokenKind::Newline | TokenKind::BlankLine | TokenKind::MarkdownBlock
+    )
 }
 
 #[cfg(test)]
@@ -188,9 +216,9 @@ mod tests {
     }
 
     #[test]
-    fn skip_ignored_takes_ignored_tokens_up_to_the_next_real_one() {
+    fn eat_skipped_takes_ignored_tokens_up_to_the_next_real_one() {
         let mut cursor = cursor("# aside\nword");
-        cursor.skip_ignored();
+        cursor.eat_skipped();
         assert_eq!(cursor.current(), Some(TokenKind::Word));
         assert_eq!(tree(cursor).to_string(), "# aside\n");
     }
@@ -255,5 +283,54 @@ mod tests {
         assert!(!cursor.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
         assert_eq!(cursor.current(), Some(TokenKind::Word));
         assert_eq!(cursor.errors, []);
+    }
+
+    #[test]
+    fn current_skips_error_tokens() {
+        let cursor = cursor("\t~word\n");
+        assert_eq!(cursor.current(), Some(TokenKind::Word));
+    }
+
+    #[test]
+    fn a_line_of_only_error_tokens_is_skipped_like_a_blank_line() {
+        let mut cursor = cursor("\t\nword\n");
+        assert_eq!(cursor.current(), Some(TokenKind::Word));
+        cursor.bump();
+        assert_eq!(tree(cursor).to_string(), "\t\nword");
+    }
+
+    #[test]
+    fn a_line_with_another_token_keeps_its_newline() {
+        let mut cursor = cursor("a\t\n");
+        cursor.bump();
+        assert_eq!(cursor.current(), Some(TokenKind::Newline));
+    }
+
+    #[test]
+    fn a_line_that_opens_a_block_keeps_its_newline() {
+        let mut cursor = cursor("a\n  \t\n");
+        cursor.bump();
+        cursor.bump();
+        assert_eq!(cursor.current(), Some(TokenKind::Indent));
+        cursor.bump();
+        assert_eq!(cursor.current(), Some(TokenKind::Newline));
+    }
+
+    #[test]
+    fn expect_reports_nothing_on_a_line_with_an_error_token() {
+        for text in ["oval 1x\n", "oval\t\n", "oval ~\n"] {
+            let mut cursor = cursor(text);
+            cursor.bump();
+            assert!(!cursor.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+            assert_eq!(cursor.errors, [], "{text:?}");
+        }
+    }
+
+    #[test]
+    fn an_error_token_on_an_earlier_line_does_not_stop_a_report() {
+        let mut cursor = cursor("~\noval\n");
+        cursor.bump();
+        assert!(!cursor.expect(TokenKind::Integer, SyntaxErrorKind::MissingValue));
+        assert_eq!(cursor.errors, [missing_integer(6)]);
     }
 }

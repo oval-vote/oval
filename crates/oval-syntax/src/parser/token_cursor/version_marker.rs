@@ -176,4 +176,22 @@ mod tests {
         "#]],
         );
     }
+
+    #[test]
+    fn a_malformed_version_is_only_a_lexical_error() {
+        let result = parse("oval 1x\n").unwrap();
+        assert_eq!(result.syntax_errors, []);
+        assert_eq!(result.lexical_errors.len(), 1);
+        check(
+            "oval 1x\n",
+            &expect![[r#"
+            Document@0..8
+              VersionMarker@0..8
+                Word@0..4 "oval"
+                Whitespace@4..5 " "
+                Error@5..7 "1x"
+                Newline@7..8 "\n"
+        "#]],
+        );
+    }
 }
