@@ -78,6 +78,8 @@ pub enum SyntaxKind {
     Requirement,
     /// An extensibility before a construct's keyword, `extensible` or `exhaustive`.
     Extensibility,
+    /// A section of a ballot, such as `section "Federal Offices"` and the block below it.
+    Section,
     /// Text the parser discarded or set aside while recovering from a syntax error.
     ///
     /// The text is kept in the tree, so the tree still covers the whole document, but it contributes
@@ -118,6 +120,7 @@ impl SyntaxKind {
         Self::Ballot,
         Self::Requirement,
         Self::Extensibility,
+        Self::Section,
         Self::ErrorNode,
     ];
 }

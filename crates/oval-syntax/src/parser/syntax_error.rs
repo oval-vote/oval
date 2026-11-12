@@ -32,7 +32,8 @@ pub enum SyntaxErrorKind {
     /// The error has no length. It sits where the identifier would begin, or just after an `@` that
     /// has no word. The parser assumes the identifier and continues with the rest of the line.
     MissingIdentifier,
-    /// A declaration whose identifier is followed by the end of the line instead of its name.
+    /// A declaration whose identifier is followed by the end of the line instead of its name, or a
+    /// section whose keyword is followed by the end of the line instead of its title.
     ///
     /// The error has no length and sits at the end of the line. The parser keeps the declaration
     /// without a name.

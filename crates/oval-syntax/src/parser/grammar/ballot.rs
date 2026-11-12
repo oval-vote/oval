@@ -1,9 +1,10 @@
 use crate::parser::Parser;
 use crate::{Expected, Keyword, SyntaxErrorKind, SyntaxKind, TokenKind};
 
-const BALLOT_ENTRIES: [Expected; 3] = [
+const BALLOT_ENTRIES: [Expected; 4] = [
     Expected::Keyword(Keyword::Eligibility),
     Expected::Keyword(Keyword::Note),
+    Expected::Keyword(Keyword::Section),
     Expected::Keyword(Keyword::Ballot),
 ];
 
@@ -28,6 +29,7 @@ impl Parser<'_> {
                 p.value_field(SyntaxKind::StringField, TokenKind::String);
             }),
             (Keyword::Note, false) => self.field_once(seen, keyword, Self::markdown_field),
+            (Keyword::Section, _) => self.section(),
             (Keyword::Ballot, _) => self.ballot(),
             _ => return false,
         }
@@ -181,6 +183,7 @@ mod tests {
                 expected: vec![
                     Expected::Keyword(Keyword::Eligibility),
                     Expected::Keyword(Keyword::Note),
+                    Expected::Keyword(Keyword::Section),
                     Expected::Keyword(Keyword::Ballot),
                 ],
             }],
