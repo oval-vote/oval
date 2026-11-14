@@ -121,6 +121,9 @@ pub enum ValidationRule {
     SupportBelowMinimum,
     /// A write-in names a candidate already printed on the ballot in the same contest. A warning.
     WriteInOnBallot,
+    /// A measure has `if_yes` or `if_no` but not both, so a reader learns what only one outcome
+    /// does. A warning.
+    UnpairedOutcome,
 }
 
 impl ValidationRule {
@@ -169,6 +172,7 @@ impl ValidationRule {
             Self::SupportOverCount => "support-over-count",
             Self::SupportBelowMinimum => "support-below-minimum",
             Self::WriteInOnBallot => "write-in-on-ballot",
+            Self::UnpairedOutcome => "unpaired-outcome",
         }
     }
 
@@ -216,7 +220,8 @@ impl ValidationRule {
             | Self::DuplicateBallotTitle
             | Self::SupportOverCount
             | Self::SupportBelowMinimum
-            | Self::WriteInOnBallot => Severity::Warning,
+            | Self::WriteInOnBallot
+            | Self::UnpairedOutcome => Severity::Warning,
         }
     }
 }
@@ -319,6 +324,7 @@ mod tests {
             (ValidationRule::SupportOverCount, "support-over-count"),
             (ValidationRule::SupportBelowMinimum, "support-below-minimum"),
             (ValidationRule::WriteInOnBallot, "write-in-on-ballot"),
+            (ValidationRule::UnpairedOutcome, "unpaired-outcome"),
         ] {
             assert_eq!(rule.spec_id(), id);
             assert_eq!(rule.severity(), Severity::Warning);

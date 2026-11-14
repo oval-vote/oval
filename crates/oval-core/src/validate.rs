@@ -9,6 +9,7 @@ mod contests;
 mod document;
 mod index;
 mod literals;
+mod measures;
 mod questions;
 mod recommendations;
 mod references;
@@ -38,6 +39,7 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     questions::abstentions_on_required(document, &mut diagnostics);
     questions::write_ins_not_accepted(document, &mut diagnostics);
     questions::extensible_retentions(document, &mut diagnostics);
+    measures::unpaired_outcomes(document, &mut diagnostics);
     references::unused_declarations(&index, &mut diagnostics);
     references::duplicate_party_names(&index, &mut diagnostics);
     ballots::duplicate_ballot_titles(document, &mut diagnostics);
