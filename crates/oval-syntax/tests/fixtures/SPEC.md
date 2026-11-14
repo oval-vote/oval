@@ -2746,8 +2746,9 @@ candidate @dana-lombardi "Dana Lombardi"
 
 #### Duplicate Party Name
 
-Occurs when two `Party` declarations have the same name and different identifiers. The warning is
-reported as `duplicate-party-name` and spans the later declaration's name.
+Occurs when two party declarations, at the top level or inline, have the same name and different
+identifiers. The warning is reported as `duplicate-party-name` and spans the name of each
+declaration that has the same name as an earlier declaration with a different identifier.
 
 ```oval example
 party @dem "Democratic"
