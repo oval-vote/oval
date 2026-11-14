@@ -4,7 +4,9 @@ use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
 use crate::{Diagnostic, DiagnosticCode, ValidationRule};
 
 mod document;
+mod index;
 mod literals;
+mod references;
 mod version;
 
 pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnostic> {
@@ -13,23 +15,44 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     document::guide_fields(document, &marker, &mut diagnostics);
     document::root_ballots(document, &mut diagnostics);
     literals::literals(document, &mut diagnostics);
+    let index = index::Index::new(document);
+    references::duplicate_declarations(&index, &mut diagnostics);
+    references::references(&index, &mut diagnostics);
+    references::unused_declarations(&index, &mut diagnostics);
     Ok(diagnostics)
 }
 
+fn kept_nodes(node: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> + use<> {
+    node.descendants().filter(|node| {
+        !node
+            .ancestors()
+            .any(|ancestor| ancestor.kind() == SyntaxKind::ErrorNode)
+    })
+}
+
 fn kept_tokens(node: &SyntaxNode) -> impl Iterator<Item = SyntaxToken> + use<> {
-    node.descendants_with_tokens()
-        .filter_map(SyntaxElement::into_token)
-        .filter(|token| {
-            !token
-                .parent_ancestors()
-                .any(|ancestor| ancestor.kind() == SyntaxKind::ErrorNode)
-        })
+    tokens(node).filter(|token| {
+        !token
+            .parent_ancestors()
+            .any(|ancestor| ancestor.kind() == SyntaxKind::ErrorNode)
+    })
 }
 
 fn content_range(node: &SyntaxNode) -> Option<TextRange> {
-    let mut ranges = node
-        .descendants_with_tokens()
+    lexical_range(tokens(node))
+}
+
+fn header_range(node: &SyntaxNode) -> Option<TextRange> {
+    lexical_range(tokens(node).take_while(|token| token.kind() != SyntaxKind::Newline))
+}
+
+fn tokens(node: &SyntaxNode) -> impl Iterator<Item = SyntaxToken> + use<> {
+    node.descendants_with_tokens()
         .filter_map(SyntaxElement::into_token)
+}
+
+fn lexical_range(tokens: impl Iterator<Item = SyntaxToken>) -> Option<TextRange> {
+    let mut ranges = tokens
         .filter(|token| token.kind().token_kind().is_some_and(TokenKind::is_lexical))
         .map(|token| token.text_range());
     let first = ranges.next()?;
@@ -70,9 +93,9 @@ fn reported_as(text: &str, id: &str) -> Vec<(u32, u32)> {
 
 #[cfg(test)]
 mod tests {
-    use oval_syntax::TextRange;
+    use oval_syntax::{SyntaxKind, TextRange};
 
-    use super::{VALID, content_range, kept_tokens, reported};
+    use super::{VALID, content_range, header_range, kept_nodes, kept_tokens, reported};
 
     fn range(text: &str) -> Option<TextRange> {
         content_range(&oval_syntax::parse(text).unwrap().syntax())
@@ -98,6 +121,30 @@ mod tests {
             .map(|token| token.text().to_owned())
             .collect();
         assert_eq!(kept, ["guide", " ", "\"G\"", " ", "\n"]);
+    }
+
+    #[test]
+    fn a_header_runs_to_the_end_of_its_first_line() {
+        let text = "party @dem \"Democratic\" 5  # c\n    abbreviation \"D\"\n";
+        let party = oval_syntax::parse(text)
+            .unwrap()
+            .syntax()
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::Party)
+            .expect("the text has a party");
+        assert_eq!(
+            header_range(&party),
+            Some(TextRange::new(0.into(), 25.into()))
+        );
+    }
+
+    #[test]
+    fn nodes_in_discarded_or_set_aside_text_are_not_kept() {
+        let text = "candidate @c \"C\"\n  party @dem\n  party @gop\n";
+        let kept = kept_nodes(&oval_syntax::parse(text).unwrap().syntax())
+            .filter(|node| node.kind() == SyntaxKind::PartyRef)
+            .count();
+        assert_eq!(kept, 1);
     }
 
     #[test]

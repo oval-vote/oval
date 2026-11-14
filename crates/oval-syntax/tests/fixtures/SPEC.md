@@ -2723,10 +2723,13 @@ warning; this specification does not say how.
 
 #### Unused Declaration
 
-Occurs when a top-level `Party` declaration is named by no `party` line and is a member of no
-campaign, or a top-level `Candidate` declaration is a member of no campaign. Inline declarations are
-used by the construct that declares them and are never reported. The warning is reported as
-`unused-declaration` and spans the declaration's header line.
+Occurs when no `party` line and no campaign member resolves to a top-level `Party` declaration, or
+no campaign member resolves to a top-level `Candidate` declaration. A reference resolves to the
+declaration of its identifier whatever the declaration's kind, so a mismatched reference still uses
+the declaration it names, and since references resolve to the first declaration of an identifier, a
+duplicate declaration is never used. Inline declarations are used by the construct that declares
+them and are never reported. The warning is reported as `unused-declaration` and spans the
+declaration's header line.
 
 ```oval example
 party @dem "Democratic"
