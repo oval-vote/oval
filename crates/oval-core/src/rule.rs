@@ -35,6 +35,26 @@ pub enum ValidationRule {
     EmptyBallot,
     /// A section has fields but no items.
     EmptySection,
+    /// A `single`, `multiple`, or `ranked` contest has no campaign.
+    ContestWithoutCampaigns,
+    /// The number of votes after `multiple` is less than 2.
+    InvalidMultipleCount,
+    /// The number after `max` is 0.
+    InvalidRankedMax,
+    /// The number after `seats` is 0.
+    InvalidSeatCount,
+    /// The number after `min` is 0, or exceeds the `max` of a `ranked` contest or the number of
+    /// votes of a `multiple` contest, so a ballot could never meet it.
+    InvalidMinimum,
+    /// `all` is written with `max` or `min`, though ranking every choice leaves no room for
+    /// either limit.
+    RankedAllWithLimit,
+    /// A `retention` contest has no campaign, or more than one. Each campaign after the first is
+    /// its own diagnostic.
+    RetentionCampaignCount,
+    /// A campaign of a `retention` contest is a party campaign, though a retention question is about
+    /// one candidate.
+    RetentionPartyCampaign,
     /// A URL uses `http` rather than `https`, so a reader following it is not protected from
     /// tampering. A warning.
     InsecureUrl,
@@ -70,6 +90,14 @@ impl ValidationRule {
             Self::MisplacedCandidateField => "misplaced-candidate-field",
             Self::EmptyBallot => "empty-ballot",
             Self::EmptySection => "empty-section",
+            Self::ContestWithoutCampaigns => "contest-without-campaigns",
+            Self::InvalidMultipleCount => "invalid-multiple-count",
+            Self::InvalidRankedMax => "invalid-ranked-max",
+            Self::InvalidSeatCount => "invalid-seat-count",
+            Self::InvalidMinimum => "invalid-minimum",
+            Self::RankedAllWithLimit => "ranked-all-with-limit",
+            Self::RetentionCampaignCount => "retention-campaign-count",
+            Self::RetentionPartyCampaign => "retention-party-campaign",
             Self::InsecureUrl => "insecure-url",
             Self::EmptyString => "empty-string",
             Self::UnusedDeclaration => "unused-declaration",
@@ -91,7 +119,15 @@ impl ValidationRule {
             | Self::BlockOnReference
             | Self::MisplacedCandidateField
             | Self::EmptyBallot
-            | Self::EmptySection => Severity::Error,
+            | Self::EmptySection
+            | Self::ContestWithoutCampaigns
+            | Self::InvalidMultipleCount
+            | Self::InvalidRankedMax
+            | Self::InvalidSeatCount
+            | Self::InvalidMinimum
+            | Self::RankedAllWithLimit
+            | Self::RetentionCampaignCount
+            | Self::RetentionPartyCampaign => Severity::Error,
             Self::InsecureUrl
             | Self::EmptyString
             | Self::UnusedDeclaration
@@ -107,83 +143,65 @@ mod tests {
     use crate::Severity;
 
     #[test]
-    fn each_rule_has_its_identifier_and_severity() {
-        for (rule, id, severity) in [
-            (
-                ValidationRule::UnsupportedVersion,
-                "unsupported-version",
-                Severity::Error,
-            ),
-            (
-                ValidationRule::MissingGuideField,
-                "missing-guide-field",
-                Severity::Error,
-            ),
-            (
-                ValidationRule::EmptyDocument,
-                "empty-document",
-                Severity::Error,
-            ),
-            (ValidationRule::InvalidDate, "invalid-date", Severity::Error),
-            (
-                ValidationRule::UndeclaredReference,
-                "undeclared-reference",
-                Severity::Error,
-            ),
+    fn each_error_has_its_identifier() {
+        for (rule, id) in [
+            (ValidationRule::UnsupportedVersion, "unsupported-version"),
+            (ValidationRule::MissingGuideField, "missing-guide-field"),
+            (ValidationRule::EmptyDocument, "empty-document"),
+            (ValidationRule::InvalidDate, "invalid-date"),
+            (ValidationRule::UndeclaredReference, "undeclared-reference"),
             (
                 ValidationRule::DuplicateDeclaration,
                 "duplicate-declaration",
-                Severity::Error,
             ),
-            (
-                ValidationRule::MismatchedReference,
-                "mismatched-reference",
-                Severity::Error,
-            ),
-            (
-                ValidationRule::BlockOnReference,
-                "block-on-reference",
-                Severity::Error,
-            ),
+            (ValidationRule::MismatchedReference, "mismatched-reference"),
+            (ValidationRule::BlockOnReference, "block-on-reference"),
             (
                 ValidationRule::MisplacedCandidateField,
                 "misplaced-candidate-field",
-                Severity::Error,
             ),
-            (ValidationRule::EmptyBallot, "empty-ballot", Severity::Error),
+            (ValidationRule::EmptyBallot, "empty-ballot"),
+            (ValidationRule::EmptySection, "empty-section"),
             (
-                ValidationRule::EmptySection,
-                "empty-section",
-                Severity::Error,
-            ),
-            (
-                ValidationRule::InsecureUrl,
-                "insecure-url",
-                Severity::Warning,
+                ValidationRule::ContestWithoutCampaigns,
+                "contest-without-campaigns",
             ),
             (
-                ValidationRule::EmptyString,
-                "empty-string",
-                Severity::Warning,
+                ValidationRule::InvalidMultipleCount,
+                "invalid-multiple-count",
+            ),
+            (ValidationRule::InvalidRankedMax, "invalid-ranked-max"),
+            (ValidationRule::InvalidSeatCount, "invalid-seat-count"),
+            (ValidationRule::InvalidMinimum, "invalid-minimum"),
+            (ValidationRule::RankedAllWithLimit, "ranked-all-with-limit"),
+            (
+                ValidationRule::RetentionCampaignCount,
+                "retention-campaign-count",
             ),
             (
-                ValidationRule::UnusedDeclaration,
-                "unused-declaration",
-                Severity::Warning,
-            ),
-            (
-                ValidationRule::DuplicatePartyName,
-                "duplicate-party-name",
-                Severity::Warning,
-            ),
-            (
-                ValidationRule::DuplicateBallotTitle,
-                "duplicate-ballot-title",
-                Severity::Warning,
+                ValidationRule::RetentionPartyCampaign,
+                "retention-party-campaign",
             ),
         ] {
             assert_eq!(rule.spec_id(), id);
-            assert_eq!(rule.severity(), severity);
+            assert_eq!(rule.severity(), Severity::Error);
+        }
+    }
+
+    #[test]
+    fn each_warning_has_its_identifier() {
+        for (rule, id) in [
+            (ValidationRule::InsecureUrl, "insecure-url"),
+            (ValidationRule::EmptyString, "empty-string"),
+            (ValidationRule::UnusedDeclaration, "unused-declaration"),
+            (ValidationRule::DuplicatePartyName, "duplicate-party-name"),
+            (
+                ValidationRule::DuplicateBallotTitle,
+                "duplicate-ballot-title",
+            ),
+        ] {
+            assert_eq!(rule.spec_id(), id);
+            assert_eq!(rule.severity(), Severity::Warning);
         }
     }
 }

@@ -5,6 +5,7 @@ use crate::{Diagnostic, DiagnosticCode, ValidationRule};
 
 mod ballots;
 mod campaigns;
+mod contests;
 mod document;
 mod index;
 mod literals;
@@ -24,6 +25,8 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     campaigns::misplaced_candidate_fields(document, &mut diagnostics);
     ballots::empty_ballots(document, &mut diagnostics);
     ballots::empty_sections(document, &mut diagnostics);
+    contests::campaign_counts(document, &mut diagnostics);
+    contests::contest_kinds(document, &mut diagnostics);
     references::unused_declarations(&index, &mut diagnostics);
     references::duplicate_party_names(&index, &mut diagnostics);
     ballots::duplicate_ballot_titles(document, &mut diagnostics);
