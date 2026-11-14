@@ -15,6 +15,14 @@ pub enum ValidationRule {
     MissingGuideField,
     /// The document has no root ballot.
     EmptyDocument,
+    /// A date does not exist on the calendar, such as `2026-02-30`.
+    InvalidDate,
+    /// A URL uses `http` rather than `https`, so a reader following it is not protected from
+    /// tampering. A warning.
+    InsecureUrl,
+    /// A string has no characters, or only spaces and tabs, so it shows the reader a blank. A
+    /// warning.
+    EmptyString,
 }
 
 impl ValidationRule {
@@ -24,15 +32,20 @@ impl ValidationRule {
             Self::UnsupportedVersion => "unsupported-version",
             Self::MissingGuideField => "missing-guide-field",
             Self::EmptyDocument => "empty-document",
+            Self::InvalidDate => "invalid-date",
+            Self::InsecureUrl => "insecure-url",
+            Self::EmptyString => "empty-string",
         }
     }
 
     /// Returns how serious breaking this rule is.
     pub fn severity(self) -> Severity {
         match self {
-            Self::UnsupportedVersion | Self::MissingGuideField | Self::EmptyDocument => {
-                Severity::Error
-            }
+            Self::UnsupportedVersion
+            | Self::MissingGuideField
+            | Self::EmptyDocument
+            | Self::InvalidDate => Severity::Error,
+            Self::InsecureUrl | Self::EmptyString => Severity::Warning,
         }
     }
 }
@@ -59,6 +72,17 @@ mod tests {
                 ValidationRule::EmptyDocument,
                 "empty-document",
                 Severity::Error,
+            ),
+            (ValidationRule::InvalidDate, "invalid-date", Severity::Error),
+            (
+                ValidationRule::InsecureUrl,
+                "insecure-url",
+                Severity::Warning,
+            ),
+            (
+                ValidationRule::EmptyString,
+                "empty-string",
+                Severity::Warning,
             ),
         ] {
             assert_eq!(rule.spec_id(), id);

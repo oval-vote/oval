@@ -1620,11 +1620,14 @@ recoveries, named here and referred to by each error below:
   with the next entry at the same level.
 - **Assume the missing token.** Nothing is discarded. Parsing continues as if the token were
   present; the construct is kept with nothing in that position, and validation treats it as absent.
-- **Set the entry aside.** The entry is parsed in full, so that errors inside it are still reported,
-  but it contributes nothing to the construct that contains it.
+- **Set the entry aside.** The entry is parsed in full, so that syntax errors inside it are still
+  reported, but it contributes nothing to the construct that contains it.
 
 Discarded and set-aside text remains in the tree inside an _error node_, so the tree still covers
-every byte of the source and a formatter can refuse the document rather than guess at it.
+every byte of the source and a formatter can refuse the document rather than guess at it. Validation
+does not check it: the rules of Sections 3.3 and 3.4 apply only to the text the document keeps, so
+discarded or set-aside text breaks no rule and counts toward none, as a declaration, a reference, or
+anything else.
 
 The errors below are exhaustive, by position. A token the grammar cannot accept at the start of an
 entry is an unexpected entry, or an unexpected block if it is an `Indent`; one in the middle of a
@@ -2018,10 +2021,11 @@ recommend abstain
 
 ### 3.3. Validation Errors
 
-A well-formed document is **valid** if it produces none of the errors below. Validation checks every
-rule and reports every error it finds, in source order; it never stops at the first, with one
-exception, `unsupported-version`. Each entry names the condition, the identifier, and the range the
-error spans.
+A well-formed document is **valid** if it produces none of the errors below. The rules below and the
+warnings of Section 3.4 apply only to the text a document keeps, not to text a recovery discards or
+sets aside. Validation checks every rule and reports every error it finds, in source order; it never
+stops at the first, with one exception, `unsupported-version`. Each entry names the condition, the
+identifier, and the range the error spans.
 
 #### Unsupported Version
 

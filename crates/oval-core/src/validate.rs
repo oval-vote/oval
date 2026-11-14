@@ -1,9 +1,10 @@
 use oval_syntax::ast::Document;
-use oval_syntax::{SyntaxElement, SyntaxNode, TextRange, TokenKind};
+use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange, TokenKind};
 
 use crate::{Diagnostic, DiagnosticCode, ValidationRule};
 
 mod document;
+mod literals;
 mod version;
 
 pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnostic> {
@@ -11,7 +12,18 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     let mut diagnostics = Vec::new();
     document::guide_fields(document, &marker, &mut diagnostics);
     document::root_ballots(document, &mut diagnostics);
+    literals::literals(document, &mut diagnostics);
     Ok(diagnostics)
+}
+
+fn kept_tokens(node: &SyntaxNode) -> impl Iterator<Item = SyntaxToken> + use<> {
+    node.descendants_with_tokens()
+        .filter_map(SyntaxElement::into_token)
+        .filter(|token| {
+            !token
+                .parent_ancestors()
+                .any(|ancestor| ancestor.kind() == SyntaxKind::ErrorNode)
+        })
 }
 
 fn content_range(node: &SyntaxNode) -> Option<TextRange> {
@@ -48,10 +60,19 @@ fn reported(text: &str) -> Vec<(&'static str, u32, u32)> {
 }
 
 #[cfg(test)]
+fn reported_as(text: &str, id: &str) -> Vec<(u32, u32)> {
+    reported(text)
+        .into_iter()
+        .filter(|(reported_id, _, _)| *reported_id == id)
+        .map(|(_, start, end)| (start, end))
+        .collect()
+}
+
+#[cfg(test)]
 mod tests {
     use oval_syntax::TextRange;
 
-    use super::{VALID, content_range, reported};
+    use super::{VALID, content_range, kept_tokens, reported};
 
     fn range(text: &str) -> Option<TextRange> {
         content_range(&oval_syntax::parse(text).unwrap().syntax())
@@ -68,6 +89,15 @@ mod tests {
             range("\n  ~ oval 1 ~  # c\n"),
             Some(TextRange::new(5.into(), 11.into()))
         );
+    }
+
+    #[test]
+    fn tokens_in_discarded_or_set_aside_text_are_not_kept() {
+        let text = "guide \"G\" 5\nguide \"H\"\n";
+        let kept: Vec<String> = kept_tokens(&oval_syntax::parse(text).unwrap().syntax())
+            .map(|token| token.text().to_owned())
+            .collect();
+        assert_eq!(kept, ["guide", " ", "\"G\"", " ", "\n"]);
     }
 
     #[test]
