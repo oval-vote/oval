@@ -95,6 +95,10 @@ pub enum ValidationRule {
     WriteInNotAccepted,
     /// `extensible` is written before a `retention` contest, which has nothing to write in.
     ExtensibleRetention,
+    /// A Markdown body uses a construct outside the profile, such as code, raw HTML, an image, or a
+    /// thematic break, or has a link whose destination is not an absolute `http` or `https` URL.
+    /// Each construct is its own diagnostic.
+    MarkdownProfile,
     /// A URL uses `http` rather than `https`, so a reader following it is not protected from
     /// tampering. A warning.
     InsecureUrl,
@@ -164,6 +168,7 @@ impl ValidationRule {
             Self::AbstainOnRequired => "abstain-on-required",
             Self::WriteInNotAccepted => "write-in-not-accepted",
             Self::ExtensibleRetention => "extensible-retention",
+            Self::MarkdownProfile => "markdown-profile",
             Self::InsecureUrl => "insecure-url",
             Self::EmptyString => "empty-string",
             Self::UnusedDeclaration => "unused-declaration",
@@ -212,7 +217,8 @@ impl ValidationRule {
             | Self::SupportOverMax
             | Self::AbstainOnRequired
             | Self::WriteInNotAccepted
-            | Self::ExtensibleRetention => Severity::Error,
+            | Self::ExtensibleRetention
+            | Self::MarkdownProfile => Severity::Error,
             Self::InsecureUrl
             | Self::EmptyString
             | Self::UnusedDeclaration
@@ -304,6 +310,7 @@ mod tests {
             (ValidationRule::AbstainOnRequired, "abstain-on-required"),
             (ValidationRule::WriteInNotAccepted, "write-in-not-accepted"),
             (ValidationRule::ExtensibleRetention, "extensible-retention"),
+            (ValidationRule::MarkdownProfile, "markdown-profile"),
         ] {
             assert_eq!(rule.spec_id(), id);
             assert_eq!(rule.severity(), Severity::Error);

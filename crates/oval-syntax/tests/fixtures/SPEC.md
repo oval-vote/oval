@@ -381,8 +381,9 @@ And these inline constructs:
 
 - Emphasis and strong emphasis.
 - Links: inline links, reference links with their link reference definitions in the same body, and
-  autolinks. Every link destination is an absolute `http` or `https` URL, and `http` draws a
-  warning.
+  autolinks. Every link destination is an absolute `http` or `https` URL: once backslash escapes and
+  character references are resolved, it begins with `http://` or `https://`, in lowercase, followed
+  by at least one character. An email autolink's destination is a `mailto:` URL, so it is not one.
 - Backslash escapes, and entity and numeric character references.
 
 A body may not contain:
@@ -1108,10 +1109,11 @@ advises against; it is unordered and may appear at most once.
 A **choice** is a reference or a write-in. Campaigns have no identifiers. Every reference in
 `support` or `oppose` names a campaign _by one of its members_: a candidate identifier for a
 candidate campaign, or a party identifier for a party campaign. It resolves to the one campaign,
-among the enclosing contest's campaigns, whose members include that candidate or party. A
-candidate's `party` field is not membership, so naming a candidate never resolves to a party
-campaign. A candidate or party may not be a member of more than one campaign within the same
-contest. Any member may be named; a formatter rewrites the reference to name the campaign's head.
+among the enclosing contest's campaigns, whose members include that candidate or party; if more than
+one does, which is the error `member-in-two-campaigns`, it resolves to the first. A candidate's
+`party` field is not membership, so naming a candidate never resolves to a party campaign. A
+candidate or party may not be a member of more than one campaign within the same contest. Any member
+may be named; a formatter rewrites the reference to name the campaign's head.
 
 A **write-in** is a choice the voter writes on the ballot by hand. It is not a campaign, since it is
 not printed, and is valid only in an extensible contest. `write-in` followed by a string names the
@@ -2284,8 +2286,9 @@ campaign
 
 #### Duplicate Member
 
-Occurs when a candidate or party appears twice among one campaign's members. The error is reported
-as `duplicate-member` and spans the later member.
+Occurs when two members of one campaign have the same identifier. The error is reported as
+`duplicate-member` and spans each member whose identifier is that of an earlier member of the
+campaign.
 
 ```oval example
 campaign
@@ -2301,8 +2304,9 @@ campaign
 
 #### Member in Two Campaigns
 
-Occurs when a candidate or party is a member of more than one campaign in the same contest. The
-error is reported as `member-in-two-campaigns` and spans the later member.
+Occurs when members of two campaigns in the same contest have the same identifier. The error is
+reported as `member-in-two-campaigns` and spans each member whose identifier is that of a member of
+an earlier campaign in the contest.
 
 ```oval example
 contest @mayor "Mayor" single
@@ -2320,11 +2324,12 @@ contest @mayor "Mayor" single
 
 #### Party in Two Campaigns
 
-Occurs when a member of a candidate campaign has a `party`, and that party is a member of another
-campaign in the same contest. The ballot would then offer both the candidate and their party as
-separate choices for one question, which almost always means the contest was transcribed wrong. The
-error is reported as `party-in-two-campaigns` and spans whichever of the two members comes later in
-the source.
+Occurs when a member of a candidate campaign resolves to a candidate whose declaration has a `party`
+field, and a member of another campaign in the same contest has the identifier that field names. The
+ballot would then offer both the candidate and their party as separate choices for one question,
+which almost always means the contest was transcribed wrong. The error is reported as
+`party-in-two-campaigns` and spans whichever of the two members comes later in the source. A member
+that is the later of several such pairs is reported once.
 
 ```oval example
 contest @assembly "National Assembly" single
@@ -2483,8 +2488,8 @@ measure @prop-a "Proposition A"
 
 #### Campaign Not in Contest
 
-Occurs when a `support` or `oppose` reference names a candidate or party that is a member of no
-campaign in the enclosing contest. A recommendation names a campaign by one of its members, and a
+Occurs when a `support` or `oppose` reference resolves to a candidate or party that is a member of
+no campaign in the enclosing contest. A recommendation names a campaign by one of its members, and a
 candidate's `party` field is not membership. The error is reported as `campaign-not-in-contest` and
 spans the reference.
 
@@ -2523,10 +2528,11 @@ recommend
 
 #### Repeated Stance
 
-Occurs when the same choice appears more than once across a recommendation's `support` lines and its
-`oppose` line. Two choices are the same when they are references that resolve to the same campaign,
-even if they name different members; when they are write-ins with identical names; or when both are
-bare write-ins. The error is reported as `repeated-stance` and spans each choice after the first.
+Occurs when the same choice appears more than once across a recommendation's `support` and `oppose`
+lines. Two choices are the same when they are references with the same identifier, or that resolve
+to the same campaign even if they name different members; when they are write-ins with identical
+names; or when both are bare write-ins. The error is reported as `repeated-stance` and spans each
+choice after the first.
 
 ```oval example
 recommend
@@ -2607,7 +2613,8 @@ contest @board "School Board" ranked max 2
 Occurs when a `retention` contest's recommendation is anything other than one `support` line naming
 only its campaign, one `oppose` line naming only its campaign, `recommend no-position`, or
 `recommend abstain`. A retention question has a single answer, yes or no. The error is reported as
-`retention-stance` and spans the line that breaks the shape.
+`retention-stance` and spans each `support` or `oppose` line after the first, and the first when it
+names anything other than the contest's first campaign.
 
 ```oval example
 contest @judge-ueda "Retain Judge Ueda?" retention
@@ -2697,8 +2704,9 @@ section "Judicial"
 Occurs when a `MarkdownBlock` value, parsed as described in Section 2.2 (Markdown Profile), contains
 a construct outside the profile, or a link whose destination is not an absolute `http` or `https`
 URL. The error is reported as `markdown-profile`, once per construct, and spans the construct within
-the body. Checking this rule requires a CommonMark parser with the tables extension; no other rule
-does.
+the body, without the spaces, tabs, and line terminators it begins or ends with. A link is reported
+where it is written, even when its destination comes from a link reference definition. Checking this
+rule requires a CommonMark parser with the tables extension; no other rule does.
 
 ```oval example
 note:
@@ -2883,10 +2891,10 @@ measure @prop-a "Proposition A"
 
 #### Insecure URL
 
-Occurs when a `Url`, or a link destination inside a `MarkdownBlock`, uses the `http` scheme rather
-than `https`. The URL is valid, but a reader following it is not protected from tampering, and most
-sites that still answer on `http` redirect to `https`. The warning is reported as `insecure-url` and
-spans the URL, or the link destination within the body.
+Occurs when a `Url` uses the `http` scheme rather than `https`. The URL is valid, but a reader
+following it is not protected from tampering, and most sites that still answer on `http` redirect to
+`https`. The warning is reported as `insecure-url` and spans the URL. A link destination inside a
+`MarkdownBlock` is part of the body's prose, not a value of the document, so it is not checked.
 
 ```oval example
 website https://santosformayor.example
