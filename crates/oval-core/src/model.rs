@@ -32,6 +32,10 @@ pub struct Compiled {
     pub parties: Vec<Party>,
     /// Every candidate, declared at the top level or inline, in document order.
     pub candidates: Vec<Candidate>,
+    /// The root ballots, in ballot order.
+    pub ballots: Vec<Ballot>,
+    /// Totals across the whole document.
+    pub counts: Counts,
 }
 
 impl Compiled {
@@ -109,4 +113,70 @@ pub struct Candidate {
     /// `campaign` line has no note of their own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+}
+
+/// A ballot, either a root ballot or a sub-ballot for a narrower electorate.
+///
+/// Its JSON has a `kind` of `"ballot"` wherever it appears, so root ballots and sub-ballots share
+/// one shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename = "ballot")]
+pub struct Ballot {
+    /// The ballot's identifier, without its `@`.
+    pub id: String,
+    /// The jurisdiction or grouping the ballot covers.
+    pub title: String,
+    /// Who receives the ballot, from `eligibility`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eligibility: Option<String>,
+    /// The author's note on the ballot in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The identifiers of the ballots that enclose this one, outermost first, which is empty for a
+    /// root ballot.
+    pub path: Vec<String>,
+    /// The ballot's sections, contests, measures, and sub-ballots, in ballot order.
+    pub items: Vec<BallotItem>,
+}
+
+/// One item of a ballot.
+///
+/// Each item's JSON has a `kind` naming what it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum BallotItem {
+    /// A titled group of questions.
+    Section(Section),
+    /// A sub-ballot.
+    Ballot(Ballot),
+}
+
+/// A titled group of contests and measures within a ballot.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename = "section")]
+pub struct Section {
+    /// The section's title as it is printed on the ballot.
+    pub title: String,
+    /// The author's note on the section in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// Totals across the whole document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Counts {
+    /// Every ballot, root ballots and sub-ballots alike.
+    pub ballots: usize,
+    /// Every section.
+    pub sections: usize,
+    /// Every contest.
+    pub contests: usize,
+    /// Every measure.
+    pub measures: usize,
+    /// Every campaign.
+    pub campaigns: usize,
+    /// Every candidate.
+    pub candidates: usize,
+    /// Every party.
+    pub parties: usize,
 }

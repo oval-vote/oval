@@ -1,14 +1,19 @@
-use oval_syntax::SyntaxNode;
 use oval_syntax::ast::{
     self, AstNode, AstToken, Campaign, Document, Identifier, MarkdownField, Member, PartyMember,
     PartyRef, StringField, UrlField,
 };
+use oval_syntax::{SyntaxKind, SyntaxNode};
 
-use crate::model::{Candidate, Compiled, Guide, Party};
+use crate::model::{Ballot, BallotItem, Candidate, Compiled, Counts, Guide, Party, Section};
 
 pub(crate) fn compile(document: &Document) -> Option<Compiled> {
     let candidates = candidates(document.syntax())?;
     let parties = parties(document.syntax(), &candidates)?;
+    let mut ballots = Vec::new();
+    for root in document.ballots() {
+        ballots.push(ballot(&root, &[])?);
+    }
+    let counts = counts(document.syntax(), &parties, &candidates);
     Some(Compiled {
         oval: document.version_marker()?.version()?.value()?,
         guide: Guide {
@@ -19,6 +24,8 @@ pub(crate) fn compile(document: &Document) -> Option<Compiled> {
         },
         parties,
         candidates,
+        ballots,
+        counts,
     })
 }
 
@@ -115,6 +122,50 @@ fn candidates(root: &SyntaxNode) -> Option<Vec<Candidate>> {
     Some(candidates)
 }
 
+fn ballot(ballot: &ast::Ballot, path: &[String]) -> Option<Ballot> {
+    let id = id(ballot.identifier())?;
+    let mut inner = path.to_vec();
+    inner.push(id.clone());
+    let mut items = Vec::new();
+    for item in ballot.items() {
+        match item {
+            ast::BallotItem::Section(section) => items.push(BallotItem::Section(Section {
+                title: section.title()?.value().into_owned(),
+                note: markdown(section.note()),
+            })),
+            ast::BallotItem::Ballot(sub_ballot) => {
+                items.push(BallotItem::Ballot(self::ballot(&sub_ballot, &inner)?));
+            }
+            ast::BallotItem::Contest(_) | ast::BallotItem::Measure(_) => {}
+        }
+    }
+    Some(Ballot {
+        id,
+        title: ballot.name()?.value().into_owned(),
+        eligibility: string(ballot.eligibility()),
+        note: markdown(ballot.note()),
+        path: path.to_vec(),
+        items,
+    })
+}
+
+fn counts(root: &SyntaxNode, parties: &[Party], candidates: &[Candidate]) -> Counts {
+    let count = |kind| {
+        root.descendants()
+            .filter(|node| node.kind() == kind)
+            .count()
+    };
+    Counts {
+        ballots: count(SyntaxKind::Ballot),
+        sections: count(SyntaxKind::Section),
+        contests: count(SyntaxKind::Contest),
+        measures: count(SyntaxKind::Measure),
+        campaigns: count(SyntaxKind::Campaign),
+        candidates: candidates.len(),
+        parties: parties.len(),
+    }
+}
+
 fn id(identifier: Option<Identifier>) -> Option<String> {
     Some(identifier?.name()?.text().to_owned())
 }
@@ -137,6 +188,8 @@ mod tests {
 
     use crate::check;
     use crate::validate::VALID;
+
+    const BALLOTS: &str = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nparty @dem \"Dem\"\nballot @state \"State\"\n  eligibility \"Everyone\"\n  note:\n    The state.\n  section \"Offices\"\n    note:\n      Vote.\n    contest @gov \"Governor\" single\n      campaign @a \"A\"\n      campaign party @dem\n      recommend no-position\n  ballot @city \"City\"\n    section \"Measures\"\n      measure @m \"M\"\n        recommend yes\n    ballot @ward \"Ward\"\n      measure @w \"W\"\n        recommend no\n  measure @s \"S\"\n    recommend yes\nballot @county \"County\"\n  contest @sheriff \"Sheriff\" single\n    campaign\n      @b \"B\"\n      @c \"C\"\n    recommend no-position\n";
 
     fn compiled(text: &str) -> serde_json::Value {
         let compiled = check(text)
@@ -209,6 +262,60 @@ mod tests {
                 { "id": "bsantos", "name": "Beatriz Santos", "designation": "Mayor", "party": "green" },
                 { "id": "jlee", "name": "Jordan Lee", "party": "dem", "note": "First term." },
             ])
+        );
+    }
+
+    #[test]
+    fn ballots_compile_as_a_tree_with_the_path_to_each() {
+        let compiled = compiled(BALLOTS);
+        assert_eq!(
+            compiled["ballots"],
+            json!([
+                {
+                    "kind": "ballot",
+                    "id": "state",
+                    "title": "State",
+                    "eligibility": "Everyone",
+                    "note": "The state.",
+                    "path": [],
+                    "items": [
+                        { "kind": "section", "title": "Offices", "note": "Vote." },
+                        {
+                            "kind": "ballot",
+                            "id": "city",
+                            "title": "City",
+                            "path": ["state"],
+                            "items": [
+                                { "kind": "section", "title": "Measures" },
+                                {
+                                    "kind": "ballot",
+                                    "id": "ward",
+                                    "title": "Ward",
+                                    "path": ["state", "city"],
+                                    "items": [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                { "kind": "ballot", "id": "county", "title": "County", "path": [], "items": [] },
+            ])
+        );
+    }
+
+    #[test]
+    fn counts_total_the_whole_document() {
+        assert_eq!(
+            compiled(BALLOTS)["counts"],
+            json!({
+                "ballots": 4,
+                "sections": 2,
+                "contests": 2,
+                "measures": 3,
+                "campaigns": 3,
+                "candidates": 3,
+                "parties": 1,
+            })
         );
     }
 }
