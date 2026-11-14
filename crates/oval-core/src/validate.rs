@@ -9,6 +9,7 @@ mod contests;
 mod document;
 mod index;
 mod literals;
+mod recommendations;
 mod references;
 mod version;
 
@@ -31,6 +32,8 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     campaigns::members_in_two_campaigns(document, &mut diagnostics);
     campaigns::parties_in_two_campaigns(document, &index, &mut diagnostics);
     contests::contest_kinds(document, &mut diagnostics);
+    recommendations::recommendation_counts(document, &mut diagnostics);
+    recommendations::stances(document, &index, &mut diagnostics);
     references::unused_declarations(&index, &mut diagnostics);
     references::duplicate_party_names(&index, &mut diagnostics);
     ballots::duplicate_ballot_titles(document, &mut diagnostics);

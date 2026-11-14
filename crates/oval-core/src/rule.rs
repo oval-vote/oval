@@ -66,6 +66,26 @@ pub enum ValidationRule {
     /// A campaign of a `retention` contest is a party campaign, though a retention question is about
     /// one candidate.
     RetentionPartyCampaign,
+    /// A contest or measure has no recommendation.
+    MissingRecommendation,
+    /// A contest or measure has more than one recommendation. Each one after the first is its own
+    /// diagnostic.
+    RepeatedRecommendation,
+    /// A `support` or `oppose` reference resolves to a candidate or party that is a member of no
+    /// campaign in its contest.
+    CampaignNotInContest,
+    /// A recommendation has more than one `oppose` line. Each one after the first is its own
+    /// diagnostic.
+    RepeatedOppose,
+    /// A choice appears more than once across a recommendation's `support` and `oppose` lines.
+    /// Each repeat is its own diagnostic.
+    RepeatedStance,
+    /// A `single` contest's recommendation has more than one `support` line, though a vote for
+    /// one has no second choice.
+    TiersInSingle,
+    /// A `retention` contest's recommendation is not a single `support` or `oppose` line naming
+    /// only the contest's campaign, `no-position`, or `abstain`.
+    RetentionStance,
     /// A URL uses `http` rather than `https`, so a reader following it is not protected from
     /// tampering. A warning.
     InsecureUrl,
@@ -113,6 +133,13 @@ impl ValidationRule {
             Self::RankedAllWithLimit => "ranked-all-with-limit",
             Self::RetentionCampaignCount => "retention-campaign-count",
             Self::RetentionPartyCampaign => "retention-party-campaign",
+            Self::MissingRecommendation => "missing-recommendation",
+            Self::RepeatedRecommendation => "repeated-recommendation",
+            Self::CampaignNotInContest => "campaign-not-in-contest",
+            Self::RepeatedOppose => "repeated-oppose",
+            Self::RepeatedStance => "repeated-stance",
+            Self::TiersInSingle => "tiers-in-single",
+            Self::RetentionStance => "retention-stance",
             Self::InsecureUrl => "insecure-url",
             Self::EmptyString => "empty-string",
             Self::UnusedDeclaration => "unused-declaration",
@@ -146,7 +173,14 @@ impl ValidationRule {
             | Self::InvalidMinimum
             | Self::RankedAllWithLimit
             | Self::RetentionCampaignCount
-            | Self::RetentionPartyCampaign => Severity::Error,
+            | Self::RetentionPartyCampaign
+            | Self::MissingRecommendation
+            | Self::RepeatedRecommendation
+            | Self::CampaignNotInContest
+            | Self::RepeatedOppose
+            | Self::RepeatedStance
+            | Self::TiersInSingle
+            | Self::RetentionStance => Severity::Error,
             Self::InsecureUrl
             | Self::EmptyString
             | Self::UnusedDeclaration
@@ -214,6 +248,22 @@ mod tests {
                 ValidationRule::RetentionPartyCampaign,
                 "retention-party-campaign",
             ),
+            (
+                ValidationRule::MissingRecommendation,
+                "missing-recommendation",
+            ),
+            (
+                ValidationRule::RepeatedRecommendation,
+                "repeated-recommendation",
+            ),
+            (
+                ValidationRule::CampaignNotInContest,
+                "campaign-not-in-contest",
+            ),
+            (ValidationRule::RepeatedOppose, "repeated-oppose"),
+            (ValidationRule::RepeatedStance, "repeated-stance"),
+            (ValidationRule::TiersInSingle, "tiers-in-single"),
+            (ValidationRule::RetentionStance, "retention-stance"),
         ] {
             assert_eq!(rule.spec_id(), id);
             assert_eq!(rule.severity(), Severity::Error);

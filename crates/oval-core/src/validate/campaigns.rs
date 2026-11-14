@@ -105,7 +105,7 @@ pub(super) fn parties_in_two_campaigns(
     }
 }
 
-fn members(campaign: &Campaign) -> Vec<(String, SyntaxNode)> {
+pub(super) fn members(campaign: &Campaign) -> Vec<(String, SyntaxNode)> {
     let members = campaign.members().map(|member| member.syntax().clone());
     let party_members = campaign
         .party_members()
