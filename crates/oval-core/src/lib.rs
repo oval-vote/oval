@@ -110,15 +110,19 @@ mod tests {
     #[test]
     fn a_lexical_error_comes_before_a_syntax_error_at_the_same_place() {
         assert_eq!(
-            codes("guide \"G\"\n  ~ x\n"),
+            codes("ballot @b \"B\"\n  section \"S\"\n contest @c \"C\" single\n"),
             [
                 (
-                    DiagnosticCode::Lexical(LexicalErrorKind::UnexpectedCharacter),
-                    range(12, 13)
+                    DiagnosticCode::Lexical(LexicalErrorKind::InconsistentDedent),
+                    range(28, 29)
                 ),
                 (
-                    DiagnosticCode::Syntax(SyntaxErrorKind::UnexpectedBlock),
-                    range(12, 15)
+                    DiagnosticCode::Syntax(SyntaxErrorKind::MissingBlock),
+                    range(28, 28)
+                ),
+                (
+                    DiagnosticCode::Syntax(SyntaxErrorKind::UnexpectedEntry),
+                    range(29, 50)
                 ),
             ]
         );

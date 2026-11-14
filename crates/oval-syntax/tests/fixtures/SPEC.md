@@ -1651,10 +1651,11 @@ since the lexical errors are the only diagnostics for its text.
 Error ranges are measured over the tokens the parser does not skip. The _end of a line_ is the end
 of the last token on it, other than a layout token, that the parser does not skip, so whitespace, a
 comment, or an `Error` token after that point is not part of the line. An error that spans part of a
-line, a line, an entry, or a block begins at the first token in it that the parser does not skip and
-ends at the end of its last line, and a recovery that discards or sets aside that text leaves what
-comes before and after it in place. An error that is zero-length at the end of a line is at that
-position.
+line, a line, an entry, or a block begins at the first token in it, other than a layout token, that
+the parser does not skip, so an `Indent`, whitespace, or an `Error` token before that point is not
+part of the error. It ends at the end of its last line, and a recovery that discards or sets aside
+that text leaves what comes before and after it in place. An error that is zero-length at the end of
+a line is at that position.
 
 #### Unexpected Token
 

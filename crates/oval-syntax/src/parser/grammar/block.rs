@@ -60,8 +60,8 @@ impl Parser<'_> {
     }
 
     fn skip_entry(&mut self, kind: SyntaxErrorKind, expected: Vec<Expected>) {
+        let start = self.content_offset().unwrap_or(self.offset);
         self.start_node(SyntaxKind::ErrorNode);
-        let start = self.offset;
         while !self.at_line_end() {
             self.bump();
         }
@@ -325,6 +325,20 @@ mod tests {
             len,
             expected: Vec::new(),
         }
+    }
+
+    #[test]
+    fn an_unexpected_block_begins_after_an_error_token() {
+        let result = parse("guide \"G\"\n  ~ x\n").unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(result.syntax_errors, [unexpected_block(14, 1)]);
+    }
+
+    #[test]
+    fn an_unexpected_block_begins_after_a_line_of_only_error_tokens() {
+        let result = parse("guide \"G\"\n  ~\n  x\n").unwrap();
+        assert_eq!(result.lexical_errors.len(), 1);
+        assert_eq!(result.syntax_errors, [unexpected_block(16, 1)]);
     }
 
     #[test]

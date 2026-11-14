@@ -119,6 +119,13 @@ impl<'t> Parser<'t> {
         None
     }
 
+    fn content_offset(&self) -> Option<usize> {
+        (0..)
+            .map_while(|n| self.nth(n))
+            .find(|(token, _)| !token.is_layout())
+            .map(|(_, offset)| offset)
+    }
+
     fn at_line_end(&self) -> bool {
         matches!(
             self.current(),
