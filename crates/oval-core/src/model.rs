@@ -28,6 +28,10 @@ pub struct Compiled {
     pub oval: u64,
     /// The document-level fields, which name the guide and the election it covers.
     pub guide: Guide,
+    /// Every party, declared at the top level or inline, in document order.
+    pub parties: Vec<Party>,
+    /// Every candidate, declared at the top level or inline, in document order.
+    pub candidates: Vec<Candidate>,
 }
 
 impl Compiled {
@@ -62,6 +66,47 @@ pub struct Guide {
     /// Election day, from `date`, written as `YYYY-MM-DD`.
     pub date: String,
     /// The guide's introductory note in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// A political party.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Party {
+    /// The party's identifier, without its `@`.
+    pub id: String,
+    /// The party's name as it is printed on the ballot.
+    pub name: String,
+    /// The short form printed beside the party's candidates, from `abbreviation`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub abbreviation: Option<String>,
+    /// The party's website, from `website`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website: Option<String>,
+    /// The author's note on the party in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The identifiers of every candidate whose party this is, in document order.
+    pub candidates: Vec<String>,
+}
+
+/// A person who appears in one or more campaigns.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Candidate {
+    /// The candidate's identifier, without its `@`.
+    pub id: String,
+    /// The candidate's name as it is printed on the ballot.
+    pub name: String,
+    /// The occupation or title printed beside the name, from `designation`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub designation: Option<String>,
+    /// The identifier of the candidate's party, from `party`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub party: Option<String>,
+    /// The author's note on the candidate in Markdown, from `note`.
+    ///
+    /// The note under a one-line campaign belongs to the campaign, so a candidate declared on a
+    /// `campaign` line has no note of their own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
