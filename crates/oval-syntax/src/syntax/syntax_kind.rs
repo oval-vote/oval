@@ -219,6 +219,43 @@ const _: () = {
     }
 };
 
+impl SyntaxKind {
+    /// Returns the [`TokenKind`] of the same name, or `None` if this is a kind of node.
+    ///
+    /// This undoes the conversion from a [`TokenKind`], so a token in a tree can be sorted into the
+    /// categories the lexer gives it, such as [`TokenKind::is_lexical`].
+    ///
+    /// ```
+    /// use oval_syntax::{SyntaxKind, TokenKind};
+    ///
+    /// assert_eq!(SyntaxKind::Colon.token_kind(), Some(TokenKind::Colon));
+    /// assert_eq!(SyntaxKind::Document.token_kind(), None);
+    /// ```
+    pub fn token_kind(self) -> Option<TokenKind> {
+        let kind = match self {
+            Self::Word => TokenKind::Word,
+            Self::String => TokenKind::String,
+            Self::Integer => TokenKind::Integer,
+            Self::Date => TokenKind::Date,
+            Self::AtSign => TokenKind::AtSign,
+            Self::Url => TokenKind::Url,
+            Self::Colon => TokenKind::Colon,
+            Self::Comma => TokenKind::Comma,
+            Self::MarkdownBlock => TokenKind::MarkdownBlock,
+            Self::Whitespace => TokenKind::Whitespace,
+            Self::Comment => TokenKind::Comment,
+            Self::ByteOrderMark => TokenKind::ByteOrderMark,
+            Self::BlankLine => TokenKind::BlankLine,
+            Self::Newline => TokenKind::Newline,
+            Self::Indent => TokenKind::Indent,
+            Self::Dedent => TokenKind::Dedent,
+            Self::Error => TokenKind::Error,
+            _ => return None,
+        };
+        Some(kind)
+    }
+}
+
 impl From<TokenKind> for SyntaxKind {
     fn from(value: TokenKind) -> Self {
         match value {
@@ -259,6 +296,21 @@ mod tests {
             (TokenKind::Error, SyntaxKind::Error),
         ] {
             assert_eq!(SyntaxKind::from(token_kind), syntax_kind, "{token_kind:?}");
+        }
+    }
+
+    #[test]
+    fn every_kind_before_the_node_kinds_is_a_token_kind_of_the_same_name() {
+        for kind in SyntaxKind::ALL {
+            let token_kind = kind.token_kind();
+            assert_eq!(
+                token_kind.is_some(),
+                kind < SyntaxKind::Document,
+                "{kind:?}"
+            );
+            if let Some(token_kind) = token_kind {
+                assert_eq!(SyntaxKind::from(token_kind), kind);
+            }
         }
     }
 

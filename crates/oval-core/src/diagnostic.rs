@@ -1,5 +1,7 @@
 use oval_syntax::{LexicalError, LexicalErrorKind, SyntaxError, SyntaxErrorKind, TextRange};
 
+use crate::ValidationRule;
+
 /// How serious a [`Diagnostic`] is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Severity {
@@ -16,6 +18,8 @@ pub enum DiagnosticCode {
     Lexical(LexicalErrorKind),
     /// A problem found while matching the tokens against the grammar.
     Syntax(SyntaxErrorKind),
+    /// A rule the syntax tree breaks.
+    Validation(ValidationRule),
 }
 
 impl DiagnosticCode {
@@ -24,13 +28,16 @@ impl DiagnosticCode {
         match self {
             Self::Lexical(kind) => kind.spec_id(),
             Self::Syntax(kind) => kind.spec_id(),
+            Self::Validation(rule) => rule.spec_id(),
         }
     }
 
-    /// Returns how serious this problem is. Every lexical and syntax problem is an error.
+    /// Returns how serious this problem is. Every lexical and syntax problem is an error, and a
+    /// broken rule is as serious as the rule says.
     pub fn severity(self) -> Severity {
         match self {
             Self::Lexical(_) | Self::Syntax(_) => Severity::Error,
+            Self::Validation(rule) => rule.severity(),
         }
     }
 }
@@ -48,24 +55,30 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    fn new(code: DiagnosticCode, offset: u32, len: u32) -> Self {
+    pub(crate) fn new(code: DiagnosticCode, range: TextRange) -> Self {
         Self {
             code,
             severity: code.severity(),
-            range: TextRange::at(offset.into(), len.into()),
+            range,
         }
     }
 }
 
 impl From<&LexicalError> for Diagnostic {
     fn from(error: &LexicalError) -> Self {
-        Self::new(DiagnosticCode::Lexical(error.kind), error.offset, error.len)
+        Self::new(
+            DiagnosticCode::Lexical(error.kind),
+            TextRange::at(error.offset.into(), error.len.into()),
+        )
     }
 }
 
 impl From<&SyntaxError> for Diagnostic {
     fn from(error: &SyntaxError) -> Self {
-        Self::new(DiagnosticCode::Syntax(error.kind), error.offset, error.len)
+        Self::new(
+            DiagnosticCode::Syntax(error.kind),
+            TextRange::at(error.offset.into(), error.len.into()),
+        )
     }
 }
 
@@ -74,13 +87,22 @@ mod tests {
     use oval_syntax::{LexicalError, LexicalErrorKind, SyntaxError, SyntaxErrorKind, TextRange};
 
     use super::{Diagnostic, DiagnosticCode, Severity};
+    use crate::ValidationRule;
 
     #[test]
     fn a_code_has_the_identifier_of_its_kind() {
         let lexical = DiagnosticCode::Lexical(LexicalErrorKind::InvalidEscape);
         let syntax = DiagnosticCode::Syntax(SyntaxErrorKind::MissingValue);
+        let validation = DiagnosticCode::Validation(ValidationRule::EmptyDocument);
         assert_eq!(lexical.spec_id(), "invalid-escape");
         assert_eq!(syntax.spec_id(), "missing-value");
+        assert_eq!(validation.spec_id(), "empty-document");
+    }
+
+    #[test]
+    fn a_broken_rule_is_as_serious_as_the_rule_says() {
+        let code = DiagnosticCode::Validation(ValidationRule::EmptyDocument);
+        assert_eq!(code.severity(), ValidationRule::EmptyDocument.severity());
     }
 
     #[test]

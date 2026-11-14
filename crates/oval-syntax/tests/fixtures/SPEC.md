@@ -1234,7 +1234,7 @@ Validating a document is three stages run in order, each on the output of the on
 Every error at every stage has an identifier and a range in the source. Identifiers are stable
 across editions; tools should report errors by identifier. A validator reports every lexical error,
 every syntax error, and every rule the document breaks, in source order, so that an author can see
-them all in one pass.
+them all in one pass. The one exception is `unsupported-version`, which a validator reports alone.
 
 ### 3.1. Lexical Errors
 
@@ -2025,11 +2025,13 @@ error spans.
 
 #### Unsupported Version
 
-Occurs when the document has no version marker, or its marker names a major version the
-implementation does not support. The error is reported as `unsupported-version` and spans the
-marker, or is zero-length at the start of the first line with content when there is none. A
-validator that reports it reports nothing else, since the rest of the document may not have the
-meaning this specification gives it.
+Occurs when the document has no version marker, or its marker names no major version or one the
+implementation does not support. A marker with no `Integer` after `oval` names no major version. The
+error is reported as `unsupported-version` and spans the marker. When there is no marker, it is
+zero-length at the start of the first token the parser does not skip, other than a layout token, or
+at the end of the input when there is none. A validator that reports it reports nothing else, not
+even a lexical or syntax error, since the rest of the document may not have the meaning this
+specification gives it.
 
 ```oval example
 oval 1
@@ -2037,6 +2039,10 @@ oval 1
 
 ```oval counter-example
 oval 2
+```
+
+```oval counter-example
+oval
 ```
 
 #### Missing Guide Field
