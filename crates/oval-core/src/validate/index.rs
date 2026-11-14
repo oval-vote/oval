@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use oval_syntax::ast::{AstNode, Document, Identifier, Member, PartyMember, PartyRef};
-use oval_syntax::{SyntaxKind, SyntaxNode};
+use oval_syntax::ast::{
+    AstNode, AstToken, Document, Identifier, Member, PartyMember, PartyRef, StringLiteral,
+};
+use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode};
 
 use super::kept_nodes;
 
@@ -39,6 +41,17 @@ impl Position {
 pub(super) struct Declaration {
     pub(super) entity: Entity,
     pub(super) identifier: Identifier,
+}
+
+impl Declaration {
+    pub(super) fn name(&self) -> Option<StringLiteral> {
+        self.identifier
+            .syntax()
+            .parent()?
+            .children_with_tokens()
+            .filter_map(SyntaxElement::into_token)
+            .find_map(StringLiteral::cast)
+    }
 }
 
 pub(super) struct Reference {

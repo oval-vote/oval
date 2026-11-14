@@ -1,8 +1,8 @@
 use oval_syntax::SyntaxKind;
-use oval_syntax::ast::AstNode;
+use oval_syntax::ast::{AstNode, AstToken};
 
-use super::index::Index;
-use super::{diagnostic, header_range};
+use super::index::{Entity, Index};
+use super::{content_range, diagnostic, header_range};
 use crate::{Diagnostic, ValidationRule};
 
 pub(super) fn duplicate_declarations(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
@@ -30,6 +30,50 @@ pub(super) fn references(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
             Some(_) => continue,
         };
         diagnostics.push(diagnostic(rule, reference.identifier.syntax().text_range()));
+    }
+}
+
+pub(super) fn blocks_on_references(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
+    for reference in &index.references {
+        let Some(block) = reference.identifier.syntax().parent().and_then(|node| {
+            node.children()
+                .find(|child| child.kind() == SyntaxKind::Block)
+        }) else {
+            continue;
+        };
+        if block
+            .children()
+            .all(|entry| entry.kind() == SyntaxKind::ErrorNode)
+        {
+            continue;
+        }
+        if let Some(range) = content_range(&block) {
+            diagnostics.push(diagnostic(ValidationRule::BlockOnReference, range));
+        }
+    }
+}
+
+pub(super) fn duplicate_party_names(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
+    let mut earlier: Vec<(String, String)> = Vec::new();
+    let parties = index
+        .declarations
+        .iter()
+        .filter(|declaration| declaration.entity == Entity::Party);
+    for party in parties {
+        let (Some(name), Some(identifier)) = (party.name(), party.identifier.name()) else {
+            continue;
+        };
+        let (name_text, identifier_text) =
+            (name.value().into_owned(), identifier.text().to_owned());
+        if earlier.iter().any(|(other_name, other_identifier)| {
+            *other_name == name_text && *other_identifier != identifier_text
+        }) {
+            diagnostics.push(diagnostic(
+                ValidationRule::DuplicatePartyName,
+                name.syntax().text_range(),
+            ));
+        }
+        earlier.push((name_text, identifier_text));
     }
 }
 
@@ -113,6 +157,36 @@ mod tests {
             "ballot @b \"B\"\n  contest @k \"K\" single\n    campaign @kobi\n    campaign @kobi \"Kwame Obi\"\n      party @green \"Green\"\n    campaign party @green\n    recommend no-position\n",
         );
         assert_eq!(reported(&text), []);
+    }
+
+    #[test]
+    fn a_block_of_fields_below_a_reference_is_invalid() {
+        let text = guide(
+            "party @dem \"Dem\"\ncandidate @n \"N\"\n  party @dem\n    abbreviation \"D\"\nballot @b \"B\"\n  contest @k \"K\" single\n    campaign\n      @n as \"P\"\n        designation \"S\"\n      @x \"X\"\n        designation \"S\"\n    campaign party\n      @dem\n        abbreviation \"D\"\n    recommend no-position\n",
+        );
+        assert_eq!(
+            reported_as(&text, "block-on-reference"),
+            [(97, 113), (189, 204), (280, 296)]
+        );
+    }
+
+    #[test]
+    fn a_block_of_only_discarded_text_below_a_reference_is_not_reported() {
+        let text = guide(
+            "party @dem \"Dem\"\ncandidate @n \"N\"\n  party @dem\n    bogus 1\nballot @b \"B\"\n  contest @k \"K\" single\n    campaign @n\n    recommend no-position\n",
+        );
+        assert_eq!(reported(&text), [("unexpected-entry", 97, 104)]);
+    }
+
+    #[test]
+    fn parties_declared_anywhere_with_the_same_name_and_different_identifiers_are_duplicates() {
+        let text = guide(
+            "party @dem \"Democratic\"\nparty @dems \"Democratic\"\nparty @dem \"Democratic\"\nparty @a \"X\"\nparty @a \"X\"\ncandidate @c \"C\"\n  party @green \"Democratic\"\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n",
+        );
+        assert_eq!(
+            reported_as(&text, "duplicate-party-name"),
+            [(82, 94), (106, 118), (177, 189)]
+        );
     }
 
     #[test]

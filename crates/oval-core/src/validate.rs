@@ -3,6 +3,8 @@ use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange,
 
 use crate::{Diagnostic, DiagnosticCode, ValidationRule};
 
+mod ballots;
+mod campaigns;
 mod document;
 mod index;
 mod literals;
@@ -18,7 +20,13 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     let index = index::Index::new(document);
     references::duplicate_declarations(&index, &mut diagnostics);
     references::references(&index, &mut diagnostics);
+    references::blocks_on_references(&index, &mut diagnostics);
+    campaigns::misplaced_candidate_fields(document, &mut diagnostics);
+    ballots::empty_ballots(document, &mut diagnostics);
+    ballots::empty_sections(document, &mut diagnostics);
     references::unused_declarations(&index, &mut diagnostics);
+    references::duplicate_party_names(&index, &mut diagnostics);
+    ballots::duplicate_ballot_titles(document, &mut diagnostics);
     Ok(diagnostics)
 }
 

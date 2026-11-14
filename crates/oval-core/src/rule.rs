@@ -25,6 +25,16 @@ pub enum ValidationRule {
     /// A reference resolves to a declaration of a kind its position does not accept, such as a
     /// candidate's `party` field naming another candidate.
     MismatchedReference,
+    /// A reference, not an inline declaration, has a block of fields below it, though a reference
+    /// has nothing to declare.
+    BlockOnReference,
+    /// `designation` or `party` is written at a campaign's level where it describes no candidate,
+    /// in a block-form campaign, or in a one-line campaign whose member is a reference.
+    MisplacedCandidateField,
+    /// A ballot has fields but no items.
+    EmptyBallot,
+    /// A section has fields but no items.
+    EmptySection,
     /// A URL uses `http` rather than `https`, so a reader following it is not protected from
     /// tampering. A warning.
     InsecureUrl,
@@ -37,6 +47,12 @@ pub enum ValidationRule {
     /// A duplicate declaration is never used, since references resolve to the first declaration
     /// of an identifier. A party or candidate declared inline is used where it is declared.
     UnusedDeclaration,
+    /// Two parties, declared at the top level or inline, have the same name and different
+    /// identifiers, so a reader cannot tell them apart. A warning.
+    DuplicatePartyName,
+    /// Two root ballots, or two sub-ballots of the same ballot, have the same title, so a reader
+    /// cannot tell them apart. A warning.
+    DuplicateBallotTitle,
 }
 
 impl ValidationRule {
@@ -50,9 +66,15 @@ impl ValidationRule {
             Self::UndeclaredReference => "undeclared-reference",
             Self::DuplicateDeclaration => "duplicate-declaration",
             Self::MismatchedReference => "mismatched-reference",
+            Self::BlockOnReference => "block-on-reference",
+            Self::MisplacedCandidateField => "misplaced-candidate-field",
+            Self::EmptyBallot => "empty-ballot",
+            Self::EmptySection => "empty-section",
             Self::InsecureUrl => "insecure-url",
             Self::EmptyString => "empty-string",
             Self::UnusedDeclaration => "unused-declaration",
+            Self::DuplicatePartyName => "duplicate-party-name",
+            Self::DuplicateBallotTitle => "duplicate-ballot-title",
         }
     }
 
@@ -65,8 +87,16 @@ impl ValidationRule {
             | Self::InvalidDate
             | Self::UndeclaredReference
             | Self::DuplicateDeclaration
-            | Self::MismatchedReference => Severity::Error,
-            Self::InsecureUrl | Self::EmptyString | Self::UnusedDeclaration => Severity::Warning,
+            | Self::MismatchedReference
+            | Self::BlockOnReference
+            | Self::MisplacedCandidateField
+            | Self::EmptyBallot
+            | Self::EmptySection => Severity::Error,
+            Self::InsecureUrl
+            | Self::EmptyString
+            | Self::UnusedDeclaration
+            | Self::DuplicatePartyName
+            | Self::DuplicateBallotTitle => Severity::Warning,
         }
     }
 }
@@ -111,6 +141,22 @@ mod tests {
                 Severity::Error,
             ),
             (
+                ValidationRule::BlockOnReference,
+                "block-on-reference",
+                Severity::Error,
+            ),
+            (
+                ValidationRule::MisplacedCandidateField,
+                "misplaced-candidate-field",
+                Severity::Error,
+            ),
+            (ValidationRule::EmptyBallot, "empty-ballot", Severity::Error),
+            (
+                ValidationRule::EmptySection,
+                "empty-section",
+                Severity::Error,
+            ),
+            (
                 ValidationRule::InsecureUrl,
                 "insecure-url",
                 Severity::Warning,
@@ -123,6 +169,16 @@ mod tests {
             (
                 ValidationRule::UnusedDeclaration,
                 "unused-declaration",
+                Severity::Warning,
+            ),
+            (
+                ValidationRule::DuplicatePartyName,
+                "duplicate-party-name",
+                Severity::Warning,
+            ),
+            (
+                ValidationRule::DuplicateBallotTitle,
+                "duplicate-ballot-title",
                 Severity::Warning,
             ),
         ] {
