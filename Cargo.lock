@@ -74,6 +74,9 @@ version = "0.1.10"
 [[package]]
 name = "oval-core"
 version = "0.1.10"
+dependencies = [
+ "oval-syntax",
+]
 
 [[package]]
 name = "oval-format"

@@ -13,6 +13,7 @@ publish = false
 
 [workspace.dependencies]
 expect-test = "1.5"
+oval-syntax = { path = "crates/oval-syntax" }
 rowan = "0.17"
 wasm-bindgen = "0.2"
 
