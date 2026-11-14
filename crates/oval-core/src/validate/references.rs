@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn a_reference_resolves_to_an_inline_declaration_anywhere_in_the_document() {
         let text = guide(
-            "ballot @b \"B\"\n  contest @k \"K\" single\n    campaign @kobi\n    campaign @kobi \"Kwame Obi\"\n      party @green \"Green\"\n    campaign party @green\n    recommend no-position\n",
+            "ballot @b \"B\"\n  contest @j \"J\" single\n    campaign @kobi\n    recommend no-position\n  contest @k \"K\" single\n    campaign @kobi \"Kwame Obi\"\n      party @green \"Green\"\n    recommend no-position\n  contest @l \"L\" single\n    campaign party @green\n    recommend no-position\n",
         );
         assert_eq!(reported(&text), []);
     }

@@ -26,6 +26,10 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     ballots::empty_ballots(document, &mut diagnostics);
     ballots::empty_sections(document, &mut diagnostics);
     contests::campaign_counts(document, &mut diagnostics);
+    campaigns::campaigns_without_members(document, &mut diagnostics);
+    campaigns::duplicate_members(document, &mut diagnostics);
+    campaigns::members_in_two_campaigns(document, &mut diagnostics);
+    campaigns::parties_in_two_campaigns(document, &index, &mut diagnostics);
     contests::contest_kinds(document, &mut diagnostics);
     references::unused_declarations(&index, &mut diagnostics);
     references::duplicate_party_names(&index, &mut diagnostics);

@@ -2250,9 +2250,9 @@ section "Measures"
 
 #### Contest Without Campaigns
 
-Occurs when a contest whose kind is not `retention` has no campaign. The error is reported as
-`contest-without-campaigns` and spans the contest's header line. A retention contest's campaign
-count is governed by `retention-campaign-count`.
+Occurs when a `single`, `multiple`, or `ranked` contest has no campaign. The error is reported as
+`contest-without-campaigns` and spans the contest's header line. A contest with no kind is not
+checked. A retention contest's campaign count is governed by `retention-campaign-count`.
 
 ```oval example
 contest @mayor "Mayor" single
@@ -2431,9 +2431,10 @@ contest @judge-ueda "Retain Judge Ueda?" retention
 
 #### Party Campaign in a Retention Contest
 
-Occurs when a `retention` contest's campaign is a party campaign. A retention question asks for a
+Occurs when a campaign of a `retention` contest is a party campaign. A retention question asks for a
 yes or no on one candidate, so its campaign names a candidate. The error is reported as
-`retention-party-campaign` and spans the campaign's line.
+`retention-party-campaign` and spans the line of each such campaign, including one also reported as
+`retention-campaign-count`.
 
 ```oval example
 contest @judge-ueda "Retain Judge Ueda?" retention

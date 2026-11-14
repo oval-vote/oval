@@ -37,6 +37,17 @@ pub enum ValidationRule {
     EmptySection,
     /// A `single`, `multiple`, or `ranked` contest has no campaign.
     ContestWithoutCampaigns,
+    /// A block-form campaign has fields but no member, so a recommendation has nothing to name.
+    CampaignWithoutMembers,
+    /// Two members of one campaign have the same identifier. Each member after the first is its
+    /// own diagnostic.
+    DuplicateMember,
+    /// Members of two campaigns in one contest have the same identifier. Each member that repeats
+    /// one of an earlier campaign is its own diagnostic.
+    MemberInTwoCampaigns,
+    /// A candidate in one campaign of a contest has a party that is a member of another, so the
+    /// ballot offers both as separate choices.
+    PartyInTwoCampaigns,
     /// The number of votes after `multiple` is less than 2.
     InvalidMultipleCount,
     /// The number after `max` is 0.
@@ -91,6 +102,10 @@ impl ValidationRule {
             Self::EmptyBallot => "empty-ballot",
             Self::EmptySection => "empty-section",
             Self::ContestWithoutCampaigns => "contest-without-campaigns",
+            Self::CampaignWithoutMembers => "campaign-without-members",
+            Self::DuplicateMember => "duplicate-member",
+            Self::MemberInTwoCampaigns => "member-in-two-campaigns",
+            Self::PartyInTwoCampaigns => "party-in-two-campaigns",
             Self::InvalidMultipleCount => "invalid-multiple-count",
             Self::InvalidRankedMax => "invalid-ranked-max",
             Self::InvalidSeatCount => "invalid-seat-count",
@@ -121,6 +136,10 @@ impl ValidationRule {
             | Self::EmptyBallot
             | Self::EmptySection
             | Self::ContestWithoutCampaigns
+            | Self::CampaignWithoutMembers
+            | Self::DuplicateMember
+            | Self::MemberInTwoCampaigns
+            | Self::PartyInTwoCampaigns
             | Self::InvalidMultipleCount
             | Self::InvalidRankedMax
             | Self::InvalidSeatCount
@@ -165,6 +184,19 @@ mod tests {
             (
                 ValidationRule::ContestWithoutCampaigns,
                 "contest-without-campaigns",
+            ),
+            (
+                ValidationRule::CampaignWithoutMembers,
+                "campaign-without-members",
+            ),
+            (ValidationRule::DuplicateMember, "duplicate-member"),
+            (
+                ValidationRule::MemberInTwoCampaigns,
+                "member-in-two-campaigns",
+            ),
+            (
+                ValidationRule::PartyInTwoCampaigns,
+                "party-in-two-campaigns",
             ),
             (
                 ValidationRule::InvalidMultipleCount,
