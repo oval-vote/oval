@@ -25,7 +25,9 @@
 //! # Ok::<(), oval_core::InputRejection>(())
 //! ```
 
+mod compile;
 mod diagnostic;
+pub mod model;
 mod report;
 mod rule;
 mod validate;

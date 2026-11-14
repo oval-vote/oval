@@ -12,6 +12,8 @@ publish.workspace = true
 [dependencies]
 oval-syntax.workspace = true
 pulldown-cmark.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true
