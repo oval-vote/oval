@@ -86,6 +86,15 @@ pub enum ValidationRule {
     /// A `retention` contest's recommendation is not a single `support` or `oppose` line naming
     /// only the contest's campaign, `no-position`, or `abstain`.
     RetentionStance,
+    /// A `ranked` contest's recommendation names more choices in its `support` lines than its
+    /// `max`.
+    SupportOverMax,
+    /// A required question is recommended `abstain`, though it cannot be left blank.
+    AbstainOnRequired,
+    /// A recommendation has a `write-in`, though its contest is exhaustive.
+    WriteInNotAccepted,
+    /// `extensible` is written before a `retention` contest, which has nothing to write in.
+    ExtensibleRetention,
     /// A URL uses `http` rather than `https`, so a reader following it is not protected from
     /// tampering. A warning.
     InsecureUrl,
@@ -104,6 +113,14 @@ pub enum ValidationRule {
     /// Two root ballots, or two sub-ballots of the same ballot, have the same title, so a reader
     /// cannot tell them apart. A warning.
     DuplicateBallotTitle,
+    /// A `multiple` contest's recommendation names more choices in its `support` lines than the
+    /// voter has votes. A warning.
+    SupportOverCount,
+    /// A recommendation's `support` lines name fewer choices than a ballot must mark, so a reader
+    /// who marks only those casts a ballot that does not count. A warning.
+    SupportBelowMinimum,
+    /// A write-in names a candidate already printed on the ballot in the same contest. A warning.
+    WriteInOnBallot,
 }
 
 impl ValidationRule {
@@ -140,11 +157,18 @@ impl ValidationRule {
             Self::RepeatedStance => "repeated-stance",
             Self::TiersInSingle => "tiers-in-single",
             Self::RetentionStance => "retention-stance",
+            Self::SupportOverMax => "support-over-max",
+            Self::AbstainOnRequired => "abstain-on-required",
+            Self::WriteInNotAccepted => "write-in-not-accepted",
+            Self::ExtensibleRetention => "extensible-retention",
             Self::InsecureUrl => "insecure-url",
             Self::EmptyString => "empty-string",
             Self::UnusedDeclaration => "unused-declaration",
             Self::DuplicatePartyName => "duplicate-party-name",
             Self::DuplicateBallotTitle => "duplicate-ballot-title",
+            Self::SupportOverCount => "support-over-count",
+            Self::SupportBelowMinimum => "support-below-minimum",
+            Self::WriteInOnBallot => "write-in-on-ballot",
         }
     }
 
@@ -180,12 +204,19 @@ impl ValidationRule {
             | Self::RepeatedOppose
             | Self::RepeatedStance
             | Self::TiersInSingle
-            | Self::RetentionStance => Severity::Error,
+            | Self::RetentionStance
+            | Self::SupportOverMax
+            | Self::AbstainOnRequired
+            | Self::WriteInNotAccepted
+            | Self::ExtensibleRetention => Severity::Error,
             Self::InsecureUrl
             | Self::EmptyString
             | Self::UnusedDeclaration
             | Self::DuplicatePartyName
-            | Self::DuplicateBallotTitle => Severity::Warning,
+            | Self::DuplicateBallotTitle
+            | Self::SupportOverCount
+            | Self::SupportBelowMinimum
+            | Self::WriteInOnBallot => Severity::Warning,
         }
     }
 }
@@ -264,6 +295,10 @@ mod tests {
             (ValidationRule::RepeatedStance, "repeated-stance"),
             (ValidationRule::TiersInSingle, "tiers-in-single"),
             (ValidationRule::RetentionStance, "retention-stance"),
+            (ValidationRule::SupportOverMax, "support-over-max"),
+            (ValidationRule::AbstainOnRequired, "abstain-on-required"),
+            (ValidationRule::WriteInNotAccepted, "write-in-not-accepted"),
+            (ValidationRule::ExtensibleRetention, "extensible-retention"),
         ] {
             assert_eq!(rule.spec_id(), id);
             assert_eq!(rule.severity(), Severity::Error);
@@ -281,6 +316,9 @@ mod tests {
                 ValidationRule::DuplicateBallotTitle,
                 "duplicate-ballot-title",
             ),
+            (ValidationRule::SupportOverCount, "support-over-count"),
+            (ValidationRule::SupportBelowMinimum, "support-below-minimum"),
+            (ValidationRule::WriteInOnBallot, "write-in-on-ballot"),
         ] {
             assert_eq!(rule.spec_id(), id);
             assert_eq!(rule.severity(), Severity::Warning);

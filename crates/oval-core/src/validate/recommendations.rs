@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 
 use oval_syntax::ast::{
-    AstNode, Choice, Contest, ContestRecommend, Document, Measure, Method, Stance,
+    AstNode, AstToken, Choice, Contest, ContestKind, ContestRecommend, Document, Measure, Member,
+    Method, Stance, Support,
 };
 use oval_syntax::{SyntaxNode, TextRange};
 
@@ -53,7 +54,13 @@ pub(super) fn stances(document: &Document, index: &Index, diagnostics: &mut Vec<
                     .collect()
             })
             .collect();
-        let method = contest.kind().map(|kind| kind.method());
+        let kind = contest.kind();
+        let method = kind.as_ref().map(ContestKind::method);
+        let candidates: HashSet<String> = contest
+            .campaigns()
+            .flat_map(|campaign| campaign.members().collect::<Vec<_>>())
+            .filter_map(|member| candidate_name(&member, index))
+            .collect();
         for recommendation in contest.recommendations() {
             let stances = Stances {
                 campaigns: &campaigns,
@@ -66,6 +73,10 @@ pub(super) fn stances(document: &Document, index: &Index, diagnostics: &mut Vec<
             if method == Some(Method::Retention) {
                 stances.retention_shape(diagnostics);
             }
+            if let Some(kind) = &kind {
+                stances.support_counts(kind, diagnostics);
+            }
+            stances.write_ins_on_ballot(&candidates, diagnostics);
         }
     }
 }
@@ -168,6 +179,55 @@ impl Stances<'_> {
         }
     }
 
+    fn support_counts(&self, kind: &ContestKind, diagnostics: &mut Vec<Diagnostic>) {
+        let (limit, rule) = match kind.method() {
+            Method::Ranked => (kind.max(), ValidationRule::SupportOverMax),
+            Method::Multiple => (kind.votes(), ValidationRule::SupportOverCount),
+            Method::Single | Method::Retention => return,
+        };
+        let supports: Vec<Support> = self.recommendation.supports().collect();
+        let choices: Vec<Choice> = supports.iter().flat_map(Support::choices).collect();
+        let beyond = limit
+            .and_then(|limit| usize::try_from(limit.value()?).ok())
+            .and_then(|limit| choices.get(limit));
+        if let Some(beyond) = beyond {
+            push(rule, Some(beyond.syntax().text_range()), diagnostics);
+        }
+        let Some(last) = supports.last() else {
+            return;
+        };
+        let below_min = kind.min().is_some_and(|min| {
+            min.value()
+                .and_then(|min| usize::try_from(min).ok())
+                .is_none_or(|min| choices.len() < min)
+        });
+        let below_all = kind.method() == Method::Ranked
+            && kind.all().is_some()
+            && choices.len() < self.campaigns.len();
+        if below_min || below_all {
+            push(
+                ValidationRule::SupportBelowMinimum,
+                header_range(last.syntax()),
+                diagnostics,
+            );
+        }
+    }
+
+    fn write_ins_on_ballot(&self, candidates: &HashSet<String>, diagnostics: &mut Vec<Diagnostic>) {
+        for choice in self.choices() {
+            if let Choice::WriteIn(write_in) = choice
+                && let Some(name) = write_in.name()
+                && candidates.contains(name.value().as_ref())
+            {
+                push(
+                    ValidationRule::WriteInOnBallot,
+                    Some(name.syntax().text_range()),
+                    diagnostics,
+                );
+            }
+        }
+    }
+
     fn choices(&self) -> impl Iterator<Item = Choice> + use<> {
         self.recommendation
             .stances()
@@ -179,6 +239,14 @@ impl Stances<'_> {
             .iter()
             .position(|members| members.contains(name))
     }
+}
+
+fn candidate_name(member: &Member, index: &Index) -> Option<String> {
+    let declaration = &index.declarations[index.resolve(&member.identifier()?)?];
+    if declaration.entity != Entity::Candidate {
+        return None;
+    }
+    Some(declaration.name()?.value().into_owned())
 }
 
 fn push(rule: ValidationRule, range: Option<TextRange>, diagnostics: &mut Vec<Diagnostic>) {
@@ -261,6 +329,28 @@ mod tests {
         assert_eq!(
             reported_as(text, "retention-stance"),
             [(146, 155), (329, 340), (442, 462)]
+        );
+    }
+
+    #[test]
+    fn a_write_in_matching_a_party_named_by_a_mismatched_member_is_not_on_the_ballot() {
+        let text = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nparty @dem \"Dem\"\nextensible ballot @b \"B\"\n  contest @k \"K\" single\n    campaign @dem\n    recommend\n      support write-in \"Dem\"\n";
+        assert_eq!(reported_as(text, "mismatched-reference").len(), 1);
+        assert_eq!(reported_as(text, "write-in-on-ballot"), []);
+    }
+
+    #[test]
+    fn support_is_counted_against_max_votes_min_and_every_campaign_for_all() {
+        let text = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  contest @r \"R\" ranked max 2\n    campaign @a \"A\"\n    campaign @c \"C\"\n    campaign @d \"D\"\n    recommend\n      support @a\n      support @c @d\n  contest @m \"M\" multiple 2 seats 3\n    campaign @a2 \"A\"\n    campaign @c2 \"C\"\n    campaign @d2 \"D\"\n    recommend\n      support @a2 @c2\n      support @d2\n  contest @n \"N\" ranked min 3\n    campaign @a3 \"A\"\n    campaign @c3 \"C\"\n    campaign @d3 \"D\"\n    recommend\n      support @a3\n      support @c3\n  contest @l \"L\" ranked all\n    campaign @a4 \"A\"\n    campaign @c4 \"C\"\n    campaign @d4 \"D\"\n    recommend\n      support @a4 @c4\n  contest @o \"O\" multiple 2 min 2\n    campaign @a5 \"A\"\n    campaign @c5 \"C\"\n    recommend\n      support @a5 @c5\n  contest @h \"H\" ranked max 99999999999999999999 min 99999999999999999999\n    campaign @a6 \"A\"\n    recommend\n      support @a6\n";
+        assert_eq!(
+            reported(text),
+            [
+                ("support-over-max", 198, 200),
+                ("support-over-count", 350, 353),
+                ("support-below-minimum", 485, 496),
+                ("support-below-minimum", 608, 623),
+                ("support-below-minimum", 851, 862),
+            ]
         );
     }
 }
