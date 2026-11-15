@@ -3,6 +3,7 @@ use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 use crate::modifiers::is_redundant;
 use crate::order::reorder;
+use crate::references::head;
 
 pub(crate) struct Document {
     pub(crate) entries: Vec<Entry>,
@@ -97,7 +98,7 @@ impl Builder {
                     entry.children = self.entries(&block, entry.kind);
                 }
                 SyntaxElement::Node(modifier) if is_redundant(&modifier) => {}
-                SyntaxElement::Node(child) => self.collect(&child, entry),
+                SyntaxElement::Node(child) => self.collect(&head(&child).unwrap_or(child), entry),
             }
         }
     }
