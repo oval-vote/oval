@@ -1,13 +1,16 @@
 use oval_syntax::ast::{AstToken, MarkdownBody};
 use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
+use crate::modifiers::is_redundant;
+use crate::order::reorder;
+
 pub(crate) struct Document {
     pub(crate) entries: Vec<Entry>,
     pub(crate) trailing: Vec<Trivia>,
 }
 
-#[derive(Default)]
 pub(crate) struct Entry {
+    pub(crate) kind: SyntaxKind,
     pub(crate) leading: Vec<Trivia>,
     pub(crate) line: Vec<SyntaxToken>,
     pub(crate) comment: Option<String>,
@@ -28,7 +31,7 @@ pub(crate) enum Trivia {
 
 pub(crate) fn document(root: &SyntaxNode) -> Document {
     let mut builder = Builder::default();
-    let mut entries = builder.entries(root);
+    let mut entries = builder.entries(root, SyntaxKind::Document);
     let mut trailing = builder.pending;
     let start = match entries.first_mut() {
         Some(first) => &mut first.leading,
@@ -49,19 +52,26 @@ struct Builder {
 }
 
 impl Builder {
-    fn entries(&mut self, parent: &SyntaxNode) -> Vec<Entry> {
+    fn entries(&mut self, parent: &SyntaxNode, owner: SyntaxKind) -> Vec<Entry> {
         let mut entries = Vec::new();
         for element in parent.children_with_tokens() {
             match element {
                 SyntaxElement::Node(node) => {
-                    let mut entry = Entry::default();
+                    let mut entry = Entry {
+                        kind: node.kind(),
+                        leading: Vec::new(),
+                        line: Vec::new(),
+                        comment: None,
+                        body: None,
+                        children: Vec::new(),
+                    };
                     self.collect(&node, &mut entry);
                     entries.push(entry);
                 }
                 SyntaxElement::Token(token) => self.trivia(&token),
             }
         }
-        entries
+        reorder(owner, entries)
     }
 
     fn collect(&mut self, node: &SyntaxNode, entry: &mut Entry) {
@@ -84,8 +94,9 @@ impl Builder {
                 }
                 SyntaxElement::Token(token) => self.trivia(&token),
                 SyntaxElement::Node(block) if block.kind() == SyntaxKind::Block => {
-                    entry.children = self.entries(&block);
+                    entry.children = self.entries(&block, entry.kind);
                 }
+                SyntaxElement::Node(modifier) if is_redundant(&modifier) => {}
                 SyntaxElement::Node(child) => self.collect(&child, entry),
             }
         }
