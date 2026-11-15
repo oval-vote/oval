@@ -70,9 +70,7 @@ pub fn format(text: &str) -> Result<String, FormatError> {
     if !parse.lexical_errors.is_empty() || !parse.syntax_errors.is_empty() {
         return Err(FormatError::Malformed(parse));
     }
-    let mut output = String::new();
-    print::print(&entry::entries(&parse.syntax()), 0, &mut output);
-    Ok(output)
+    Ok(print::print(&entry::document(&parse.syntax())))
 }
 
 #[cfg(test)]

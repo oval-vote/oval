@@ -1,19 +1,43 @@
 use oval_syntax::{SyntaxKind, SyntaxToken};
 
-use crate::entry::Entry;
+use crate::entry::{Document, Entry, Trivia};
 
 const INDENT: &str = "  ";
 
-pub(crate) fn print(entries: &[Entry], depth: usize, output: &mut String) {
+pub(crate) fn print(document: &Document) -> String {
+    let mut output = String::new();
+    entries(&document.entries, 0, &mut output);
+    for trivia in &document.trailing {
+        self::trivia(trivia, 0, &mut output);
+    }
+    output
+}
+
+fn entries(entries: &[Entry], depth: usize, output: &mut String) {
     for entry in entries {
+        for trivia in &entry.leading {
+            self::trivia(trivia, depth, output);
+        }
         output.push_str(&INDENT.repeat(depth));
         line(&entry.line, output);
+        if let Some(comment) = &entry.comment {
+            output.push(' ');
+            output.push_str(comment);
+        }
         output.push('\n');
         if let Some(body) = &entry.body {
             output.push_str(body.text());
         }
-        print(&entry.children, depth + 1, output);
+        self::entries(&entry.children, depth + 1, output);
     }
+}
+
+fn trivia(trivia: &Trivia, depth: usize, output: &mut String) {
+    if let Trivia::Comment(comment) = trivia {
+        output.push_str(&INDENT.repeat(depth));
+        output.push_str(comment);
+    }
+    output.push('\n');
 }
 
 fn line(tokens: &[SyntaxToken], output: &mut String) {
