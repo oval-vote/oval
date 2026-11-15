@@ -217,6 +217,8 @@ pub struct Contest {
     pub extensible: bool,
     /// The contest's campaigns in ballot order.
     pub campaigns: Vec<Campaign>,
+    /// The author's recommendation on the contest.
+    pub recommendation: ContestRecommendation,
 }
 
 /// A contest's voting method, from its header, with each number the header leaves out filled in
@@ -283,6 +285,8 @@ pub struct Campaign {
     /// The author's note on the campaign in Markdown, from `note`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// What the contest's recommendation says about the campaign.
+    pub stance: Stance,
 }
 
 /// Whether a campaign's members are candidates or parties.
@@ -315,6 +319,82 @@ pub enum Member {
     Party {
         /// The party's identifier.
         party: String,
+    },
+}
+
+/// What a contest's recommendation says about one of its campaigns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "position", rename_all = "lowercase")]
+pub enum Stance {
+    /// The campaign is in a `support` line.
+    Support {
+        /// The zero-based index of that `support` line among the recommendation's tiers.
+        tier: usize,
+    },
+    /// The campaign is in the `oppose` line.
+    Oppose,
+    /// The recommendation doesn't name the campaign.
+    None,
+}
+
+/// The author's recommendation on a contest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ContestRecommendation {
+    /// Whether the recommendation takes a stance or is `no-position` or `abstain`.
+    pub position: ContestPosition,
+    /// The `support` lines, most preferred first, each a tier of interchangeable choices.
+    ///
+    /// It's empty unless the position is a stance.
+    pub support: Vec<Vec<Choice>>,
+    /// The choices in the `oppose` line, as written.
+    ///
+    /// It's empty unless the position is a stance.
+    pub oppose: Vec<Choice>,
+    /// The author's reasoning in Markdown, from `justification`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub justification: Option<String>,
+    /// The author's note on the recommendation in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// The kind of recommendation on a contest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContestPosition {
+    /// The recommendation has `support` or `oppose` lines.
+    Stance,
+    /// The author takes no position, from `recommend no-position`.
+    NoPosition,
+    /// The author advises leaving the contest blank, from `recommend abstain`.
+    Abstain,
+}
+
+/// One choice in a recommendation, a campaign printed on the ballot or a write-in.
+///
+/// A reference may name any member of a campaign, and it's written as the campaign's head.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Choice {
+    /// A candidate campaign.
+    Candidate {
+        /// The identifier of the campaign's head.
+        candidate: String,
+        /// The campaign's index in its contest's campaigns.
+        campaign: usize,
+    },
+    /// A party campaign.
+    Party {
+        /// The identifier of the campaign's lead party.
+        party: String,
+        /// The campaign's index in its contest's campaigns.
+        campaign: usize,
+    },
+    /// A choice the voter writes on the ballot by hand.
+    WriteIn {
+        /// The name to write in, or `None` for a bare `write-in`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
     },
 }
 

@@ -2,6 +2,7 @@ mod ballots;
 mod campaigns;
 mod declarations;
 mod questions;
+mod recommendations;
 
 use oval_syntax::ast::{
     AstNode, AstToken, Document, Identifier, MarkdownField, StringField, StringListField, UrlField,

@@ -2,6 +2,7 @@ use oval_syntax::SyntaxNode;
 use oval_syntax::ast::{self, AstNode, Extensibility, IntegerLiteral, Position, Requirement};
 
 use super::campaigns::campaigns;
+use super::recommendations::recommendation;
 use super::{Declarations, id, markdown, string, strings};
 use crate::model::{Contest, Location, Measure, MeasurePosition, MeasureRecommendation, Method};
 use crate::validate::nearest;
@@ -12,6 +13,8 @@ pub(super) fn contest(
     declarations: &Declarations,
 ) -> Option<Contest> {
     let method = method(contest)?;
+    let mut campaigns = campaigns(contest, declarations)?;
+    let recommendation = recommendation(contest, &mut campaigns)?;
     let extensible = method != Method::Retention
         && nearest::<Extensibility>(contest.syntax())
             .is_some_and(|extensibility| extensibility.is_extensible());
@@ -25,7 +28,8 @@ pub(super) fn contest(
         location,
         required: required(contest.syntax()),
         extensible,
-        campaigns: campaigns(contest, declarations)?,
+        campaigns,
+        recommendation,
     })
 }
 

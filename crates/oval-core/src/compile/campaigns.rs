@@ -1,7 +1,7 @@
 use oval_syntax::ast;
 
 use super::{Declarations, id, markdown, url};
-use crate::model::{Campaign, CampaignKind, Member};
+use crate::model::{Campaign, CampaignKind, Member, Stance};
 
 pub(super) fn campaigns(
     contest: &ast::Contest,
@@ -60,6 +60,7 @@ fn campaign(
         withdrawn: campaign.is_withdrawn(),
         website: url(campaign.website()),
         note: markdown(campaign.note()),
+        stance: Stance::None,
     })
 }
 
@@ -103,6 +104,7 @@ mod tests {
                 "members": [{ "kind": "candidate", "candidate": "bsantos", "role": "Mayor" }],
                 "incumbent": true,
                 "withdrawn": false,
+                "stance": { "position": "none" },
                 "website": "https://santos.example",
                 "note": "Two terms.",
             }])
@@ -132,6 +134,7 @@ mod tests {
                 ],
                 "incumbent": false,
                 "withdrawn": true,
+                "stance": { "position": "none" },
                 "note": "The ticket.",
             }])
         );
@@ -175,6 +178,7 @@ mod tests {
                     "members": [{ "kind": "party", "party": "dem" }],
                     "incumbent": false,
                     "withdrawn": false,
+                    "stance": { "position": "none" },
                 },
                 {
                     "index": 1,
@@ -187,6 +191,7 @@ mod tests {
                     ],
                     "incumbent": false,
                     "withdrawn": false,
+                    "stance": { "position": "none" },
                     "website": "https://redgreen.example",
                 },
                 {
@@ -197,6 +202,7 @@ mod tests {
                     "members": [{ "kind": "candidate", "candidate": "cfox" }],
                     "incumbent": false,
                     "withdrawn": false,
+                    "stance": { "position": "none" },
                 },
             ])
         );
