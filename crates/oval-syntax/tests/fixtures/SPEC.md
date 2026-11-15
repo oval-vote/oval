@@ -3319,6 +3319,7 @@ text in surprising ways.
 
 ### 6.1. Whitespace
 
+- A byte order mark at the start of the document is removed.
 - Line terminators become U+000A. The document ends with exactly one.
 - Trailing spaces are removed from every line, except content lines inside a `MarkdownBlock`, where
   two trailing spaces are a hard line break in Markdown and are preserved. Whitespace-only lines
