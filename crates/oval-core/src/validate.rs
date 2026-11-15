@@ -16,6 +16,8 @@ mod recommendations;
 mod references;
 mod version;
 
+pub(crate) use questions::nearest;
+
 pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnostic> {
     let marker = version::supported_marker(document)?;
     let mut diagnostics = Vec::new();

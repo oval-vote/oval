@@ -34,6 +34,8 @@ pub struct Compiled {
     pub candidates: Vec<Candidate>,
     /// The root ballots, in ballot order.
     pub ballots: Vec<Ballot>,
+    /// Every contest and measure in ballot order, with where each sits in the tree.
+    pub questions: Vec<QuestionEntry>,
     /// Totals across the whole document.
     pub counts: Counts,
 }
@@ -92,6 +94,8 @@ pub struct Party {
     pub note: Option<String>,
     /// The identifiers of every candidate whose party this is, in document order.
     pub candidates: Vec<String>,
+    /// The identifiers of every contest with a campaign the party is a member of, in ballot order.
+    pub contests: Vec<String>,
 }
 
 /// A person who appears in one or more campaigns.
@@ -113,6 +117,9 @@ pub struct Candidate {
     /// `campaign` line has no note of their own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The identifiers of every contest with a campaign the candidate is a member of, in ballot
+    /// order.
+    pub contests: Vec<String>,
 }
 
 /// A ballot, either a root ballot or a sub-ballot for a narrower electorate.
@@ -147,6 +154,10 @@ pub struct Ballot {
 pub enum BallotItem {
     /// A titled group of questions.
     Section(Section),
+    /// A race between campaigns for an office.
+    Contest(Contest),
+    /// A question answered yes or no.
+    Measure(Measure),
     /// A sub-ballot.
     Ballot(Ballot),
 }
@@ -160,6 +171,268 @@ pub struct Section {
     /// The author's note on the section in Markdown, from `note`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// The section's contests and measures, in ballot order.
+    pub items: Vec<SectionItem>,
+}
+
+/// One item of a section.
+///
+/// Each item's JSON has a `kind` naming what it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum SectionItem {
+    /// A race between campaigns for an office.
+    Contest(Contest),
+    /// A question answered yes or no.
+    Measure(Measure),
+}
+
+/// A race between campaigns for an office.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename = "contest")]
+pub struct Contest {
+    /// The contest's identifier, without its `@`.
+    pub id: String,
+    /// The contest as it is named on the ballot.
+    pub title: String,
+    /// A line printed under the title, from `subtitle`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    /// The voting method, from the contest's header.
+    pub method: Method,
+    /// How votes are counted, from `tabulation`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tabulation: Option<String>,
+    /// The author's note on the contest in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Where the contest sits in the ballot tree.
+    pub location: Location,
+    /// Whether a voter must answer the contest, from the nearest `required` or `optional` on the
+    /// contest, its section, or its ballots, and `false` if there is none.
+    pub required: bool,
+    /// Whether a voter may write in a choice, from the nearest `extensible` or `exhaustive` on the
+    /// contest, its section, or its ballots, and `false` if there is none or the contest is a
+    /// retention contest.
+    pub extensible: bool,
+    /// The contest's campaigns in ballot order.
+    pub campaigns: Vec<Campaign>,
+}
+
+/// A contest's voting method, from its header, with each number the header leaves out filled in
+/// with its default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Method {
+    /// A vote for one choice.
+    Single {
+        /// How many candidates are elected, from `seats`, or 1.
+        seats: u64,
+    },
+    /// A vote for up to a number of choices.
+    Multiple {
+        /// How many choices a voter may mark, from `multiple`.
+        votes: u64,
+        /// How many candidates are elected, from `seats`, or the number of votes.
+        seats: u64,
+        /// How many choices a ballot that marks the contest must mark, from `min`, or 1.
+        min: u64,
+    },
+    /// A ranking of choices in order of preference.
+    Ranked {
+        /// How many candidates are elected, from `seats`, or 1.
+        seats: u64,
+        /// How many choices a voter may rank, from `max`, or `None` when there is no limit.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max: Option<u64>,
+        /// How many choices a ballot that ranks the contest must rank, from `min`, or 1, or the
+        /// number of campaigns when every choice must be ranked.
+        min: u64,
+        /// Whether every printed choice must be ranked, from `all`.
+        complete: bool,
+    },
+    /// A yes or no on one candidate.
+    Retention,
+}
+
+/// One or more candidates, or one or more parties, running together for a contest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Campaign {
+    /// The campaign's position in its contest's campaigns, which is how the rest of the output
+    /// refers to it, since a campaign has no identifier.
+    pub index: usize,
+    /// Whether the members are candidates or parties.
+    pub kind: CampaignKind,
+    /// The members' names joined with `" / "`, head first.
+    pub label: String,
+    /// The identifier of the first member, the head of the ticket or the lead party.
+    pub head: String,
+    /// The party every member of a candidate campaign belongs to, or `None` if they don't all
+    /// belong to the same one or the campaign is a party campaign.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub party: Option<String>,
+    /// The campaign's candidates or parties, head first.
+    pub members: Vec<Member>,
+    /// Whether the campaign currently holds the office, from the `incumbent` flag.
+    pub incumbent: bool,
+    /// Whether the campaign has ended but is still on the ballot, from the `withdrawn` flag.
+    pub withdrawn: bool,
+    /// The campaign's website, from `website`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub website: Option<String>,
+    /// The author's note on the campaign in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// Whether a campaign's members are candidates or parties.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CampaignKind {
+    /// A candidate campaign, written `campaign`.
+    Candidates,
+    /// A party campaign, written `campaign party`.
+    Parties,
+}
+
+/// A candidate's or a party's place in a campaign.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Member {
+    /// A member of a candidate campaign.
+    Candidate {
+        /// The candidate's identifier.
+        candidate: String,
+        /// The member's role on the ticket, from `as`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+        /// The author's note on the member in Markdown, from the `note` in the member's own
+        /// block.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+    },
+    /// A member of a party campaign.
+    Party {
+        /// The party's identifier.
+        party: String,
+    },
+}
+
+/// A ballot measure, a question answered yes or no.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename = "measure")]
+pub struct Measure {
+    /// The measure's identifier, without its `@`.
+    pub id: String,
+    /// The measure as it is named on the ballot.
+    pub title: String,
+    /// A line printed under the title, from `subtitle`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    /// The question as it is printed on the ballot in Markdown, from `description`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// What a yes vote does in Markdown, from `if_yes`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub if_yes: Option<String>,
+    /// What a no vote does in Markdown, from `if_no`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub if_no: Option<String>,
+    /// How the measure reached the ballot, from `placement`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placement: Option<String>,
+    /// What it takes to pass, from `tabulation`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tabulation: Option<String>,
+    /// The measure's fiscal impact, from `fiscal_impact`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fiscal_impact: Option<String>,
+    /// The organizations supporting the measure, from `supporters`.
+    ///
+    /// It is `None` when they were not researched, and empty when the author wrote `none`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supporters: Option<Vec<String>>,
+    /// The organizations opposing the measure, from `opponents`.
+    ///
+    /// It is `None` when they were not researched, and empty when the author wrote `none`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opponents: Option<Vec<String>>,
+    /// The author's note on the measure in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Where the measure sits in the ballot tree.
+    pub location: Location,
+    /// Whether a voter must answer the measure, from the nearest `required` or `optional` on the
+    /// measure, its section, or its ballots, and `false` if there is none.
+    pub required: bool,
+    /// The author's recommendation on the measure.
+    pub recommendation: MeasureRecommendation,
+}
+
+/// The author's recommendation on a measure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MeasureRecommendation {
+    /// The recommended vote, from `recommend`.
+    pub position: MeasurePosition,
+    /// The author's reasoning in Markdown, from `justification`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub justification: Option<String>,
+    /// The author's note on the recommendation in Markdown, from `note`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// The vote recommended on a measure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MeasurePosition {
+    /// `yes`, a vote for the measure.
+    Yes,
+    /// `no`, a vote against the measure.
+    No,
+    /// `no-position`, no advice.
+    NoPosition,
+    /// `abstain`, leaving the measure blank.
+    Abstain,
+}
+
+/// Where a contest or measure sits in the ballot tree.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Location {
+    /// The identifier of the innermost ballot that encloses the question.
+    pub ballot: String,
+    /// The title of the section that encloses the question, if there is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+    /// The identifiers of every ballot that encloses the question, outermost first, ending with
+    /// [`ballot`](Self::ballot).
+    pub path: Vec<String>,
+}
+
+/// One contest or measure in the flat list of every question, for tables of contents and views of
+/// one electorate.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct QuestionEntry {
+    /// Whether the question is a contest or a measure.
+    pub kind: QuestionKind,
+    /// The question's identifier, without its `@`.
+    pub id: String,
+    /// The question's title.
+    pub title: String,
+    /// Where the question sits in the ballot tree.
+    pub location: Location,
+    /// Whether a voter must answer the question.
+    pub required: bool,
+}
+
+/// Whether a question is a contest or a measure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QuestionKind {
+    /// A race between campaigns for an office.
+    Contest,
+    /// A question answered yes or no.
+    Measure,
 }
 
 /// Totals across the whole document.

@@ -77,7 +77,7 @@ fn is_retention(contest: &Contest) -> bool {
         .is_some_and(|kind| kind.method() == Method::Retention)
 }
 
-fn nearest<N: AstNode>(node: &SyntaxNode) -> Option<N> {
+pub(crate) fn nearest<N: AstNode>(node: &SyntaxNode) -> Option<N> {
     node.ancestors()
         .filter(|ancestor| {
             matches!(
