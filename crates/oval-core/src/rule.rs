@@ -57,6 +57,9 @@ pub enum ValidationRule {
     /// The number after `min` is 0, or exceeds the `max` of a `ranked` contest or the number of
     /// votes of a `multiple` contest, so a ballot could never meet it.
     InvalidMinimum,
+    /// The number after `multiple`, `seats`, `max`, or `min` is greater than 9007199254740991, the
+    /// largest integer a JSON consumer can be relied on to read exactly.
+    IntegerTooLarge,
     /// `all` is written with `max` or `min`, though ranking every choice leaves no room for
     /// either limit.
     RankedAllWithLimit,
@@ -154,6 +157,7 @@ impl ValidationRule {
             Self::InvalidRankedMax => "invalid-ranked-max",
             Self::InvalidSeatCount => "invalid-seat-count",
             Self::InvalidMinimum => "invalid-minimum",
+            Self::IntegerTooLarge => "integer-too-large",
             Self::RankedAllWithLimit => "ranked-all-with-limit",
             Self::RetentionCampaignCount => "retention-campaign-count",
             Self::RetentionPartyCampaign => "retention-party-campaign",
@@ -204,6 +208,7 @@ impl ValidationRule {
             | Self::InvalidRankedMax
             | Self::InvalidSeatCount
             | Self::InvalidMinimum
+            | Self::IntegerTooLarge
             | Self::RankedAllWithLimit
             | Self::RetentionCampaignCount
             | Self::RetentionPartyCampaign
@@ -281,6 +286,7 @@ mod tests {
             (ValidationRule::InvalidRankedMax, "invalid-ranked-max"),
             (ValidationRule::InvalidSeatCount, "invalid-seat-count"),
             (ValidationRule::InvalidMinimum, "invalid-minimum"),
+            (ValidationRule::IntegerTooLarge, "integer-too-large"),
             (ValidationRule::RankedAllWithLimit, "ranked-all-with-limit"),
             (
                 ValidationRule::RetentionCampaignCount,

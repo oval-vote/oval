@@ -6,6 +6,8 @@ use oval_syntax::ast::{
 use super::{content_range, diagnostic, header_range, kept_nodes};
 use crate::{Diagnostic, ValidationRule};
 
+const LARGEST_INTEGER: u64 = 9_007_199_254_740_991;
+
 pub(super) fn campaign_counts(document: &Document, diagnostics: &mut Vec<Diagnostic>) {
     for contest in kept_nodes(document.syntax()).filter_map(Contest::cast) {
         let Some(kind) = contest.kind() else {
@@ -63,6 +65,12 @@ pub(super) fn contest_kinds(document: &Document, diagnostics: &mut Vec<Diagnosti
             };
             if min.value() == Some(0) || limit.is_some_and(|limit| exceeds(&min, &limit)) {
                 report(ValidationRule::InvalidMinimum, &min);
+            }
+        }
+        let integers = [kind.votes(), kind.seats(), kind.max(), kind.min()];
+        for integer in integers.into_iter().flatten() {
+            if integer.value().is_none_or(|value| value > LARGEST_INTEGER) {
+                report(ValidationRule::IntegerTooLarge, &integer);
             }
         }
         let has_limit = kind
@@ -176,11 +184,35 @@ mod tests {
     fn numbers_too_large_for_a_u64_are_compared_exactly() {
         assert_eq!(
             kind_errors("multiple 99999999999999999999 min 0099999999999999999998"),
-            []
+            [("integer-too-large", 9, 29), ("integer-too-large", 34, 56),]
         );
         assert_eq!(
             kind_errors("ranked max 99999999999999999999 min 100000000000000000000"),
-            [("invalid-minimum", 36, 57)]
+            [
+                ("integer-too-large", 11, 31),
+                ("invalid-minimum", 36, 57),
+                ("integer-too-large", 36, 57),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_number_past_the_largest_integer_json_reads_exactly_is_too_large() {
+        assert_eq!(
+            kind_errors("multiple 9007199254740991 seats 0009007199254740991"),
+            []
+        );
+        assert_eq!(
+            kind_errors("ranked seats 9007199254740992 max 18446744073709551616 min 2"),
+            [("integer-too-large", 13, 29), ("integer-too-large", 34, 54),]
+        );
+        assert_eq!(
+            kind_errors("multiple 9007199254740992 min 9007199254740993"),
+            [
+                ("integer-too-large", 9, 25),
+                ("invalid-minimum", 30, 46),
+                ("integer-too-large", 30, 46),
+            ]
         );
     }
 

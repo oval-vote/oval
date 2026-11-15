@@ -349,6 +349,8 @@ mod tests {
                 ("support-over-count", 350, 353),
                 ("support-below-minimum", 485, 496),
                 ("support-below-minimum", 608, 623),
+                ("integer-too-large", 764, 784),
+                ("integer-too-large", 789, 809),
                 ("support-below-minimum", 851, 862),
             ]
         );

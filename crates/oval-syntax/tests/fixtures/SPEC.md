@@ -874,7 +874,9 @@ accepts:
 | `all`       | A ballot that marks the contest must rank every printed choice.         | not required                             |
 
 Each modifier appears at most once, in any order. `all` excludes `max` and `min`, and `min` may not
-exceed `max` or, for `multiple`, the number of votes.
+exceed `max` or, for `multiple`, the number of votes. Every number in a contest header, after
+`multiple`, `seats`, `max`, or `min`, is at most 9007199254740991, which is 2<sup>53</sup> − 1, the
+largest integer the canonical output can carry exactly.
 
 ```oval example
 contest @legco "Legislative Council, Hong Kong Island" single seats 2
@@ -2400,6 +2402,21 @@ contest @board "School Board" multiple 3 min 2
 contest @board "School Board" multiple 3 min 4
 ```
 
+#### Integer Too Large
+
+Occurs when the `Integer` after `multiple`, `seats`, `max`, or `min` is greater than
+9007199254740991, which is 2<sup>53</sup> − 1. That is the largest integer a JSON consumer can be
+relied on to read exactly (RFC 7493), so the canonical output could not carry a larger one. The
+error is reported as `integer-too-large` and spans the integer.
+
+```oval example
+contest @council "City Council" ranked seats 3 max 9007199254740991
+```
+
+```oval counter-example
+contest @council "City Council" ranked seats 3 max 9007199254740992
+```
+
 #### Ranked All With a Limit
 
 Occurs when `all` appears in a header with `max` or `min`. Ranking every printed choice leaves no
@@ -3105,13 +3122,13 @@ The voting method, from the contest header.
 | Key        | Type                                                       | Required                 | Meaning                                                                                                                                     |
 | ---------- | ---------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kind`     | one of `"single"`, `"multiple"`, `"ranked"`, `"retention"` | yes                      | One of `single`, `multiple`, `ranked`, or `retention`.                                                                                      |
-| `seats`    | integer, at least 1                                        | with `"single"`          | How many candidates are elected, from `seats`; 1 if not written.                                                                            |
-| `votes`    | integer, at least 2                                        | with `"multiple"`        | How many choices a voter may mark, from `multiple`.                                                                                         |
-| `seats`    | integer, at least 1                                        | with `"multiple"`        | How many candidates are elected, from `seats`; the number of votes if not written.                                                          |
-| `min`      | integer, at least 1                                        | with `"multiple"`        | How many choices a ballot that marks the contest must mark, from `min`; 1 if not written.                                                   |
-| `seats`    | integer, at least 1                                        | with `"ranked"`          | How many candidates are elected, from `seats`; 1 if not written.                                                                            |
-| `max`      | integer, at least 1                                        | optional with `"ranked"` | How many choices a voter may rank, from `max`. Omitted when unlimited.                                                                      |
-| `min`      | integer, at least 1                                        | with `"ranked"`          | How many choices a ballot that ranks the contest must rank, from `min`; 1 if not written. Derived as the number of campaigns when complete. |
+| `seats`    | integer, from 1 to 9007199254740991                        | with `"single"`          | How many candidates are elected, from `seats`; 1 if not written.                                                                            |
+| `votes`    | integer, from 2 to 9007199254740991                        | with `"multiple"`        | How many choices a voter may mark, from `multiple`.                                                                                         |
+| `seats`    | integer, from 1 to 9007199254740991                        | with `"multiple"`        | How many candidates are elected, from `seats`; the number of votes if not written.                                                          |
+| `min`      | integer, from 1 to 9007199254740991                        | with `"multiple"`        | How many choices a ballot that marks the contest must mark, from `min`; 1 if not written.                                                   |
+| `seats`    | integer, from 1 to 9007199254740991                        | with `"ranked"`          | How many candidates are elected, from `seats`; 1 if not written.                                                                            |
+| `max`      | integer, from 1 to 9007199254740991                        | optional with `"ranked"` | How many choices a voter may rank, from `max`. Omitted when unlimited.                                                                      |
+| `min`      | integer, from 1 to 9007199254740991                        | with `"ranked"`          | How many choices a ballot that ranks the contest must rank, from `min`; 1 if not written. Derived as the number of campaigns when complete. |
 | `complete` | boolean                                                    | with `"ranked"`          | Whether every printed choice must be ranked, from `all`.                                                                                    |
 
 #### Campaign
