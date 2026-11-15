@@ -13,6 +13,7 @@ publish = false
 
 [workspace.dependencies]
 expect-test = "1.5"
+oval-core = { path = "crates/oval-core" }
 oval-syntax = { path = "crates/oval-syntax" }
 pulldown-cmark = { version = "0.13", default-features = false }
 rowan = "0.17"

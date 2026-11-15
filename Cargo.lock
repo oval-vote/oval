@@ -103,6 +103,7 @@ dependencies = [
 name = "oval-format"
 version = "0.1.10"
 dependencies = [
+ "oval-core",
  "oval-syntax",
 ]
 

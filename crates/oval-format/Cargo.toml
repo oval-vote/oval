@@ -12,5 +12,8 @@ publish.workspace = true
 [dependencies]
 oval-syntax.workspace = true
 
+[dev-dependencies]
+oval-core.workspace = true
+
 [lints]
 workspace = true
