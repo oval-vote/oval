@@ -1,6 +1,7 @@
 use oval_syntax::ast::{AstToken, MarkdownBody};
 use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
+use crate::methods::ordered;
 use crate::modifiers::is_redundant;
 use crate::order::reorder;
 use crate::references::head;
@@ -77,29 +78,38 @@ impl Builder {
 
     fn collect(&mut self, node: &SyntaxNode, entry: &mut Entry) {
         for element in node.children_with_tokens() {
-            match element {
-                SyntaxElement::Token(token) if token.kind() == SyntaxKind::MarkdownBlock => {
-                    entry.body = MarkdownBody::cast(token).map(|body| Body {
-                        leading: std::mem::take(&mut self.pending),
-                        value: body.value(),
-                    });
-                }
-                SyntaxElement::Token(token) if is_trailing_comment(&token) => {
-                    entry.comment = Some(comment(&token));
-                }
-                SyntaxElement::Token(token) if is_significant(token.kind()) => {
-                    if entry.line.is_empty() {
-                        entry.leading = std::mem::take(&mut self.pending);
-                    }
-                    entry.line.push(token);
-                }
-                SyntaxElement::Token(token) => self.trivia(&token),
-                SyntaxElement::Node(block) if block.kind() == SyntaxKind::Block => {
-                    entry.children = self.entries(&block, entry.kind);
-                }
-                SyntaxElement::Node(modifier) if is_redundant(&modifier) => {}
-                SyntaxElement::Node(child) => self.collect(&head(&child).unwrap_or(child), entry),
+            self.element(element, entry);
+        }
+    }
+
+    fn element(&mut self, element: SyntaxElement, entry: &mut Entry) {
+        match element {
+            SyntaxElement::Token(token) if token.kind() == SyntaxKind::MarkdownBlock => {
+                entry.body = MarkdownBody::cast(token).map(|body| Body {
+                    leading: std::mem::take(&mut self.pending),
+                    value: body.value(),
+                });
             }
+            SyntaxElement::Token(token) if is_trailing_comment(&token) => {
+                entry.comment = Some(comment(&token));
+            }
+            SyntaxElement::Token(token) if is_significant(token.kind()) => {
+                if entry.line.is_empty() {
+                    entry.leading = std::mem::take(&mut self.pending);
+                }
+                entry.line.push(token);
+            }
+            SyntaxElement::Token(token) => self.trivia(&token),
+            SyntaxElement::Node(block) if block.kind() == SyntaxKind::Block => {
+                entry.children = self.entries(&block, entry.kind);
+            }
+            SyntaxElement::Node(modifier) if is_redundant(&modifier) => {}
+            SyntaxElement::Node(kind) if kind.kind() == SyntaxKind::ContestKind => {
+                for element in ordered(&kind) {
+                    self.element(element, entry);
+                }
+            }
+            SyntaxElement::Node(child) => self.collect(&head(&child).unwrap_or(child), entry),
         }
     }
 

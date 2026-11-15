@@ -15,6 +15,7 @@
 //! ```
 
 mod entry;
+mod methods;
 mod modifiers;
 mod order;
 mod print;
