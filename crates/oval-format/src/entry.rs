@@ -1,3 +1,4 @@
+use oval_syntax::ast::{AstToken, MarkdownBody};
 use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken};
 
 pub(crate) struct Document {
@@ -10,8 +11,13 @@ pub(crate) struct Entry {
     pub(crate) leading: Vec<Trivia>,
     pub(crate) line: Vec<SyntaxToken>,
     pub(crate) comment: Option<String>,
-    pub(crate) body: Option<SyntaxToken>,
+    pub(crate) body: Option<Body>,
     pub(crate) children: Vec<Entry>,
+}
+
+pub(crate) struct Body {
+    pub(crate) leading: Vec<Trivia>,
+    pub(crate) value: String,
 }
 
 #[derive(PartialEq, Eq)]
@@ -62,7 +68,10 @@ impl Builder {
         for element in node.children_with_tokens() {
             match element {
                 SyntaxElement::Token(token) if token.kind() == SyntaxKind::MarkdownBlock => {
-                    entry.body = Some(token);
+                    entry.body = MarkdownBody::cast(token).map(|body| Body {
+                        leading: std::mem::take(&mut self.pending),
+                        value: body.value(),
+                    });
                 }
                 SyntaxElement::Token(token) if is_trailing_comment(&token) => {
                     entry.comment = Some(comment(&token));

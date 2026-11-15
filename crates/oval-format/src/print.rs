@@ -26,7 +26,16 @@ fn entries(entries: &[Entry], depth: usize, output: &mut String) {
         }
         output.push('\n');
         if let Some(body) = &entry.body {
-            output.push_str(body.text());
+            for trivia in &body.leading {
+                self::trivia(trivia, depth + 1, output);
+            }
+            for line in body.value.split('\n') {
+                if !line.is_empty() {
+                    output.push_str(&INDENT.repeat(depth + 1));
+                    output.push_str(line);
+                }
+                output.push('\n');
+            }
         }
         self::entries(&entry.children, depth + 1, output);
     }
@@ -92,6 +101,48 @@ mod tests {
     #[test]
     fn a_byte_order_mark_is_removed() {
         assert_eq!(formatted("\u{feff}oval 1\n"), "oval 1\n");
+    }
+
+    #[test]
+    fn a_body_is_one_level_deeper_than_its_keyword_and_keeps_its_own_indentation() {
+        assert_eq!(
+            formatted(
+                "oval 1\nnote:\n        Lists:\n\n          - one\n            more\n        - two\nballot @b \"B\"\n      note:\n       Text.\n      measure @m \"M\"\n        recommend yes\n            justification:\n                 Why.\n"
+            ),
+            "oval 1\nnote:\n  Lists:\n\n    - one\n      more\n  - two\nballot @b \"B\"\n  note:\n    Text.\n  measure @m \"M\"\n    recommend yes\n      justification:\n        Why.\n"
+        );
+    }
+
+    #[test]
+    fn blank_lines_inside_a_body_are_kept_and_whitespace_only_ones_become_empty() {
+        assert_eq!(
+            formatted("oval 1\nnote:\n    One.\n\n      \n\n    Two.\n\n\nguide \"G\"\n"),
+            "oval 1\nnote:\n  One.\n\n\n\n  Two.\n\nguide \"G\"\n"
+        );
+    }
+
+    #[test]
+    fn a_body_keeps_trailing_spaces_and_tabs_as_text() {
+        assert_eq!(
+            formatted("oval 1\nnote:\r\n    Hard  \r\n    \tbreak.   \r    End.\nguide \"G\"\n"),
+            "oval 1\nnote:\n  Hard  \n  \tbreak.   \n  End.\nguide \"G\"\n"
+        );
+    }
+
+    #[test]
+    fn a_body_at_the_end_of_the_document_ends_with_a_line_feed() {
+        assert_eq!(
+            formatted("oval 1\nnote:\n   Last."),
+            "oval 1\nnote:\n  Last.\n"
+        );
+    }
+
+    #[test]
+    fn a_blank_line_before_a_body_stays_with_it() {
+        assert_eq!(
+            formatted("oval 1\nnote:\n\n\n    Text.\nguide \"G\"\n"),
+            "oval 1\nnote:\n\n  Text.\nguide \"G\"\n"
+        );
     }
 
     #[test]
