@@ -102,6 +102,9 @@ dependencies = [
 [[package]]
 name = "oval-format"
 version = "0.1.10"
+dependencies = [
+ "oval-syntax",
+]
 
 [[package]]
 name = "oval-syntax"
