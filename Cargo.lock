@@ -205,6 +205,7 @@ version = "0.1.10"
 dependencies = [
  "clap",
  "oval-core",
+ "oval-format",
 ]
 
 [[package]]

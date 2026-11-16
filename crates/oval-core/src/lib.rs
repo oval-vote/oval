@@ -34,7 +34,7 @@ mod rule;
 mod validate;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode, Severity};
-pub use oval_syntax::InputRejection;
+pub use oval_syntax::{InputRejection, ParseResult};
 pub use report::Report;
 pub use rule::ValidationRule;
 
@@ -54,28 +54,54 @@ pub fn check(text: &str) -> Result<Report, InputRejection> {
     let parse = oval_syntax::parse(text)?;
     let diagnostics = match validate::validate(&parse.document()) {
         Ok(broken_rules) => {
-            let mut diagnostics: Vec<Diagnostic> = parse
-                .lexical_errors
-                .iter()
-                .map(|error| Diagnostic::from(error).described(text, &[]))
-                .chain(
-                    parse
-                        .syntax_errors
-                        .iter()
-                        .map(|error| Diagnostic::from(error).described(text, &error.expected)),
-                )
-                .chain(
-                    broken_rules
-                        .into_iter()
-                        .map(|diagnostic| diagnostic.described(text, &[])),
-                )
-                .collect();
+            let mut diagnostics = described_parse_errors(&parse, text);
+            diagnostics.extend(
+                broken_rules
+                    .into_iter()
+                    .map(|diagnostic| diagnostic.described(text, &[])),
+            );
             diagnostics.sort_by_key(|diagnostic| diagnostic.range.start());
             diagnostics
         }
         Err(unsupported_version) => vec![unsupported_version.described(text, &[])],
     };
     Ok(Report::new(parse, diagnostics))
+}
+
+/// Returns the lexical and syntax errors of a parse as diagnostics, ordered by where each one
+/// begins.
+///
+/// These are the problems that stop a document from being formatted. Unlike [`check`], it reports
+/// them even when the version marker is missing or unsupported, and it applies no validation rule.
+///
+/// ```
+/// let report = oval_core::check("guide \"G\n")?;
+/// assert_eq!(report.diagnostics()[0].code.spec_id(), "unsupported-version");
+/// assert_eq!(report.diagnostics().len(), 1);
+///
+/// let diagnostics = oval_core::parse_diagnostics(report.parse());
+/// assert_eq!(diagnostics[0].code.spec_id(), "unterminated-string");
+/// assert_eq!(diagnostics[0].message, "the string has no closing quote");
+/// # Ok::<(), oval_core::InputRejection>(())
+/// ```
+pub fn parse_diagnostics(parse: &ParseResult) -> Vec<Diagnostic> {
+    let mut diagnostics = described_parse_errors(parse, &parse.syntax().text().to_string());
+    diagnostics.sort_by_key(|diagnostic| diagnostic.range.start());
+    diagnostics
+}
+
+fn described_parse_errors(parse: &ParseResult, text: &str) -> Vec<Diagnostic> {
+    parse
+        .lexical_errors
+        .iter()
+        .map(|error| Diagnostic::from(error).described(text, &[]))
+        .chain(
+            parse
+                .syntax_errors
+                .iter()
+                .map(|error| Diagnostic::from(error).described(text, &error.expected)),
+        )
+        .collect()
 }
 
 #[cfg(test)]
