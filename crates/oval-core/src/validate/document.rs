@@ -12,16 +12,19 @@ pub(super) fn guide_fields(
     let line_end = content_range(marker.syntax())
         .expect("a marker begins with `oval`")
         .end();
-    for absent in [
-        document.guide().is_none(),
-        document.election().is_none(),
-        document.date().is_none(),
+    for (field, absent) in [
+        ("guide", document.guide().is_none()),
+        ("election", document.election().is_none()),
+        ("date", document.date().is_none()),
     ] {
         if absent {
-            diagnostics.push(diagnostic(
-                ValidationRule::MissingGuideField,
-                TextRange::empty(line_end),
-            ));
+            diagnostics.push(
+                diagnostic(
+                    ValidationRule::MissingGuideField,
+                    TextRange::empty(line_end),
+                )
+                .with_message(format!("the document has no `{field}` field")),
+            );
         }
     }
 }

@@ -47,7 +47,7 @@ fn a_valid_file_prints_nothing_and_succeeds() {
 }
 
 #[test]
-fn each_diagnostic_is_a_line_with_its_position_severity_and_identifier() {
+fn each_diagnostic_is_a_line_with_its_position_severity_identifier_and_message() {
     let text = VALID
         .replace("2026-11-03", "2026-02-30")
         .replace("ballot @b", "candidate @c \"C\"\nballot @b");
@@ -58,7 +58,7 @@ fn each_diagnostic_is_a_line_with_its_position_severity_and_identifier() {
     );
     assert_eq!(
         run.stdout,
-        "guide.oval:4:6: error[invalid-date]\nguide.oval:5:1: warning[unused-declaration]\n"
+        "guide.oval:4:6: error[invalid-date]: `2026-02-30` isn't a calendar date\nguide.oval:5:1: warning[unused-declaration]: nothing refers to this declaration\n"
     );
     assert_eq!(run.status, Some(1));
 }
@@ -71,7 +71,10 @@ fn warnings_alone_succeed() {
         &[("guide.oval", text.as_bytes())],
         &["guide.oval"],
     );
-    assert_eq!(run.stdout, "guide.oval:5:1: warning[unused-declaration]\n");
+    assert_eq!(
+        run.stdout,
+        "guide.oval:5:1: warning[unused-declaration]: nothing refers to this declaration\n"
+    );
     assert_eq!(run.status, Some(0));
 }
 
@@ -101,7 +104,10 @@ fn every_file_is_checked_and_the_worst_outcome_is_the_status() {
         ],
         &["valid.oval", "invalid.oval", "valid.oval"],
     );
-    assert_eq!(run.stdout, "invalid.oval:4:6: error[invalid-date]\n");
+    assert_eq!(
+        run.stdout,
+        "invalid.oval:4:6: error[invalid-date]: `2026-02-30` isn't a calendar date\n"
+    );
     assert_eq!(run.status, Some(1));
 }
 
@@ -128,7 +134,10 @@ fn a_file_that_cannot_be_checked_is_reported_on_standard_error_and_the_rest_are_
         lines[2],
         "oval: bytes.oval: the document is not valid UTF-8 at byte 7"
     );
-    assert_eq!(run.stdout, "invalid.oval:4:6: error[invalid-date]\n");
+    assert_eq!(
+        run.stdout,
+        "invalid.oval:4:6: error[invalid-date]: `2026-02-30` isn't a calendar date\n"
+    );
     assert_eq!(run.status, Some(2));
 }
 

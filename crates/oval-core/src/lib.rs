@@ -27,6 +27,7 @@
 
 mod compile;
 mod diagnostic;
+mod message;
 pub mod model;
 mod report;
 mod rule;
@@ -56,14 +57,23 @@ pub fn check(text: &str) -> Result<Report, InputRejection> {
             let mut diagnostics: Vec<Diagnostic> = parse
                 .lexical_errors
                 .iter()
-                .map(Diagnostic::from)
-                .chain(parse.syntax_errors.iter().map(Diagnostic::from))
-                .chain(broken_rules)
+                .map(|error| Diagnostic::from(error).described(text, &[]))
+                .chain(
+                    parse
+                        .syntax_errors
+                        .iter()
+                        .map(|error| Diagnostic::from(error).described(text, &error.expected)),
+                )
+                .chain(
+                    broken_rules
+                        .into_iter()
+                        .map(|diagnostic| diagnostic.described(text, &[])),
+                )
                 .collect();
             diagnostics.sort_by_key(|diagnostic| diagnostic.range.start());
             diagnostics
         }
-        Err(unsupported_version) => vec![unsupported_version],
+        Err(unsupported_version) => vec![unsupported_version.described(text, &[])],
     };
     Ok(Report::new(parse, diagnostics))
 }

@@ -1,4 +1,6 @@
-use oval_syntax::{LexicalError, LexicalErrorKind, SyntaxError, SyntaxErrorKind, TextRange};
+use oval_syntax::{
+    Expected, LexicalError, LexicalErrorKind, SyntaxError, SyntaxErrorKind, TextRange,
+};
 
 use crate::ValidationRule;
 
@@ -52,6 +54,9 @@ pub struct Diagnostic {
     /// The bytes of the document the problem spans. A missing token spans no bytes, and sits where
     /// the token would have begun.
     pub range: TextRange,
+    /// A sentence describing the problem for a person to read, such as
+    /// ``"`2026-02-30` isn't a calendar date"``.
+    pub message: String,
 }
 
 impl Diagnostic {
@@ -60,7 +65,21 @@ impl Diagnostic {
             code,
             severity: code.severity(),
             range,
+            message: String::new(),
         }
+    }
+
+    pub(crate) fn with_message(mut self, message: String) -> Self {
+        self.message = message;
+        self
+    }
+
+    pub(crate) fn described(mut self, text: &str, expected: &[Expected]) -> Self {
+        if self.message.is_empty() {
+            let spanned = &text[usize::from(self.range.start())..usize::from(self.range.end())];
+            self.message = crate::message::message(self.code, spanned, expected);
+        }
+        self
     }
 }
 

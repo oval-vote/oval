@@ -1,9 +1,10 @@
 //! The `oval` command line tool for Oval voting guides.
 //!
 //! `oval check FILE...` parses and validates each file and prints every diagnostic, errors and
-//! warnings alike, to standard output, one per line as `file:line:column: severity[identifier]`.
-//! The line and column are one-based, and the column counts characters. The identifier is the
-//! diagnostic's identifier in the specification, such as `missing-guide-field`.
+//! warnings alike, to standard output, one per line as
+//! `file:line:column: severity[identifier]: message`. The line and column are one-based, and the
+//! column counts characters. The identifier is the diagnostic's identifier in the specification,
+//! such as `missing-guide-field`, and the message says what is wrong for a person to read.
 //!
 //! A file that can't be read, or that is rejected before lexing, is reported on standard error in
 //! one line starting `oval:`, and the remaining files are still checked.
@@ -125,9 +126,10 @@ fn print(output: &mut impl Write, path: &Path, text: &str, report: &Report) -> i
         };
         writeln!(
             output,
-            "{}:{line}:{column}: {severity}[{}]",
+            "{}:{line}:{column}: {severity}[{}]: {}",
             path.display(),
-            diagnostic.code.spec_id()
+            diagnostic.code.spec_id(),
+            diagnostic.message
         )?;
     }
     Ok(if report.has_errors() {
