@@ -123,3 +123,20 @@ fn a_command_without_files_is_a_usage_error() {
     assert_eq!(run.status, Some(2));
     assert!(run.stderr.contains("Usage: oval check"), "{}", run.stderr);
 }
+
+#[test]
+fn strict_fails_a_file_with_warnings() {
+    let text = VALID.replace("ballot @b", "candidate @c \"C\"\nballot @b");
+    let files: &[(&str, &[u8])] = &[
+        ("warned.oval", text.as_bytes()),
+        ("valid.oval", VALID.as_bytes()),
+    ];
+    let strict = run("strict", files, &["check", "--strict", "warned.oval"]);
+    assert_eq!(
+        strict.stdout,
+        "warned.oval:5:1: warning[unused-declaration]: nothing refers to this declaration\n"
+    );
+    assert_eq!(strict.status, Some(1));
+    let clean = run("strict-clean", files, &["check", "--strict", "valid.oval"]);
+    assert_eq!(clean.status, Some(0));
+}

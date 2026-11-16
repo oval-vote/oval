@@ -15,15 +15,23 @@
 //! would change instead. A file with lexical or syntax errors is never formatted, and its errors go
 //! to standard error in the same form as diagnostics.
 //!
+//! With `--json`, each command prints its diagnostics as one JSON array on the same stream instead,
+//! with an object for each diagnostic whose keys are `path`, `code`, `severity`, `message`, `start`
+//! and `end` as a one-based `line` and `column`, and `range` as the byte offsets `start` and `end`.
+//! `check` prints the array even when it's empty, and `compile` and `fmt` only when it isn't.
+//!
 //! A file that can't be read or written, or that is rejected before lexing, is reported on standard
-//! error in one line starting `oval:`, and the remaining files are still processed.
+//! error in one line starting `oval:`, even with `--json`, and the remaining files are still
+//! processed.
 //!
 //! The exit status is the worst outcome among the files. It's 0 on success, including when the
-//! only diagnostics are warnings. It's 1 when a file has an error, or under `fmt --check` would
-//! change, and 2 when a file can't be read or written or the command line is invalid. When standard
+//! only diagnostics are warnings and `check` isn't given `--strict`. It's 1 when a file has an
+//! error, or a warning under `check --strict`, or under `fmt --check` would change, and 2 when a
+//! file can't be read or written or the command line is invalid. When standard
 //! output is closed early, as by `head`, the run stops with status 0.
 
 mod line_index;
+mod printer;
 
 use std::fmt;
 use std::fs;
@@ -32,10 +40,10 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use oval_core::{Diagnostic, InputRejection, Report, Severity};
+use oval_core::{InputRejection, Report};
 use oval_format::FormatError;
 
-use crate::line_index::LineIndex;
+use crate::printer::Printer;
 
 #[derive(Parser)]
 #[command(name = "oval", version, about = "Tools for Oval voting guides")]
@@ -50,6 +58,10 @@ enum Command {
     Check {
         #[arg(required = true, help = "The files to check")]
         files: Vec<PathBuf>,
+        #[arg(long, help = "Fail when a file has warnings, not only errors")]
+        strict: bool,
+        #[arg(long, help = "Print the diagnostics as one JSON array")]
+        json: bool,
     },
     #[command(about = "Compile a document to its canonical JSON")]
     Compile {
@@ -57,6 +69,8 @@ enum Command {
         file: PathBuf,
         #[arg(long, help = "Indent the JSON for reading")]
         pretty: bool,
+        #[arg(long, help = "Print the diagnostics as one JSON array")]
+        json: bool,
     },
     #[command(about = "Rewrite one or more documents in the canonical style")]
     Fmt {
@@ -64,6 +78,8 @@ enum Command {
         files: Vec<PathBuf>,
         #[arg(long, help = "Rewrite nothing, and list the files that would change")]
         check: bool,
+        #[arg(long, help = "Print the diagnostics as one JSON array")]
+        json: bool,
     },
 }
 
@@ -113,9 +129,17 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let mut output = BufWriter::new(io::stdout().lock());
     let result = match cli.command {
-        Command::Check { files } => check(&files, &mut output),
-        Command::Compile { file, pretty } => compile(&file, pretty, &mut output),
-        Command::Fmt { files, check } => format(&files, check, &mut output),
+        Command::Check {
+            files,
+            strict,
+            json,
+        } => check(&files, strict, Printer::new(json), &mut output),
+        Command::Compile { file, pretty, json } => {
+            compile(&file, pretty, Printer::new(json), &mut output)
+        }
+        Command::Fmt { files, check, json } => {
+            format(&files, check, Printer::new(json), &mut output)
+        }
     }
     .and_then(|status| output.flush().map(|()| status));
     match result {
@@ -128,27 +152,45 @@ fn main() -> ExitCode {
     }
 }
 
-fn check(files: &[PathBuf], output: &mut impl Write) -> io::Result<Status> {
+fn check(
+    files: &[PathBuf],
+    strict: bool,
+    mut printer: Printer,
+    output: &mut impl Write,
+) -> io::Result<Status> {
     let mut status = Status::Success;
     for path in files {
         let file_status = match load(path) {
             Ok((text, report)) => {
-                print(output, path, &text, report.diagnostics())?;
-                status_of(&report)
+                printer.print(output, path, &text, report.diagnostics())?;
+                let fails = report.has_errors() || strict && !report.diagnostics().is_empty();
+                if fails {
+                    Status::Failure
+                } else {
+                    Status::Success
+                }
             }
             Err(problem) => problem.report(path),
         };
         status = status.max(file_status);
     }
+    printer.finish(output, true)?;
     Ok(status)
 }
 
-fn compile(path: &Path, pretty: bool, output: &mut impl Write) -> io::Result<Status> {
+fn compile(
+    path: &Path,
+    pretty: bool,
+    mut printer: Printer,
+    output: &mut impl Write,
+) -> io::Result<Status> {
     let (text, report) = match load(path) {
         Ok(loaded) => loaded,
         Err(problem) => return Ok(problem.report(path)),
     };
-    print(&mut io::stderr().lock(), path, &text, report.diagnostics())?;
+    let mut errors = io::stderr().lock();
+    printer.print(&mut errors, path, &text, report.diagnostics())?;
+    printer.finish(&mut errors, false)?;
     let Some(compiled) = report.compile() else {
         return Ok(Status::Failure);
     };
@@ -161,7 +203,12 @@ fn compile(path: &Path, pretty: bool, output: &mut impl Write) -> io::Result<Sta
     Ok(Status::Success)
 }
 
-fn format(files: &[PathBuf], check: bool, output: &mut impl Write) -> io::Result<Status> {
+fn format(
+    files: &[PathBuf],
+    check: bool,
+    mut printer: Printer,
+    output: &mut impl Write,
+) -> io::Result<Status> {
     let mut status = Status::Success;
     for path in files {
         let text = match read(path) {
@@ -184,12 +231,13 @@ fn format(files: &[PathBuf], check: bool, output: &mut impl Write) -> io::Result
             Err(FormatError::Rejected(rejection)) => Problem::Rejected(rejection).report(path),
             Err(FormatError::Malformed(parse)) => {
                 let diagnostics = oval_core::parse_diagnostics(&parse);
-                print(&mut io::stderr().lock(), path, &text, &diagnostics)?;
+                printer.print(&mut io::stderr().lock(), path, &text, &diagnostics)?;
                 Status::Failure
             }
         };
         status = status.max(file_status);
     }
+    printer.finish(&mut io::stderr().lock(), false)?;
     Ok(status)
 }
 
@@ -206,36 +254,4 @@ fn load(path: &Path) -> Result<(String, Report), Problem> {
     let text = read(path)?;
     let report = oval_core::check(&text).map_err(Problem::Rejected)?;
     Ok((text, report))
-}
-
-fn status_of(report: &Report) -> Status {
-    if report.has_errors() {
-        Status::Failure
-    } else {
-        Status::Success
-    }
-}
-
-fn print(
-    output: &mut impl Write,
-    path: &Path,
-    text: &str,
-    diagnostics: &[Diagnostic],
-) -> io::Result<()> {
-    let index = LineIndex::new(text);
-    for diagnostic in diagnostics {
-        let (line, column) = index.position(diagnostic.range.start().into());
-        let severity = match diagnostic.severity {
-            Severity::Error => "error",
-            Severity::Warning => "warning",
-        };
-        writeln!(
-            output,
-            "{}:{line}:{column}: {severity}[{}]: {}",
-            path.display(),
-            diagnostic.code.spec_id(),
-            diagnostic.message
-        )?;
-    }
-    Ok(())
 }

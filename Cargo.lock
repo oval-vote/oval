@@ -206,6 +206,8 @@ dependencies = [
  "clap",
  "oval-core",
  "oval-format",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
