@@ -17,10 +17,12 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+mod completion;
 mod hover;
 mod outline;
 mod symbols;
 
+pub use completion::{Completion, CompletionKind};
 pub use hover::Hover;
 pub use outline::{OutlineItem, OutlineKind};
 pub use oval_core::InputRejection;

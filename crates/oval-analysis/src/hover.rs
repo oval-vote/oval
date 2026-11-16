@@ -100,7 +100,7 @@ fn keyword(token: &SyntaxToken) -> Option<Keyword> {
     Keyword::from_text(token.text())
 }
 
-fn sentence(keyword: Keyword) -> &'static str {
+pub(crate) fn sentence(keyword: Keyword) -> &'static str {
     match keyword {
         Keyword::Oval => "gives the major version of Oval the document is written in",
         Keyword::Guide => "gives the voter guide's name",
