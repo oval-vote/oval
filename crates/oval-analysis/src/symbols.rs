@@ -1,5 +1,5 @@
-use oval_core::{Declaration, Reference};
-use oval_syntax::ast::{AstNode, Identifier};
+use oval_core::{Declaration, Reference, ReferenceKind, Symbols};
+use oval_syntax::ast::{AstNode, Contest, Identifier};
 use oval_syntax::{TextRange, TextSize};
 
 use crate::Analysis;
@@ -100,6 +100,51 @@ impl Analysis {
         occurrences.sort_by_key(|occurrence| occurrence.range.start());
         occurrences
     }
+}
+
+pub(crate) fn nameable<'a>(symbols: &'a Symbols, reference: &Reference) -> Vec<&'a Declaration> {
+    let named: Vec<Identifier> = if reference.kind == ReferenceKind::Stance {
+        reference
+            .identifier
+            .syntax()
+            .ancestors()
+            .find_map(Contest::cast)
+            .map(|contest| members(&contest))
+            .unwrap_or_default()
+    } else {
+        symbols
+            .declarations()
+            .iter()
+            .map(|declaration| declaration.identifier.clone())
+            .collect()
+    };
+    let mut positions = Vec::new();
+    for identifier in named {
+        let Some(position) = symbols.resolve(&identifier) else {
+            continue;
+        };
+        let entity = symbols.declarations()[position].entity;
+        if !positions.contains(&position) && reference.kind.accepts(entity) {
+            positions.push(position);
+        }
+    }
+    positions
+        .into_iter()
+        .map(|position| &symbols.declarations()[position])
+        .collect()
+}
+
+fn members(contest: &Contest) -> Vec<Identifier> {
+    contest
+        .campaigns()
+        .flat_map(|campaign| {
+            let members = campaign.members().filter_map(|member| member.identifier());
+            let parties = campaign
+                .party_members()
+                .filter_map(|member| member.identifier());
+            members.chain(parties).collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 fn text(identifier: &Identifier) -> Option<String> {

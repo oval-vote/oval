@@ -1,11 +1,12 @@
-use oval_core::{Entity, ReferenceKind, Symbols};
-use oval_syntax::ast::{AstNode, Contest, Identifier};
+use oval_core::{Entity, Symbols};
+use oval_syntax::ast::{AstNode, Identifier};
 use oval_syntax::{
     Expected, Keyword, ParseResult, SyntaxErrorKind, TextRange, TextSize, TokenKind,
 };
 
 use crate::Analysis;
 use crate::hover::sentence;
+use crate::symbols::nameable;
 
 const PLACEHOLDER: &str = "zqovalcompletionzq";
 
@@ -165,54 +166,16 @@ impl<'a> Probe<'a> {
         else {
             return Vec::new();
         };
-        let named: Vec<Identifier> = if reference.kind == ReferenceKind::Stance {
-            reference
-                .identifier
-                .syntax()
-                .ancestors()
-                .find_map(Contest::cast)
-                .map(|contest| members(&contest))
-                .unwrap_or_default()
-        } else {
-            symbols
-                .declarations()
-                .iter()
-                .map(|declaration| declaration.identifier.clone())
-                .collect()
-        };
-        let mut offered = Vec::new();
-        let mut completions = Vec::new();
-        for identifier in named {
-            let Some(position) = symbols.resolve(&identifier) else {
-                continue;
-            };
-            let declaration = &symbols.declarations()[position];
-            if offered.contains(&position) || !reference.kind.accepts(declaration.entity) {
-                continue;
-            }
-            offered.push(position);
-            completions.push(Completion {
+        nameable(&symbols, reference)
+            .into_iter()
+            .map(|declaration| Completion {
                 label: declaration.identifier.syntax().text().to_string(),
                 kind: CompletionKind::Identifier(declaration.entity),
                 detail: declaration.name().map(|name| name.value().into_owned()),
                 replace: self.replace,
-            });
-        }
-        completions
+            })
+            .collect()
     }
-}
-
-fn members(contest: &Contest) -> Vec<Identifier> {
-    contest
-        .campaigns()
-        .flat_map(|campaign| {
-            let members = campaign.members().filter_map(|member| member.identifier());
-            let parties = campaign
-                .party_members()
-                .filter_map(|member| member.identifier());
-            members.chain(parties).collect::<Vec<_>>()
-        })
-        .collect()
 }
 
 fn is_placeholder(identifier: &Identifier) -> bool {

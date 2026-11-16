@@ -18,11 +18,13 @@
 //! ```
 
 mod completion;
+mod fix;
 mod hover;
 mod outline;
 mod symbols;
 
 pub use completion::{Completion, CompletionKind};
+pub use fix::{Edit, Fix};
 pub use hover::Hover;
 pub use outline::{OutlineItem, OutlineKind};
 pub use oval_core::InputRejection;
