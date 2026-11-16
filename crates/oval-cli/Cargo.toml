@@ -13,5 +13,9 @@ publish.workspace = true
 name = "oval"
 path = "src/main.rs"
 
+[dependencies]
+clap.workspace = true
+oval-core.workspace = true
+
 [lints]
 workspace = true
