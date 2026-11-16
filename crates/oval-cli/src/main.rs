@@ -6,11 +6,15 @@
 //! column counts characters. The identifier is the diagnostic's identifier in the specification,
 //! such as `missing-guide-field`, and the message says what is wrong for a person to read.
 //!
+//! `oval compile FILE` compiles one file to its canonical JSON on standard output, compact or, with
+//! `--pretty`, indented. Its diagnostics go to standard error in the same form, and a file with an
+//! error prints no JSON.
+//!
 //! A file that can't be read, or that is rejected before lexing, is reported on standard error in
 //! one line starting `oval:`, and the remaining files are still checked.
 //!
 //! The exit status is the worst outcome among the files. It's 0 when no file has an error, 1 when
-//! a file has an error, and 2 when a file can't be checked or the command line is invalid. When
+//! a file has an error, and 2 when a file can't be read or the command line is invalid. When
 //! standard output is closed early, as by `head`, the run stops with status 0.
 
 mod line_index;
@@ -39,6 +43,13 @@ enum Command {
     Check {
         #[arg(required = true, help = "The files to check")]
         files: Vec<PathBuf>,
+    },
+    #[command(about = "Compile a document to its canonical JSON")]
+    Compile {
+        #[arg(help = "The file to compile")]
+        file: PathBuf,
+        #[arg(long, help = "Indent the JSON for reading")]
+        pretty: bool,
     },
 }
 
@@ -78,6 +89,7 @@ fn main() -> ExitCode {
     let mut output = BufWriter::new(io::stdout().lock());
     let result = match cli.command {
         Command::Check { files } => check(&files, &mut output),
+        Command::Compile { file, pretty } => compile(&file, pretty, &mut output),
     }
     .and_then(|status| output.flush().map(|()| status));
     match result {
@@ -103,6 +115,27 @@ fn check(files: &[PathBuf], output: &mut impl Write) -> io::Result<Status> {
         status = status.max(file_status);
     }
     Ok(status)
+}
+
+fn compile(path: &Path, pretty: bool, output: &mut impl Write) -> io::Result<Status> {
+    let (text, report) = match load(path) {
+        Ok(loaded) => loaded,
+        Err(problem) => {
+            eprintln!("oval: {}: {problem}", path.display());
+            return Ok(Status::Error);
+        }
+    };
+    print(&mut io::stderr().lock(), path, &text, &report)?;
+    let Some(compiled) = report.compile() else {
+        return Ok(Status::Failure);
+    };
+    let json = if pretty {
+        compiled.to_json_pretty()
+    } else {
+        compiled.to_json()
+    };
+    writeln!(output, "{json}")?;
+    Ok(Status::Success)
 }
 
 fn load(path: &Path) -> Result<(String, Report), Problem> {

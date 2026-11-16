@@ -1,45 +1,15 @@
 //! Runs `oval check` on files and checks what it prints and its exit status.
 
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
+mod common;
 
-const VALID: &str = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n";
-
-struct Run {
-    status: Option<i32>,
-    stdout: String,
-    stderr: String,
-}
-
-fn run(test: &str, files: &[(&str, &[u8])], arguments: &[&str]) -> Run {
-    let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("check")
-        .join(test);
-    let _ = fs::remove_dir_all(&directory);
-    fs::create_dir_all(&directory).unwrap();
-    for (name, contents) in files {
-        fs::write(directory.join(name), contents).unwrap();
-    }
-    let output = Command::new(env!("CARGO_BIN_EXE_oval"))
-        .arg("check")
-        .args(arguments)
-        .current_dir(&directory)
-        .output()
-        .unwrap();
-    Run {
-        status: output.status.code(),
-        stdout: String::from_utf8(output.stdout).unwrap(),
-        stderr: String::from_utf8(output.stderr).unwrap(),
-    }
-}
+use common::{VALID, run};
 
 #[test]
 fn a_valid_file_prints_nothing_and_succeeds() {
     let run = run(
         "valid",
         &[("guide.oval", VALID.as_bytes())],
-        &["guide.oval"],
+        &["check", "guide.oval"],
     );
     assert_eq!(run.status, Some(0));
     assert_eq!(run.stdout, "");
@@ -54,7 +24,7 @@ fn each_diagnostic_is_a_line_with_its_position_severity_identifier_and_message()
     let run = run(
         "diagnostics",
         &[("guide.oval", text.as_bytes())],
-        &["guide.oval"],
+        &["check", "guide.oval"],
     );
     assert_eq!(
         run.stdout,
@@ -69,7 +39,7 @@ fn warnings_alone_succeed() {
     let run = run(
         "warnings",
         &[("guide.oval", text.as_bytes())],
-        &["guide.oval"],
+        &["check", "guide.oval"],
     );
     assert_eq!(
         run.stdout,
@@ -84,7 +54,7 @@ fn a_column_counts_characters() {
     let run = run(
         "columns",
         &[("guide.oval", text.as_bytes())],
-        &["guide.oval"],
+        &["check", "guide.oval"],
     );
     assert!(
         run.stdout.starts_with("guide.oval:2:12: error["),
@@ -102,7 +72,7 @@ fn every_file_is_checked_and_the_worst_outcome_is_the_status() {
             ("valid.oval", VALID.as_bytes()),
             ("invalid.oval", invalid.as_bytes()),
         ],
-        &["valid.oval", "invalid.oval", "valid.oval"],
+        &["check", "valid.oval", "invalid.oval", "valid.oval"],
     );
     assert_eq!(
         run.stdout,
@@ -121,7 +91,13 @@ fn a_file_that_cannot_be_checked_is_reported_on_standard_error_and_the_rest_are_
             ("bytes.oval", b"oval 1\n\xff\n"),
             ("invalid.oval", invalid.as_bytes()),
         ],
-        &["missing.oval", "nul.oval", "bytes.oval", "invalid.oval"],
+        &[
+            "check",
+            "missing.oval",
+            "nul.oval",
+            "bytes.oval",
+            "invalid.oval",
+        ],
     );
     let lines: Vec<&str> = run.stderr.lines().collect();
     assert_eq!(lines.len(), 3, "{}", run.stderr);
@@ -143,7 +119,7 @@ fn a_file_that_cannot_be_checked_is_reported_on_standard_error_and_the_rest_are_
 
 #[test]
 fn a_command_without_files_is_a_usage_error() {
-    let run = run("usage", &[], &[]);
+    let run = run("usage", &[], &["check"]);
     assert_eq!(run.status, Some(2));
     assert!(run.stderr.contains("Usage: oval check"), "{}", run.stderr);
 }
