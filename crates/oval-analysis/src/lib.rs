@@ -17,9 +17,11 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+mod hover;
 mod outline;
 mod symbols;
 
+pub use hover::Hover;
 pub use outline::{OutlineItem, OutlineKind};
 pub use oval_core::InputRejection;
 pub use symbols::{Occurrence, Symbol};
