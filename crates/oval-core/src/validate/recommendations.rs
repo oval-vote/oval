@@ -7,8 +7,8 @@ use oval_syntax::ast::{
 use oval_syntax::{SyntaxNode, TextRange};
 
 use super::campaigns::members;
-use super::index::{Entity, Index};
 use super::{content_range, diagnostic, header_range, kept_nodes};
+use crate::symbols::{Entity, Symbols};
 use crate::{Diagnostic, ValidationRule};
 
 pub(super) fn recommendation_counts(document: &Document, diagnostics: &mut Vec<Diagnostic>) {
@@ -43,7 +43,7 @@ pub(super) fn recommendation_counts(document: &Document, diagnostics: &mut Vec<D
     }
 }
 
-pub(super) fn stances(document: &Document, index: &Index, diagnostics: &mut Vec<Diagnostic>) {
+pub(super) fn stances(document: &Document, symbols: &Symbols, diagnostics: &mut Vec<Diagnostic>) {
     for contest in kept_nodes(document.syntax()).filter_map(Contest::cast) {
         let campaigns: Vec<HashSet<String>> = contest
             .campaigns()
@@ -59,12 +59,12 @@ pub(super) fn stances(document: &Document, index: &Index, diagnostics: &mut Vec<
         let candidates: HashSet<String> = contest
             .campaigns()
             .flat_map(|campaign| campaign.members().collect::<Vec<_>>())
-            .filter_map(|member| candidate_name(&member, index))
+            .filter_map(|member| candidate_name(&member, symbols))
             .collect();
         for recommendation in contest.recommendations() {
             let stances = Stances {
                 campaigns: &campaigns,
-                index,
+                symbols,
                 recommendation: &recommendation,
             };
             stances.repeated_lines(method, diagnostics);
@@ -83,7 +83,7 @@ pub(super) fn stances(document: &Document, index: &Index, diagnostics: &mut Vec<
 
 struct Stances<'a> {
     campaigns: &'a [HashSet<String>],
-    index: &'a Index,
+    symbols: &'a Symbols,
     recommendation: &'a ContestRecommend,
 }
 
@@ -145,11 +145,11 @@ impl Stances<'_> {
                 continue;
             };
             let (Some(name), Some(declaration)) =
-                (identifier.name(), self.index.resolve(&identifier))
+                (identifier.name(), self.symbols.resolve(&identifier))
             else {
                 continue;
             };
-            let entity = self.index.declarations[declaration].entity;
+            let entity = self.symbols.declarations()[declaration].entity;
             let names_a_campaign = matches!(entity, Entity::Candidate | Entity::Party);
             if names_a_campaign && self.campaign_of(name.text()).is_none() {
                 push(
@@ -241,8 +241,8 @@ impl Stances<'_> {
     }
 }
 
-fn candidate_name(member: &Member, index: &Index) -> Option<String> {
-    let declaration = &index.declarations[index.resolve(&member.identifier()?)?];
+fn candidate_name(member: &Member, symbols: &Symbols) -> Option<String> {
+    let declaration = &symbols.declarations()[symbols.resolve(&member.identifier()?)?];
     if declaration.entity != Entity::Candidate {
         return None;
     }

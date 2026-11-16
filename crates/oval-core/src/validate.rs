@@ -1,13 +1,12 @@
 use oval_syntax::ast::Document;
 use oval_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, SyntaxToken, TextRange, TokenKind};
 
-use crate::{Diagnostic, DiagnosticCode, ValidationRule};
+use crate::{Diagnostic, DiagnosticCode, Symbols, ValidationRule};
 
 mod ballots;
 mod campaigns;
 mod contests;
 mod document;
-mod index;
 mod literals;
 mod markdown;
 mod measures;
@@ -24,10 +23,10 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     document::guide_fields(document, &marker, &mut diagnostics);
     document::root_ballots(document, &mut diagnostics);
     literals::literals(document, &mut diagnostics);
-    let index = index::Index::new(document);
-    references::duplicate_declarations(&index, &mut diagnostics);
-    references::references(&index, &mut diagnostics);
-    references::blocks_on_references(&index, &mut diagnostics);
+    let symbols = Symbols::new(document);
+    references::duplicate_declarations(&symbols, &mut diagnostics);
+    references::references(&symbols, &mut diagnostics);
+    references::blocks_on_references(&symbols, &mut diagnostics);
     campaigns::misplaced_candidate_fields(document, &mut diagnostics);
     ballots::empty_ballots(document, &mut diagnostics);
     ballots::empty_sections(document, &mut diagnostics);
@@ -35,22 +34,22 @@ pub(crate) fn validate(document: &Document) -> Result<Vec<Diagnostic>, Diagnosti
     campaigns::campaigns_without_members(document, &mut diagnostics);
     campaigns::duplicate_members(document, &mut diagnostics);
     campaigns::members_in_two_campaigns(document, &mut diagnostics);
-    campaigns::parties_in_two_campaigns(document, &index, &mut diagnostics);
+    campaigns::parties_in_two_campaigns(document, &symbols, &mut diagnostics);
     contests::contest_kinds(document, &mut diagnostics);
     recommendations::recommendation_counts(document, &mut diagnostics);
-    recommendations::stances(document, &index, &mut diagnostics);
+    recommendations::stances(document, &symbols, &mut diagnostics);
     questions::abstentions_on_required(document, &mut diagnostics);
     questions::write_ins_not_accepted(document, &mut diagnostics);
     questions::extensible_retentions(document, &mut diagnostics);
     measures::unpaired_outcomes(document, &mut diagnostics);
     markdown::markdown_profile(document, &mut diagnostics);
-    references::unused_declarations(&index, &mut diagnostics);
-    references::duplicate_party_names(&index, &mut diagnostics);
+    references::unused_declarations(&symbols, &mut diagnostics);
+    references::duplicate_party_names(&symbols, &mut diagnostics);
     ballots::duplicate_ballot_titles(document, &mut diagnostics);
     Ok(diagnostics)
 }
 
-fn kept_nodes(node: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> + use<> {
+pub(crate) fn kept_nodes(node: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> + use<> {
     node.descendants().filter(|node| {
         !node
             .ancestors()

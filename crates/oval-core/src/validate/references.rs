@@ -1,13 +1,13 @@
 use oval_syntax::SyntaxKind;
 use oval_syntax::ast::{AstNode, AstToken};
 
-use super::index::{Entity, Index};
 use super::{content_range, diagnostic, header_range};
+use crate::symbols::{Entity, Symbols};
 use crate::{Diagnostic, ValidationRule};
 
-pub(super) fn duplicate_declarations(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
-    for (position, declaration) in index.declarations.iter().enumerate() {
-        if index.resolve(&declaration.identifier) != Some(position) {
+pub(super) fn duplicate_declarations(symbols: &Symbols, diagnostics: &mut Vec<Diagnostic>) {
+    for (position, declaration) in symbols.declarations().iter().enumerate() {
+        if symbols.resolve(&declaration.identifier) != Some(position) {
             diagnostics.push(diagnostic(
                 ValidationRule::DuplicateDeclaration,
                 declaration.identifier.syntax().text_range(),
@@ -16,14 +16,14 @@ pub(super) fn duplicate_declarations(index: &Index, diagnostics: &mut Vec<Diagno
     }
 }
 
-pub(super) fn references(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
-    for reference in &index.references {
-        let rule = match index.resolve(&reference.identifier) {
+pub(super) fn references(symbols: &Symbols, diagnostics: &mut Vec<Diagnostic>) {
+    for reference in symbols.references() {
+        let rule = match symbols.resolve(&reference.identifier) {
             None => ValidationRule::UndeclaredReference,
             Some(declaration)
                 if !reference
-                    .position
-                    .accepts(index.declarations[declaration].entity) =>
+                    .kind
+                    .accepts(symbols.declarations()[declaration].entity) =>
             {
                 ValidationRule::MismatchedReference
             }
@@ -33,8 +33,8 @@ pub(super) fn references(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
     }
 }
 
-pub(super) fn blocks_on_references(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
-    for reference in &index.references {
+pub(super) fn blocks_on_references(symbols: &Symbols, diagnostics: &mut Vec<Diagnostic>) {
+    for reference in symbols.references() {
         let Some(block) = reference.identifier.syntax().parent().and_then(|node| {
             node.children()
                 .find(|child| child.kind() == SyntaxKind::Block)
@@ -53,10 +53,10 @@ pub(super) fn blocks_on_references(index: &Index, diagnostics: &mut Vec<Diagnost
     }
 }
 
-pub(super) fn duplicate_party_names(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
+pub(super) fn duplicate_party_names(symbols: &Symbols, diagnostics: &mut Vec<Diagnostic>) {
     let mut earlier: Vec<(String, String)> = Vec::new();
-    let parties = index
-        .declarations
+    let parties = symbols
+        .declarations()
         .iter()
         .filter(|declaration| declaration.entity == Entity::Party);
     for party in parties {
@@ -77,16 +77,16 @@ pub(super) fn duplicate_party_names(index: &Index, diagnostics: &mut Vec<Diagnos
     }
 }
 
-pub(super) fn unused_declarations(index: &Index, diagnostics: &mut Vec<Diagnostic>) {
-    let mut used = vec![false; index.declarations.len()];
-    for reference in &index.references {
-        if reference.position.is_use()
-            && let Some(declaration) = index.resolve(&reference.identifier)
+pub(super) fn unused_declarations(symbols: &Symbols, diagnostics: &mut Vec<Diagnostic>) {
+    let mut used = vec![false; symbols.declarations().len()];
+    for reference in symbols.references() {
+        if reference.kind.is_use()
+            && let Some(declaration) = symbols.resolve(&reference.identifier)
         {
             used[declaration] = true;
         }
     }
-    for (declaration, used) in index.declarations.iter().zip(used) {
+    for (declaration, used) in symbols.declarations().iter().zip(used) {
         let Some(node) = declaration.identifier.syntax().parent() else {
             continue;
         };

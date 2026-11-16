@@ -5,8 +5,8 @@ use oval_syntax::ast::{
 };
 use oval_syntax::{SyntaxKind, SyntaxNode, TextRange};
 
-use super::index::{Entity, Index};
 use super::{content_range, diagnostic, header_range, kept_nodes};
+use crate::symbols::{Entity, Symbols};
 use crate::{Diagnostic, ValidationRule};
 
 pub(super) fn misplaced_candidate_fields(document: &Document, diagnostics: &mut Vec<Diagnostic>) {
@@ -73,7 +73,7 @@ pub(super) fn members_in_two_campaigns(document: &Document, diagnostics: &mut Ve
 
 pub(super) fn parties_in_two_campaigns(
     document: &Document,
-    index: &Index,
+    symbols: &Symbols,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for contest in kept_nodes(document.syntax()).filter_map(Contest::cast) {
@@ -81,7 +81,7 @@ pub(super) fn parties_in_two_campaigns(
         let mut later = Vec::new();
         for (position, campaign) in campaigns.iter().enumerate() {
             for candidate in campaign.members() {
-                let Some(party) = candidate_party(&candidate, index) else {
+                let Some(party) = candidate_party(&candidate, symbols) else {
                     continue;
                 };
                 let others = campaigns
@@ -121,8 +121,8 @@ fn name(node: &SyntaxNode) -> Option<String> {
     Some(identifier.name()?.text().to_owned())
 }
 
-fn candidate_party(member: &Member, index: &Index) -> Option<String> {
-    let declaration = &index.declarations[index.resolve(&member.identifier()?)?];
+fn candidate_party(member: &Member, symbols: &Symbols) -> Option<String> {
+    let declaration = &symbols.declarations()[symbols.resolve(&member.identifier()?)?];
     if declaration.entity != Entity::Candidate {
         return None;
     }

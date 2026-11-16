@@ -31,12 +31,14 @@ mod message;
 pub mod model;
 mod report;
 mod rule;
+mod symbols;
 mod validate;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode, Severity};
 pub use oval_syntax::{InputRejection, ParseResult};
 pub use report::Report;
 pub use rule::ValidationRule;
+pub use symbols::{Declaration, Entity, Reference, ReferenceKind, Symbols};
 
 /// Parses and validates a document, and reports every problem found in it.
 ///
