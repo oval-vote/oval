@@ -86,12 +86,12 @@ pub enum ValidationRule {
     /// A `single` contest's recommendation has more than one `support` line, though a vote for
     /// one has no second choice.
     TiersInSingle,
-    /// A `retention` contest's recommendation is not a single `support` or `oppose` line naming
-    /// only the contest's campaign, `no-position`, or `abstain`.
-    RetentionStance,
     /// A `ranked` contest's recommendation names more choices in its `support` lines than its
     /// `max`.
     SupportOverMax,
+    /// A `retention` contest's recommendation is not a single `support` or `oppose` line naming
+    /// only the contest's campaign, `no-position`, or `abstain`.
+    RetentionStance,
     /// A required question is recommended `abstain`, though it cannot be left blank.
     AbstainOnRequired,
     /// A recommendation has a `write-in`, though its contest is exhaustive.
@@ -102,12 +102,6 @@ pub enum ValidationRule {
     /// thematic break, or has a link whose destination is not an absolute `http` or `https` URL.
     /// Each construct is its own diagnostic.
     MarkdownProfile,
-    /// A URL uses `http` rather than `https`, so a reader following it is not protected from
-    /// tampering. A warning.
-    InsecureUrl,
-    /// A string has no characters, or only spaces and tabs, so it shows the reader a blank. A
-    /// warning.
-    EmptyString,
     /// A top-level party or candidate is never used, because no `party` field and no campaign
     /// member resolves to it. A warning.
     ///
@@ -131,9 +125,65 @@ pub enum ValidationRule {
     /// A measure has `if_yes` or `if_no` but not both, so a reader learns what only one outcome
     /// does. A warning.
     UnpairedOutcome,
+    /// A URL uses `http` rather than `https`, so a reader following it is not protected from
+    /// tampering. A warning.
+    InsecureUrl,
+    /// A string has no characters, or only spaces and tabs, so it shows the reader a blank. A
+    /// warning.
+    EmptyString,
 }
 
 impl ValidationRule {
+    /// Every rule, in the order the specification lists them, with the errors of Section 3.3 before
+    /// the warnings of Section 3.4.
+    pub const ALL: [Self; ValidationRule::EmptyString as usize + 1] = [
+        Self::UnsupportedVersion,
+        Self::MissingGuideField,
+        Self::EmptyDocument,
+        Self::InvalidDate,
+        Self::UndeclaredReference,
+        Self::DuplicateDeclaration,
+        Self::MismatchedReference,
+        Self::BlockOnReference,
+        Self::MisplacedCandidateField,
+        Self::EmptyBallot,
+        Self::EmptySection,
+        Self::ContestWithoutCampaigns,
+        Self::CampaignWithoutMembers,
+        Self::DuplicateMember,
+        Self::MemberInTwoCampaigns,
+        Self::PartyInTwoCampaigns,
+        Self::InvalidMultipleCount,
+        Self::InvalidRankedMax,
+        Self::InvalidSeatCount,
+        Self::InvalidMinimum,
+        Self::IntegerTooLarge,
+        Self::RankedAllWithLimit,
+        Self::RetentionCampaignCount,
+        Self::RetentionPartyCampaign,
+        Self::MissingRecommendation,
+        Self::RepeatedRecommendation,
+        Self::CampaignNotInContest,
+        Self::RepeatedOppose,
+        Self::RepeatedStance,
+        Self::TiersInSingle,
+        Self::SupportOverMax,
+        Self::RetentionStance,
+        Self::AbstainOnRequired,
+        Self::WriteInNotAccepted,
+        Self::ExtensibleRetention,
+        Self::MarkdownProfile,
+        Self::UnusedDeclaration,
+        Self::DuplicatePartyName,
+        Self::DuplicateBallotTitle,
+        Self::SupportOverCount,
+        Self::SupportBelowMinimum,
+        Self::WriteInOnBallot,
+        Self::UnpairedOutcome,
+        Self::InsecureUrl,
+        Self::EmptyString,
+    ];
+
     /// Returns this rule's identifier in the specification, such as `"missing-guide-field"`.
     pub fn spec_id(self) -> &'static str {
         match self {
@@ -167,14 +217,12 @@ impl ValidationRule {
             Self::RepeatedOppose => "repeated-oppose",
             Self::RepeatedStance => "repeated-stance",
             Self::TiersInSingle => "tiers-in-single",
-            Self::RetentionStance => "retention-stance",
             Self::SupportOverMax => "support-over-max",
+            Self::RetentionStance => "retention-stance",
             Self::AbstainOnRequired => "abstain-on-required",
             Self::WriteInNotAccepted => "write-in-not-accepted",
             Self::ExtensibleRetention => "extensible-retention",
             Self::MarkdownProfile => "markdown-profile",
-            Self::InsecureUrl => "insecure-url",
-            Self::EmptyString => "empty-string",
             Self::UnusedDeclaration => "unused-declaration",
             Self::DuplicatePartyName => "duplicate-party-name",
             Self::DuplicateBallotTitle => "duplicate-ballot-title",
@@ -182,6 +230,8 @@ impl ValidationRule {
             Self::SupportBelowMinimum => "support-below-minimum",
             Self::WriteInOnBallot => "write-in-on-ballot",
             Self::UnpairedOutcome => "unpaired-outcome",
+            Self::InsecureUrl => "insecure-url",
+            Self::EmptyString => "empty-string",
         }
     }
 
@@ -236,6 +286,17 @@ impl ValidationRule {
         }
     }
 }
+
+const _: () = {
+    let mut i = 0;
+    while i < ValidationRule::ALL.len() {
+        assert!(
+            ValidationRule::ALL[i] as usize == i,
+            "ValidationRule::ALL lists every rule in order"
+        );
+        i += 1;
+    }
+};
 
 #[cfg(test)]
 mod tests {

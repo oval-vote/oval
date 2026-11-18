@@ -3,6 +3,10 @@ use std::fmt;
 /// The kind of a [`LexicalError`], one for each lexical error in Section 3.1 of the specification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LexicalErrorKind {
+    /// A run of tabs outside a string, a comment, or a Markdown body.
+    ///
+    /// The run becomes one [`Error`](crate::TokenKind::Error) token.
+    IllegalTab,
     /// A character that cannot begin a token, such as `-`, `\`, or any character outside ASCII.
     ///
     /// The character becomes an [`Error`](crate::TokenKind::Error) token on its own.
@@ -18,10 +22,6 @@ pub enum LexicalErrorKind {
     /// [`String`](crate::TokenKind::String) token. It is not reported in an unterminated string,
     /// which is already an error as a whole.
     InvalidEscape,
-    /// A run of tabs outside a string, a comment, or a Markdown body.
-    ///
-    /// The run becomes one [`Error`](crate::TokenKind::Error) token.
-    IllegalTab,
     /// A run of letters, digits, `-`, `_`, and `.` that begins with a digit but is neither an
     /// integer nor a date, such as `12abc` or `2026-11-5`.
     ///
@@ -40,22 +40,44 @@ pub enum LexicalErrorKind {
 }
 
 impl LexicalErrorKind {
+    /// Every lexical error, in the order Section 3.1 of the specification lists them.
+    pub const ALL: [Self; LexicalErrorKind::InconsistentDedent as usize + 1] = [
+        Self::IllegalTab,
+        Self::UnexpectedCharacter,
+        Self::UnterminatedString,
+        Self::InvalidEscape,
+        Self::MalformedNumber,
+        Self::MalformedUrl,
+        Self::InconsistentDedent,
+    ];
+
     /// Returns this error's identifier in the specification, such as `"invalid-escape"`.
     ///
     /// Identifiers do not change between editions of the specification, so tools can use them to
     /// name an error or look it up.
     pub fn spec_id(self) -> &'static str {
         match self {
+            Self::IllegalTab => "illegal-tab",
             Self::UnexpectedCharacter => "unexpected-character",
             Self::UnterminatedString => "unterminated-string",
             Self::InvalidEscape => "invalid-escape",
-            Self::IllegalTab => "illegal-tab",
             Self::MalformedNumber => "malformed-number",
             Self::MalformedUrl => "malformed-url",
             Self::InconsistentDedent => "inconsistent-dedent",
         }
     }
 }
+
+const _: () = {
+    let mut i = 0;
+    while i < LexicalErrorKind::ALL.len() {
+        assert!(
+            LexicalErrorKind::ALL[i] as usize == i,
+            "LexicalErrorKind::ALL lists every lexical error in order"
+        );
+        i += 1;
+    }
+};
 
 /// A flaw found while lexing a document, and the text it spans.
 ///

@@ -25,6 +25,16 @@ pub enum DiagnosticCode {
 }
 
 impl DiagnosticCode {
+    /// Returns every code, in the order the specification lists them, so lexical errors come
+    /// first, then syntax errors, then the rules.
+    pub fn all() -> impl Iterator<Item = Self> {
+        LexicalErrorKind::ALL
+            .into_iter()
+            .map(Self::Lexical)
+            .chain(SyntaxErrorKind::ALL.into_iter().map(Self::Syntax))
+            .chain(ValidationRule::ALL.into_iter().map(Self::Validation))
+    }
+
     /// Returns the identifier the specification gives this problem, such as `missing-value`.
     pub fn spec_id(self) -> &'static str {
         match self {
@@ -107,6 +117,18 @@ mod tests {
 
     use super::{Diagnostic, DiagnosticCode, Severity};
     use crate::ValidationRule;
+
+    #[test]
+    fn every_code_has_its_own_identifier() {
+        let ids: Vec<&str> = DiagnosticCode::all().map(DiagnosticCode::spec_id).collect();
+        let mut unique = ids.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(ids.len(), 67);
+        assert_eq!(unique.len(), ids.len());
+        assert_eq!(ids.first(), Some(&"illegal-tab"));
+        assert_eq!(ids.last(), Some(&"empty-string"));
+    }
 
     #[test]
     fn a_code_has_the_identifier_of_its_kind() {

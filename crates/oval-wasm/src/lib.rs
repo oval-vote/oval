@@ -17,27 +17,7 @@ use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 use crate::utf16::{Range, Utf16Index};
 
 #[wasm_bindgen(typescript_custom_section)]
-const TYPES: &str = r#"
-/** A span of a document, from `start` up to `end`, as string indices. */
-export interface Range {
-  start: number;
-  end: number;
-}
-
-/** How serious a diagnostic is. */
-export type Severity = "error" | "warning";
-
-/** A problem found in a document. */
-export interface Diagnostic {
-  /** The identifier the specification gives the problem, such as `"missing-value"`. */
-  code: string;
-  severity: Severity;
-  /** The text the problem spans, which is empty where a missing token would begin. */
-  range: Range;
-  /** A sentence describing the problem for a person to read. */
-  message: string;
-}
-"#;
+const TYPES: &str = include_str!("types.d.ts");
 
 #[wasm_bindgen]
 extern "C" {
@@ -103,8 +83,26 @@ fn diagnostics(report: &Report, index: &Utf16Index) -> Vec<Diagnostic> {
 
 #[cfg(test)]
 mod tests {
+    use oval_core::DiagnosticCode;
+
     use super::{Diagnostic, diagnostics};
     use crate::utf16::{Range, Utf16Index};
+
+    #[test]
+    fn the_typescript_code_union_lists_every_code_in_order() {
+        let union = include_str!("types.d.ts")
+            .split_once("export type DiagnosticCode =")
+            .and_then(|(_, rest)| rest.split_once(';'))
+            .map(|(union, _)| union)
+            .unwrap();
+        let declared: Vec<&str> = union
+            .split('|')
+            .map(|member| member.trim().trim_matches('"'))
+            .filter(|member| !member.is_empty())
+            .collect();
+        let codes: Vec<&str> = DiagnosticCode::all().map(DiagnosticCode::spec_id).collect();
+        assert_eq!(declared, codes);
+    }
 
     #[test]
     fn a_diagnostic_spans_string_indices() {

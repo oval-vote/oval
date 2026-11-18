@@ -5,27 +5,12 @@ use crate::{Keyword, TokenKind};
 /// The kind of a [`SyntaxError`], one for each syntax error in Section 3.2 of the specification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SyntaxErrorKind {
-    /// A line that ends where a value is required, such as after `oval` or after a field's keyword.
-    ///
-    /// The error has no length and sits at the end of the line. The parser assumes the value and
-    /// keeps the line with nothing in its place.
-    MissingValue,
     /// A token the grammar does not accept at that point on a line, such as a string after `date` or
     /// a second value after a complete field.
     ///
     /// The error spans from that token to the end of the line. The parser discards those tokens,
     /// keeps what it parsed before them, and continues on the next line.
     UnexpectedToken,
-    /// A Markdown field's line that ends with `:` without an indented body below it.
-    ///
-    /// The error has no length and sits just after the line's terminator. The parser keeps the field
-    /// with an empty body.
-    MissingBody,
-    /// A field whose keyword already appeared in the same block, or at the document level.
-    ///
-    /// The error spans the second field, including its body. The parser parses the field in full,
-    /// so that errors inside it are still reported, but sets it aside, and the first one stands.
-    RepeatedField,
     /// A line that ends, or has a string, where an identifier is required, or an `@` that is not
     /// followed by a word.
     ///
@@ -44,17 +29,53 @@ pub enum SyntaxErrorKind {
     /// The error has no length and sits at the end of the line. The parser keeps the contest without
     /// a kind.
     MissingContestKind,
+    /// A line that ends where a value is required, such as after `oval` or after a field's keyword.
+    ///
+    /// The error has no length and sits at the end of the line. The parser assumes the value and
+    /// keeps the line with nothing in its place.
+    MissingValue,
+    /// A Markdown field's line that ends with `:` without an indented body below it.
+    ///
+    /// The error has no length and sits just after the line's terminator. The parser keeps the field
+    /// with an empty body.
+    MissingBody,
+    /// A line that requires a block below it, such as a ballot's, but is not followed by one.
+    ///
+    /// The error has no length and sits just after the line's terminator. The parser keeps the
+    /// construct as if its block were empty.
+    MissingBlock,
+    /// An indented block below a line that takes none, such as a field whose value is on its line.
+    ///
+    /// The error spans the block. The parser discards the block and keeps the line above it.
+    UnexpectedBlock,
+    /// A line that begins with a token no entry of the enclosing block can begin with, such as
+    /// `designation` inside a party.
+    ///
+    /// The error spans the line and its block or body, if it has one. The parser discards the whole
+    /// entry and continues with the next entry at the same level.
+    UnexpectedEntry,
+    /// A field whose keyword already appeared in the same block, or at the document level.
+    ///
+    /// The error spans the second field, including its body. The parser parses the field in full,
+    /// so that errors inside it are still reported, but sets it aside, and the first one stands.
+    RepeatedField,
+    /// A campaign flag, `incumbent` or `withdrawn`, that already appeared on the same `campaign`
+    /// line.
+    ///
+    /// The error spans the second flag. The parser sets it aside, and the first one stands.
+    RepeatedFlag,
     /// A contest modifier, such as `seats` or `all`, that already appeared after the same
     /// contest's kind.
     ///
     /// The error spans the second modifier, including its number. The parser parses the modifier,
     /// so that errors inside it are still reported, but sets it aside, and the first one stands.
     RepeatedModifier,
-    /// A campaign flag, `incumbent` or `withdrawn`, that already appeared on the same `campaign`
-    /// line.
+    /// A document-level entry that appears after a group of entries that must follow it has
+    /// begun, such as a guide field after the first ballot, or a version marker after any entry.
     ///
-    /// The error spans the second flag. The parser sets it aside, and the first one stands.
-    RepeatedFlag,
+    /// The error spans the entry, including its block or body. The parser parses the entry in full,
+    /// so that errors inside it are still reported, but sets it aside.
+    MisplacedEntry,
     /// A contest's recommendation with no `no-position` or `abstain` whose block ends without a
     /// `support` or `oppose` line.
     ///
@@ -66,54 +87,63 @@ pub enum SyntaxErrorKind {
     /// The error spans the line. The parser parses the line, so that errors inside it are still
     /// reported, but sets it aside.
     UnexpectedStance,
-    /// A line that begins with a token no entry of the enclosing block can begin with, such as
-    /// `designation` inside a party.
-    ///
-    /// The error spans the line and its block or body, if it has one. The parser discards the whole
-    /// entry and continues with the next entry at the same level.
-    UnexpectedEntry,
-    /// An indented block below a line that takes none, such as a field whose value is on its line.
-    ///
-    /// The error spans the block. The parser discards the block and keeps the line above it.
-    UnexpectedBlock,
-    /// A line that requires a block below it, such as a ballot's, but is not followed by one.
-    ///
-    /// The error has no length and sits just after the line's terminator. The parser keeps the
-    /// construct as if its block were empty.
-    MissingBlock,
-    /// A document-level entry that appears after a group of entries that must follow it has
-    /// begun, such as a guide field after the first ballot, or a version marker after any entry.
-    ///
-    /// The error spans the entry, including its block or body. The parser parses the entry in full,
-    /// so that errors inside it are still reported, but sets it aside.
-    MisplacedEntry,
 }
 
 impl SyntaxErrorKind {
+    /// Every syntax error, in the order Section 3.2 of the specification lists them.
+    pub const ALL: [Self; SyntaxErrorKind::UnexpectedStance as usize + 1] = [
+        Self::UnexpectedToken,
+        Self::MissingIdentifier,
+        Self::MissingName,
+        Self::MissingContestKind,
+        Self::MissingValue,
+        Self::MissingBody,
+        Self::MissingBlock,
+        Self::UnexpectedBlock,
+        Self::UnexpectedEntry,
+        Self::RepeatedField,
+        Self::RepeatedFlag,
+        Self::RepeatedModifier,
+        Self::MisplacedEntry,
+        Self::EmptyRecommendation,
+        Self::UnexpectedStance,
+    ];
+
     /// Returns this error's identifier in the specification, such as `"missing-value"`.
     ///
     /// Identifiers do not change between editions of the specification, so tools can use them to
     /// name an error or look it up.
     pub fn spec_id(self) -> &'static str {
         match self {
-            Self::MissingValue => "missing-value",
             Self::UnexpectedToken => "unexpected-token",
-            Self::MissingBody => "missing-body",
-            Self::RepeatedField => "repeated-field",
             Self::MissingIdentifier => "missing-identifier",
             Self::MissingName => "missing-name",
             Self::MissingContestKind => "missing-contest-kind",
-            Self::RepeatedModifier => "repeated-modifier",
+            Self::MissingValue => "missing-value",
+            Self::MissingBody => "missing-body",
+            Self::MissingBlock => "missing-block",
+            Self::UnexpectedBlock => "unexpected-block",
+            Self::UnexpectedEntry => "unexpected-entry",
+            Self::RepeatedField => "repeated-field",
             Self::RepeatedFlag => "repeated-flag",
+            Self::RepeatedModifier => "repeated-modifier",
+            Self::MisplacedEntry => "misplaced-entry",
             Self::EmptyRecommendation => "empty-recommendation",
             Self::UnexpectedStance => "unexpected-stance",
-            Self::UnexpectedEntry => "unexpected-entry",
-            Self::UnexpectedBlock => "unexpected-block",
-            Self::MissingBlock => "missing-block",
-            Self::MisplacedEntry => "misplaced-entry",
         }
     }
 }
+
+const _: () = {
+    let mut i = 0;
+    while i < SyntaxErrorKind::ALL.len() {
+        assert!(
+            SyntaxErrorKind::ALL[i] as usize == i,
+            "SyntaxErrorKind::ALL lists every syntax error in order"
+        );
+        i += 1;
+    }
+};
 
 /// Something the grammar would have accepted where a [`SyntaxError`] occurred.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
