@@ -150,3 +150,34 @@ export interface Hover {
     /** The description in Markdown. */
     contents: string;
 }
+
+/** Something the grammar accepts at a position. */
+export interface Completion {
+    /** The text to insert, which is a keyword or an identifier with its `@`. */
+    label: string;
+    /** `"keyword"`, or the kind of thing the identifier declares. */
+    kind: "keyword" | Entity;
+    /** What a keyword does, or the name an identifier declares. */
+    detail: string | null;
+    /** The text the label replaces, which is the part of the word written before the position. */
+    replace: Range;
+}
+
+/** A change to a document's text. */
+export interface Edit {
+    /** The text to replace, which is empty for an insertion. */
+    range: Range;
+    /** The text to put in its place. */
+    text: string;
+    /** The part of `text` the author should fill in, as indices into `text`, or `null` when it's complete. */
+    placeholder: Range | null;
+}
+
+/** A change that repairs one diagnostic. */
+export interface Fix {
+    /** The position of the diagnostic in `diagnostics()`. */
+    diagnostic: number;
+    /** What the fix does, in a few words. */
+    title: string;
+    edit: Edit;
+}

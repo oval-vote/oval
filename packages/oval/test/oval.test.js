@@ -126,3 +126,28 @@ test("an analysis of a rejected source throws an Error", () => {
         message: "the document contains U+0000 at index 0",
     });
 });
+
+test("an analysis completes and fixes in string indices", () => {
+    const source = `# Guía 🗳\noval 1\nguide "G"\ndate 2026-11-03\nparty @dem "Demócrata"\ncandidate @n "Nadia"\n  party @d`;
+    const analysis = new oval.Analysis(source);
+    try {
+        const [dem] = analysis.completions(source.length);
+        assert.deepStrictEqual(dem, {
+            label: "@dem",
+            kind: "party",
+            detail: "Demócrata",
+            replace: { start: source.length - 2, end: source.length },
+        });
+
+        const diagnostics = analysis.diagnostics();
+        const fix = analysis
+            .fixes()
+            .find((fix) => diagnostics[fix.diagnostic].code === "missing-guide-field");
+        const { range, text, placeholder } = fix.edit;
+        const fixed = source.slice(0, range.start) + text + source.slice(range.end);
+        assert.ok(fixed.includes('guide "G"\nelection ""\ndate'));
+        assert.strictEqual(text.slice(0, placeholder.start), 'election "');
+    } finally {
+        analysis.free();
+    }
+});

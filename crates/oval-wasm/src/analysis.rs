@@ -1,4 +1,4 @@
-use oval_analysis::{OutlineItem, OutlineKind};
+use oval_analysis::{CompletionKind, OutlineItem, OutlineKind};
 use oval_core::{Declaration, Entity};
 use oval_syntax::ast::AstNode;
 use serde::Serialize;
@@ -76,6 +76,23 @@ impl Analysis {
     pub fn hover(&self, index: u32) -> Result<JsValue, JsValue> {
         to_js(&self.hover_at(index))
     }
+
+    /// Returns everything the grammar accepts at `index`, keywords and identifiers alike.
+    ///
+    /// The word before `index` is treated as unfinished, and the rest of the line as not yet
+    /// written, so the completions are what could begin there. An editor filters them by the text
+    /// in each one's `replace`.
+    #[wasm_bindgen(unchecked_return_type = "Completion[]")]
+    pub fn completions(&self, index: u32) -> Result<JsValue, JsValue> {
+        to_js(&self.completions_at(index))
+    }
+
+    /// Returns a fix for each diagnostic that has a mechanical repair, in the order of the
+    /// diagnostics.
+    #[wasm_bindgen(unchecked_return_type = "Fix[]")]
+    pub fn fixes(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.fix_all())
+    }
 }
 
 impl Analysis {
@@ -100,6 +117,44 @@ impl Analysis {
                 range: self.index.range(occurrence.range),
                 id_range: self.index.range(occurrence.name),
                 is_declaration: occurrence.is_declaration,
+            })
+            .collect()
+    }
+
+    fn completions_at(&self, index: u32) -> Vec<Completion> {
+        self.analysis
+            .completions(self.index.offset(index))
+            .into_iter()
+            .map(|completion| Completion {
+                label: completion.label,
+                kind: match completion.kind {
+                    CompletionKind::Keyword => "keyword",
+                    CompletionKind::Identifier(declared) => entity(declared),
+                },
+                detail: completion.detail,
+                replace: self.index.range(completion.replace),
+            })
+            .collect()
+    }
+
+    fn fix_all(&self) -> Vec<Fix> {
+        self.analysis
+            .fixes()
+            .into_iter()
+            .map(|fix| {
+                let text = Utf16Index::new(&fix.edit.text);
+                Fix {
+                    diagnostic: fix.diagnostic,
+                    title: fix.title,
+                    edit: Edit {
+                        range: self.index.range(fix.edit.range),
+                        placeholder: fix
+                            .edit
+                            .placeholder
+                            .map(|placeholder| text.range(placeholder)),
+                        text: fix.edit.text,
+                    },
+                }
             })
             .collect()
     }
@@ -183,6 +238,28 @@ struct Hover {
     contents: String,
 }
 
+#[derive(Debug, PartialEq, Serialize)]
+struct Completion {
+    label: String,
+    kind: &'static str,
+    detail: Option<String>,
+    replace: Range,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+struct Fix {
+    diagnostic: usize,
+    title: String,
+    edit: Edit,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+struct Edit {
+    range: Range,
+    text: String,
+    placeholder: Option<Range>,
+}
+
 fn entity(entity: Entity) -> &'static str {
     match entity {
         Entity::Party => "party",
@@ -195,7 +272,7 @@ fn entity(entity: Entity) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{Analysis, Definition, Hover, Occurrence, Outline};
+    use super::{Analysis, Completion, Definition, Edit, Hover, Occurrence, Outline};
     use crate::utf16::Range;
 
     const SOURCE: &str = "oval 1\nguide \"🗳 Guía\"\nparty @dem \"Demócrata\"\ncandidate @n \"Nadia\"\n  party @dem\nballot @b \"Ciudad\"\n  section \"Óficinas\"\n    contest @k \"Alcalde\" single\n      campaign @n\n      recommend\n        support @n\n";
@@ -286,6 +363,56 @@ mod tests {
                     children: Vec::new(),
                 }],
             }
+        );
+    }
+
+    #[test]
+    fn a_completion_replaces_the_word_before_the_index() {
+        let source = format!("{SOURCE}        support @");
+        let analysis = Analysis::new(&source).unwrap();
+        let end = u32::try_from(source.encode_utf16().count()).unwrap();
+        assert_eq!(
+            analysis.completions_at(end),
+            [Completion {
+                label: "@n".to_owned(),
+                kind: "candidate",
+                detail: Some("Nadia".to_owned()),
+                replace: Range {
+                    start: end - 1,
+                    end,
+                },
+            }]
+        );
+        assert_eq!(
+            analysis.completions_at(index("single", 0) + 3)[0].kind,
+            "keyword"
+        );
+    }
+
+    #[test]
+    fn a_fix_edits_the_document_and_marks_a_placeholder_in_its_own_text() {
+        let source = "# Guía 🗳\noval 1\nguide \"G\"\ndate 2026-11-03\n";
+        let analysis = Analysis::new(source).unwrap();
+        let fixes = analysis.fix_all();
+        let missing = fixes
+            .iter()
+            .find(|fix| fix.title.contains("election"))
+            .unwrap();
+        let after_guide = source.find("date").unwrap();
+        let start = u32::try_from(source[..after_guide].encode_utf16().count()).unwrap();
+        assert_eq!(
+            missing.edit,
+            Edit {
+                range: Range { start, end: start },
+                text: "election \"\"\n".to_owned(),
+                placeholder: Some(Range { start: 10, end: 10 }),
+            }
+        );
+        assert_eq!(
+            analysis.analysis.report().diagnostics()[missing.diagnostic]
+                .code
+                .spec_id(),
+            "missing-guide-field"
         );
     }
 }
