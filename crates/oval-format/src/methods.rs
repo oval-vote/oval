@@ -71,7 +71,7 @@ mod tests {
         assert_eq!(header("multiple 3 min 2 seats 3"), "multiple 3 min 2");
         assert_eq!(header("single seats 1"), "single");
         assert_eq!(header("single seats 01"), "single");
-        assert_eq!(header("multiple 03 seats 3 min 01"), "multiple 03");
+        assert_eq!(header("multiple 03 seats 3 min 01"), "multiple 3");
         assert_eq!(header("ranked all min 1"), "ranked all");
     }
 

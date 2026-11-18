@@ -57,8 +57,19 @@ fn line(tokens: &[SyntaxToken], output: &mut String) {
         if previous.is_some() && !attached {
             output.push(' ');
         }
-        output.push_str(token.text());
+        if token.kind() == SyntaxKind::Integer {
+            output.push_str(without_leading_zeros(token.text()));
+        } else {
+            output.push_str(token.text());
+        }
         previous = Some(token.kind());
+    }
+}
+
+fn without_leading_zeros(integer: &str) -> &str {
+    match integer.trim_start_matches('0') {
+        "" => "0",
+        digits => digits,
     }
 }
 
@@ -87,6 +98,16 @@ mod tests {
                 "oval   1\nballot  @b   \"B\"\n  measure @m \"M\"\n    supporters \"A\" ,\"B\",   \"C\"\n    note  :\n      Text.\n"
             ),
             "oval 1\nballot @b \"B\"\n  measure @m \"M\"\n    supporters \"A\", \"B\", \"C\"\n    note:\n      Text.\n"
+        );
+    }
+
+    #[test]
+    fn an_integer_is_written_without_leading_zeros() {
+        assert_eq!(
+            formatted(
+                "oval 01\nballot @b \"B\"\n  contest @k \"K\" multiple 03 min 002\n    campaign @a \"A\"\n  contest @r \"R\" ranked max 10\n    campaign @c \"C\"\n  contest @z \"Z\" multiple 000\n    campaign @d \"D\"\n"
+            ),
+            "oval 1\nballot @b \"B\"\n  contest @k \"K\" multiple 3 min 2\n    campaign @a \"A\"\n  contest @r \"R\" ranked max 10\n    campaign @c \"C\"\n  contest @z \"Z\" multiple 0\n    campaign @d \"D\"\n"
         );
     }
 
