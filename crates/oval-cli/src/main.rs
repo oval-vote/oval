@@ -46,7 +46,12 @@ use oval_format::FormatError;
 use crate::printer::Printer;
 
 #[derive(Parser)]
-#[command(name = "oval", version, about = "Tools for Oval voting guides")]
+#[command(
+    name = "oval",
+    bin_name = "oval",
+    version,
+    about = "Tools for Oval voting guides"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
