@@ -7,6 +7,11 @@ on:
         description: The version to release, as MAJOR.MINOR.PATCH; the version on main when empty
         required: false
         type: string
+      skip-checks:
+        description: Release even if the checks on the latest commit aren't all green
+        required: false
+        type: boolean
+        default: false
   push:
     tags: ["v*"]
 
@@ -41,6 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           REQUESTED: ${{ inputs.version }}
+          SKIP_CHECKS: ${{ inputs.skip-checks }}
         run: |
           current="$(node -p "require('./packages/oval/package.json').version")"
           version="${REQUESTED:-$current}"
@@ -62,14 +68,20 @@ jobs:
             exit 1
           fi
           runs="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs" --paginate --jq '.check_runs[] | select(.name != "release") | "\(.name): \(.status) \(.conclusion)"')"
-          if [ -z "$runs" ]; then
-            echo "no checks have run on $GITHUB_SHA" >&2
-            exit 1
-          fi
           echo "$runs"
-          if echo "$runs" | grep -vE ': completed (success|skipped|neutral)$'; then
-            echo "checks on $GITHUB_SHA are not all green" >&2
-            exit 1
+          problem=""
+          if [ -z "$runs" ]; then
+            problem="no checks have run on $GITHUB_SHA"
+          elif echo "$runs" | grep -vE ': completed (success|skipped|neutral)$'; then
+            problem="checks on $GITHUB_SHA are not all green"
+          fi
+          if [ -n "$problem" ]; then
+            if [ "$SKIP_CHECKS" = "true" ]; then
+              echo "::warning::$problem, but skip-checks is on"
+            else
+              echo "$problem" >&2
+              exit 1
+            fi
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
       - name: Set the version
