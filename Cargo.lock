@@ -232,7 +232,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "oval-analysis"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "oval-core",
  "oval-syntax",
@@ -240,7 +240,7 @@ dependencies = [
 
 [[package]]
 name = "oval-cli"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "clap",
  "oval-core",
@@ -251,7 +251,7 @@ dependencies = [
 
 [[package]]
 name = "oval-core"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "oval-syntax",
  "pulldown-cmark",
@@ -261,14 +261,14 @@ dependencies = [
 
 [[package]]
 name = "oval-format"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "oval-syntax",
 ]
 
 [[package]]
 name = "oval-syntax"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "expect-test",
  "rowan",
@@ -276,7 +276,7 @@ dependencies = [
 
 [[package]]
 name = "oval-wasm"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "js-sys",
  "oval-analysis",
