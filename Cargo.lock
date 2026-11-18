@@ -244,6 +244,7 @@ dependencies = [
 name = "oval-wasm"
 version = "0.1.10"
 dependencies = [
+ "oval-core",
  "wasm-bindgen",
 ]
 

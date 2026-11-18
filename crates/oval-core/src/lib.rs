@@ -40,6 +40,12 @@ pub use report::Report;
 pub use rule::ValidationRule;
 pub use symbols::{Declaration, Entity, Reference, ReferenceKind, Symbols};
 
+/// The major version of the language this crate reads.
+///
+/// A document whose version marker names another major version is reported as
+/// [`UnsupportedVersion`](ValidationRule::UnsupportedVersion) and isn't validated further.
+pub const MAJOR_VERSION: u32 = 1;
+
 /// Parses and validates a document, and reports every problem found in it.
 ///
 /// The diagnostics are ordered by where each one begins. When a lexical and a syntax problem begin

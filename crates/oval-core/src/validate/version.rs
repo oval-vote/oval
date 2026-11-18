@@ -2,9 +2,7 @@ use oval_syntax::TextRange;
 use oval_syntax::ast::{AstNode, Document, VersionMarker};
 
 use super::{content_range, diagnostic};
-use crate::{Diagnostic, ValidationRule};
-
-const MAJOR_VERSION: u64 = 1;
+use crate::{Diagnostic, MAJOR_VERSION, ValidationRule};
 
 pub(super) fn supported_marker(document: &Document) -> Result<VersionMarker, Diagnostic> {
     let Some(marker) = document.version_marker() else {
@@ -13,7 +11,7 @@ pub(super) fn supported_marker(document: &Document) -> Result<VersionMarker, Dia
         return Err(unsupported(TextRange::empty(start)));
     };
     let version = marker.version().and_then(|version| version.value());
-    if version != Some(MAJOR_VERSION) {
+    if version != Some(u64::from(MAJOR_VERSION)) {
         let range = content_range(marker.syntax()).expect("a marker begins with `oval`");
         return Err(unsupported(range));
     }
