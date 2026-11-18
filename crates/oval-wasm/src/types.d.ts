@@ -1,3 +1,8 @@
+import type { Guide } from "@oval-vote/oval-schema";
+
+/** A compiled guide, the object the specification's schema describes. */
+export type { Guide };
+
 /** A span of a document, from `start` up to `end`, as string indices. */
 export interface Range {
     start: number;
@@ -85,4 +90,11 @@ export interface Diagnostic {
     range: Range;
     /** A sentence describing the problem for a person to read. */
     message: string;
+}
+
+/** The error a function throws when the document has errors that stop it. */
+export interface OvalError extends Error {
+    name: "OvalError";
+    /** The errors, ordered by where each one begins. */
+    diagnostics: Diagnostic[];
 }
