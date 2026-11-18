@@ -98,3 +98,55 @@ export interface OvalError extends Error {
     /** The errors, ordered by where each one begins. */
     diagnostics: Diagnostic[];
 }
+
+/** The kind of construct an outline item stands for. */
+export type OutlineKind = "ballot" | "section" | "contest" | "measure";
+
+/** One construct in a document's outline, with the constructs nested in it. */
+export interface OutlineItem {
+    kind: OutlineKind;
+    /** The construct's identifier without its `@`, or `null` for a section or when it's missing. */
+    id: string | null;
+    /** The construct's name or title, or `null` when it's missing. */
+    title: string | null;
+    /** The whole construct, from its first token through its block. */
+    range: Range;
+    /** The identifier, a section's title, or the construct's first token when neither is written. */
+    selection: Range;
+    /** The constructs inside this one, in ballot order. */
+    children: OutlineItem[];
+}
+
+/** The kind of thing a declaration declares. */
+export type Entity = "party" | "candidate" | "ballot" | "contest" | "measure";
+
+/** The declaration an identifier names. */
+export interface Definition {
+    entity: Entity;
+    /** The declared identifier without its `@`. */
+    id: string;
+    /** The name the declaration gives, the string after its identifier, or `null` when there's none. */
+    name: string | null;
+    /** The declared identifier, its `@` included. */
+    range: Range;
+    /** The declared identifier without its `@`. */
+    idRange: Range;
+}
+
+/** One place an identifier's name is written. */
+export interface Occurrence {
+    /** The identifier, its `@` included. */
+    range: Range;
+    /** The identifier without its `@`, which is the text a rename replaces. */
+    idRange: Range;
+    /** Whether this occurrence declares the name rather than referring to it. */
+    isDeclaration: boolean;
+}
+
+/** Text describing what's at a position. */
+export interface Hover {
+    /** The identifier or keyword the text describes. */
+    range: Range;
+    /** The description in Markdown. */
+    contents: string;
+}

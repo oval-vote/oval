@@ -80,3 +80,49 @@ test("format formats an unfinished guide but throws on a syntax error", () => {
         ["unterminated-string"],
     );
 });
+
+test("an analysis answers in string indices", () => {
+    const source = `oval 1\nguide "🗳 Guía"\nparty @dem "Demócrata"\ncandidate @n "Nadia"\n  party @dem\nballot @b "Ciudad"\n  contest @k "Alcalde" single\n    campaign @n\n    recommend\n      support @n\n`;
+    const analysis = new oval.Analysis(source);
+    try {
+        const text = (range) => source.slice(range.start, range.end);
+        assert.deepStrictEqual(analysis.diagnostics(), oval.check(source));
+
+        const definition = analysis.definition(source.lastIndexOf("@dem"));
+        assert.strictEqual(definition.entity, "party");
+        assert.strictEqual(definition.id, "dem");
+        assert.strictEqual(definition.name, "Demócrata");
+        assert.strictEqual(text(definition.range), "@dem");
+        assert.strictEqual(definition.range.start, source.indexOf("@dem"));
+        assert.strictEqual(analysis.definition(source.indexOf("Nadia")), null);
+
+        const occurrences = analysis.occurrences(source.lastIndexOf("@n") + 2);
+        assert.deepStrictEqual(
+            occurrences.map((o) => [text(o.range), text(o.idRange), o.isDeclaration]),
+            [
+                ["@n", "n", true],
+                ["@n", "n", false],
+                ["@n", "n", false],
+            ],
+        );
+
+        const hover = analysis.hover(source.indexOf("single") + 2);
+        assert.strictEqual(text(hover.range), "single");
+        assert.strictEqual(analysis.hover(source.indexOf("Ciudad")), null);
+
+        const [ballot] = analysis.outline();
+        assert.strictEqual(ballot.kind, "ballot");
+        assert.strictEqual(text(ballot.selection), "@b");
+        assert.strictEqual(ballot.children[0].title, "Alcalde");
+        assert.ok(text(ballot.range).endsWith("support @n\n"));
+    } finally {
+        analysis.free();
+    }
+});
+
+test("an analysis of a rejected source throws an Error", () => {
+    assert.throws(() => new oval.Analysis("\0"), {
+        name: "Error",
+        message: "the document contains U+0000 at index 0",
+    });
+});

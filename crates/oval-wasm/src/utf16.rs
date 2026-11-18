@@ -7,12 +7,14 @@ pub(crate) struct Range {
     pub(crate) end: u32,
 }
 
+#[derive(Debug)]
 pub(crate) struct Utf16Index {
     wide: Vec<Wide>,
     len: TextSize,
+    units: u32,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct Wide {
     offset: TextSize,
     index: u32,
@@ -39,7 +41,11 @@ impl Utf16Index {
             offset += bytes;
             index += units;
         }
-        Self { wide, len: offset }
+        Self {
+            wide,
+            len: offset,
+            units: index,
+        }
     }
 
     pub(crate) fn index(&self, offset: TextSize) -> u32 {
@@ -52,6 +58,18 @@ impl Utf16Index {
             return wide.index;
         }
         wide.index + wide.units + u32::from(offset - wide.offset - wide.bytes)
+    }
+
+    pub(crate) fn offset(&self, index: u32) -> TextSize {
+        let index = index.min(self.units);
+        let before = self.wide.partition_point(|wide| wide.index < index);
+        let Some(wide) = before.checked_sub(1).map(|last| self.wide[last]) else {
+            return index.into();
+        };
+        if index < wide.index + wide.units {
+            return wide.offset;
+        }
+        wide.offset + wide.bytes + TextSize::from(index - wide.index - wide.units)
     }
 
     pub(crate) fn range(&self, range: TextRange) -> Range {
@@ -90,6 +108,30 @@ mod tests {
     #[test]
     fn a_character_beyond_the_basic_plane_takes_two_units() {
         assert_eq!(indices("😀x😀"), [0, 0, 0, 0, 2, 3, 3, 3, 3, 5]);
+    }
+
+    fn offsets(text: &str) -> Vec<u32> {
+        let index = Utf16Index::new(text);
+        (0..=text.encode_utf16().count())
+            .map(|units| u32::from(index.offset(u32::try_from(units).unwrap())))
+            .collect()
+    }
+
+    #[test]
+    fn an_index_is_the_offset_of_the_same_character() {
+        assert_eq!(offsets("ab\r\nc"), [0, 1, 2, 3, 4, 5]);
+        assert_eq!(offsets("é!"), [0, 2, 3]);
+        assert_eq!(offsets("a€b"), [0, 1, 4, 5]);
+    }
+
+    #[test]
+    fn an_index_between_the_halves_of_a_surrogate_pair_rounds_down() {
+        assert_eq!(offsets("😀x😀"), [0, 0, 4, 5, 5, 9]);
+    }
+
+    #[test]
+    fn an_index_past_the_end_clamps() {
+        assert_eq!(Utf16Index::new("x😀").offset(99), TextSize::from(5));
     }
 
     #[test]

@@ -280,6 +280,7 @@ name = "oval-wasm"
 version = "0.1.10"
 dependencies = [
  "js-sys",
+ "oval-analysis",
  "oval-core",
  "oval-format",
  "oval-syntax",

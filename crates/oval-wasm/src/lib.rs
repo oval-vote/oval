@@ -11,7 +11,10 @@
 //! `source.slice(range.start, range.end)` is the text a range spans. Results are plain objects and
 //! arrays, whose TypeScript types are declared alongside the functions.
 
+mod analysis;
 mod utf16;
+
+pub use analysis::Analysis;
 
 use oval_core::{DiagnosticCode, InputRejection, Report, Severity};
 use oval_format::FormatError;
@@ -57,12 +60,7 @@ pub fn version() -> String {
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
     let index = Utf16Index::new(source);
     let report = oval_core::check(source).map_err(|rejection| rejected(rejection, &index))?;
-    let diagnostics: Vec<Diagnostic> = report
-        .diagnostics()
-        .iter()
-        .map(|diagnostic| Diagnostic::new(diagnostic, &index))
-        .collect();
-    to_js(&diagnostics)
+    to_js(&Diagnostic::all(&report, &index))
 }
 
 /// Compiles `source` into the object the specification's schema describes.
@@ -157,6 +155,14 @@ struct Diagnostic {
 }
 
 impl Diagnostic {
+    fn all(report: &Report, index: &Utf16Index) -> Vec<Self> {
+        report
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| Self::new(diagnostic, index))
+            .collect()
+    }
+
     fn new(diagnostic: &oval_core::Diagnostic, index: &Utf16Index) -> Self {
         Self {
             code: diagnostic.code.spec_id(),
@@ -199,12 +205,7 @@ mod tests {
     fn a_diagnostic_spans_string_indices() {
         let source = "oval 1\nguide \"🗳 Guía\"\nelection \"E\"\ndate 2026-11-03\nparty @p \"Pé\"\n";
         let report = oval_core::check(source).unwrap();
-        let index = Utf16Index::new(source);
-        let found: Vec<Diagnostic> = report
-            .diagnostics()
-            .iter()
-            .map(|diagnostic| Diagnostic::new(diagnostic, &index))
-            .collect();
+        let found = Diagnostic::all(&report, &Utf16Index::new(source));
         let declaration = "party @p \"Pé\"";
         let start = source.find(declaration).unwrap();
         let units = |text: &str| u32::try_from(text.encode_utf16().count()).unwrap();

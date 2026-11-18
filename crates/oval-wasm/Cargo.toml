@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 js-sys.workspace = true
+oval-analysis.workspace = true
 oval-core.workspace = true
 oval-format.workspace = true
 oval-syntax.workspace = true
