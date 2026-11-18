@@ -1,256 +1,233 @@
-//! The root of the tree and the declarations written at the top level.
-//!
-//! A [`Document`] is the guide of Section 2.8. It comprises the guide fields, the top-level
-//! [`Party`] and [`Candidate`] declarations, and the root ballots. [`PartyReference`] is the
-//! `party` line that a candidate or campaign writes, which either refers to a party declared
-//! elsewhere or declares one inline.
-
-use super::{
-    AstNode, Ballot, DateField, Identifier, MarkdownField, StringField, UrlField, ast_node, block,
-    child, children, field, identifier, string, string_range, token,
+use crate::Keyword;
+use crate::ast::{
+    AstNode, Ballot, Candidate, DateField, MarkdownField, Party, StringField, VersionMarker,
+    ast_node, support,
 };
-use crate::TextRange;
-use crate::{Keyword, SyntaxKind, SyntaxNode};
 
 ast_node! {
-    /// A whole guide, the root of the tree.
+    /// The root of a syntax tree, a whole Oval document.
     ///
-    /// The root node covers the entire source. Its children are the version marker, the guide
-    /// fields, the top-level declarations, and the root ballots, in the order Section 2.5 gives;
-    /// an entry out of that order is still a child, and the parser reports `misplaced-entry`.
+    /// Every tree has exactly one, and [`ParseResult::document`](crate::ParseResult::document)
+    /// returns it.
     ///
-    /// # Examples
+    /// Each accessor returns the entry that stands. An entry the parser set aside, because it
+    /// repeats a field or comes after a group it belongs before, is not returned.
     ///
     /// ```
-    /// use oval_syntax::ast::{AstNode, Document};
-    /// use oval_syntax::parser::parse;
-    ///
-    /// let result = parse("oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\n").unwrap();
-    /// let document = Document::cast(result.syntax()).unwrap();
-    /// assert_eq!(document.guide().and_then(|f| f.value()).as_deref(), Some("G"));
-    /// assert_eq!(document.date().and_then(|f| f.value()).map(|d| d.year), Some(2026));
-    /// assert_eq!(document.ballots().count(), 0);
+    /// let text = "oval 1\nguide \"Franklin Voter Guide\"\ndate 2026-11-03\n";
+    /// let result = oval_syntax::parse(text)?;
+    /// let document = result.document();
+    /// assert!(document.version_marker().is_some());
+    /// assert!(document.guide().is_some());
+    /// assert!(document.election().is_none());
+    /// # Ok::<(), oval_syntax::InputRejection>(())
     /// ```
     Document
 }
 
-ast_node! {
-    /// The `oval` version marker that opens a document.
-    ///
-    /// The marker names the major version of the language the document is written in. Whether
-    /// this crate reads that version is the validation rule `unsupported-version`; see
-    /// [`SUPPORTED_LANGUAGE_MAJOR`](crate::SUPPORTED_LANGUAGE_MAJOR).
-    VersionMarker
-}
-
-ast_node! {
-    /// A `party` declaration at the top level of the document.
-    ///
-    /// A party declared inline on a candidate or campaign is a [`PartyReference`] instead.
-    Party
-}
-
-ast_node! {
-    /// A `candidate` declaration at the top level of the document.
-    ///
-    /// A candidate declared inline in a campaign is a [`Member`](super::Member) instead.
-    Candidate
-}
-
-ast_node! {
-    /// A `party` line on a candidate or campaign, either a reference or an inline declaration.
-    ///
-    /// `party @dem` refers to a party declared elsewhere. `party @green "Green"` declares the party
-    /// here, and may carry the same block of fields as a top-level [`Party`].
-    /// [`is_declaration`](Self::is_declaration) tells the two apart.
-    PartyReference
-}
-
 impl Document {
-    /// The `oval` version marker.
-    ///
-    /// `None` when the document has no marker, which validation reports as `unsupported-version`.
-    pub fn version(&self) -> Option<VersionMarker> {
-        child(&self.0)
+    /// Returns the version marker, or `None` if the document does not begin with one.
+    pub fn version_marker(&self) -> Option<VersionMarker> {
+        support::child(self.syntax())
     }
 
-    /// The name of the guide, from the `guide` field.
+    /// Returns the `guide` field, the guide's title, or `None` if the document has none.
     ///
-    /// `None` when the field is absent, which validation reports as `missing-guide-field`.
+    /// A field written without a value is still returned, with no [`value`](StringField::value).
     pub fn guide(&self) -> Option<StringField> {
-        top_level_field(&self.0, Keyword::Guide)
+        support::field(self.syntax(), Keyword::Guide)
     }
 
-    /// The name of the election, from the `election` field.
-    ///
-    /// `None` when the field is absent, which validation reports as `missing-guide-field`.
+    /// Returns the `election` field, the election's name, or `None` if the document has none.
     pub fn election(&self) -> Option<StringField> {
-        top_level_field(&self.0, Keyword::Election)
+        support::field(self.syntax(), Keyword::Election)
     }
 
-    /// The date of the election, from the `date` field.
-    ///
-    /// `None` when the field is absent, which validation reports as `missing-guide-field`.
+    /// Returns the `date` field, the election's date, or `None` if the document has none.
     pub fn date(&self) -> Option<DateField> {
-        top_level_field(&self.0, Keyword::Date)
+        support::child(self.syntax())
     }
 
-    /// The `note` field, which is optional.
+    /// Returns the document's `note` field, or `None` if the document has none.
     pub fn note(&self) -> Option<MarkdownField> {
-        top_level_field(&self.0, Keyword::Note)
+        support::child(self.syntax())
     }
 
-    /// The top-level party declarations, in source order.
+    /// Returns the parties declared at the top level, in the order written.
     ///
-    /// Parties declared inline are not included; see [`PartyReference`].
+    /// A party declared inline, in a candidate's `party` field or a party campaign, is not among
+    /// them.
     pub fn parties(&self) -> impl Iterator<Item = Party> + use<> {
-        children(&self.0)
+        support::children(self.syntax())
     }
 
-    /// The top-level candidate declarations, in source order.
+    /// Returns the candidates declared at the top level, in the order written.
     ///
-    /// Candidates declared inline in a campaign are not included; see [`Member`](super::Member).
+    /// A candidate declared inline, as a member of a campaign, is not among them.
     pub fn candidates(&self) -> impl Iterator<Item = Candidate> + use<> {
-        children(&self.0)
+        support::children(self.syntax())
     }
 
-    /// The root ballots, in source order.
+    /// Returns the root ballots, in the order written.
     ///
-    /// Sub-ballots are items of their enclosing ballot; see [`Ballot::items`]. A valid document
-    /// has at least one root ballot (`empty-document`).
+    /// Sub-ballots are not among them. Each is an item of the ballot that contains it.
     pub fn ballots(&self) -> impl Iterator<Item = Ballot> + use<> {
-        children(&self.0)
+        support::children(self.syntax())
     }
 }
 
-impl VersionMarker {
-    /// The declared major version of the language.
-    ///
-    /// Leading zeros are insignificant, so `oval 01` is version 1. `None` when the line ended
-    /// before the integer or the integer does not fit in a `u32`.
-    pub fn value(&self) -> Option<u32> {
-        token(&self.0, SyntaxKind::IntegerLiteral)?
-            .text()
-            .parse()
-            .ok()
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::Document;
+    use crate::ast::AstNode;
+    use crate::{SyntaxKind, parse};
 
-impl Party {
-    /// The declared identifier.
-    ///
-    /// `None` when the parser recovered from a line with no identifier or an `@` with no word.
-    pub fn id(&self) -> Option<Identifier> {
-        identifier(&self.0)
+    #[test]
+    fn the_root_is_a_document() {
+        let root = parse("guide \"G\"\n").unwrap().syntax();
+        let document = Document::cast(root.clone()).expect("the root is a document");
+        assert_eq!(document.syntax(), &root);
     }
 
-    /// The party's name as printed on the ballot.
-    ///
-    /// `None` when the line ended before the name.
-    pub fn name(&self) -> Option<String> {
-        string(&self.0)
+    #[test]
+    fn another_node_is_not_a_document() {
+        let field = parse("guide \"G\"\n")
+            .unwrap()
+            .syntax()
+            .first_child()
+            .expect("the document has a field");
+        assert_eq!(field.kind(), SyntaxKind::StringField);
+        assert_eq!(Document::cast(field), None);
     }
 
-    /// The range of the party's name, quotes included.
-    ///
-    /// `None` when the line ended before the name.
-    pub fn name_range(&self) -> Option<TextRange> {
-        string_range(&self.0)
+    #[test]
+    fn only_a_document_kind_can_be_a_document() {
+        assert!(Document::can_cast(SyntaxKind::Document));
+        for kind in [SyntaxKind::Ballot, SyntaxKind::ErrorNode, SyntaxKind::Word] {
+            assert!(!Document::can_cast(kind), "{kind:?}");
+        }
     }
 
-    /// The `abbreviation` field.
-    pub fn abbreviation(&self) -> Option<StringField> {
-        field(&self.0, Keyword::Abbreviation)
+    #[test]
+    fn a_parse_result_returns_its_document() {
+        let result = parse("").unwrap();
+        assert_eq!(result.document().syntax(), &result.syntax());
     }
 
-    /// The `website` field.
-    pub fn website(&self) -> Option<UrlField> {
-        field(&self.0, Keyword::Website)
+    fn string_value(field: Option<crate::ast::StringField>) -> Option<String> {
+        field
+            .and_then(|field| field.value())
+            .map(|value| value.value().into_owned())
     }
 
-    /// The `note` field.
-    pub fn note(&self) -> Option<MarkdownField> {
-        field(&self.0, Keyword::Note)
-    }
-}
-
-impl Candidate {
-    /// The declared identifier.
-    ///
-    /// `None` when the parser recovered from a line with no identifier or an `@` with no word.
-    pub fn id(&self) -> Option<Identifier> {
-        identifier(&self.0)
-    }
-
-    /// The candidate's name as printed on the ballot.
-    ///
-    /// `None` when the line ended before the name.
-    pub fn name(&self) -> Option<String> {
-        string(&self.0)
+    #[test]
+    fn a_document_has_its_guide_fields() {
+        let result = parse(
+            "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nnote:\n  N.\nparty @d \"D\"\n",
+        )
+        .unwrap();
+        let document = result.document();
+        let version = document
+            .version_marker()
+            .and_then(|marker| marker.version());
+        assert_eq!(version.and_then(|version| version.value()), Some(1));
+        assert_eq!(string_value(document.guide()).as_deref(), Some("G"));
+        assert_eq!(string_value(document.election()).as_deref(), Some("E"));
+        let date = document.date().and_then(|field| field.value());
+        assert_eq!(date.map(|date| date.year()), Some(2026));
+        let note = document.note().and_then(|field| field.body());
+        assert_eq!(note.map(|body| body.value()).as_deref(), Some("N."));
     }
 
-    /// The ballot designation, such as an occupation or current office, from the `designation`
-    /// field.
-    pub fn designation(&self) -> Option<StringField> {
-        field(&self.0, Keyword::Designation)
+    #[test]
+    fn an_empty_document_has_no_guide_fields() {
+        let document = parse("").unwrap().document();
+        assert_eq!(document.version_marker(), None);
+        assert_eq!(document.guide(), None);
+        assert_eq!(document.election(), None);
+        assert_eq!(document.date(), None);
+        assert_eq!(document.note(), None);
     }
 
-    /// The `party` line, whether a reference or an inline declaration.
-    pub fn party(&self) -> Option<PartyReference> {
-        block(&self.0).and_then(|b| child(&b))
+    #[test]
+    fn a_field_without_a_value_is_still_present() {
+        let guide = parse("guide\n").unwrap().document().guide();
+        assert!(guide.is_some_and(|field| field.value().is_none()));
     }
 
-    /// The `note` field.
-    pub fn note(&self) -> Option<MarkdownField> {
-        field(&self.0, Keyword::Note)
-    }
-}
-
-impl PartyReference {
-    /// The identifier referred to or declared.
-    ///
-    /// `None` when the parser recovered from a line with no identifier or an `@` with no word.
-    pub fn id(&self) -> Option<Identifier> {
-        identifier(&self.0)
+    #[test]
+    fn a_repeated_field_is_not_the_field() {
+        let document = parse("guide \"A\"\nguide \"B\"\n").unwrap().document();
+        assert_eq!(string_value(document.guide()).as_deref(), Some("A"));
     }
 
-    /// The party's name, present only when this line declares the party.
-    pub fn name(&self) -> Option<String> {
-        string(&self.0)
+    #[test]
+    fn a_misplaced_entry_is_not_part_of_the_document() {
+        assert_eq!(
+            parse("party @d \"D\"\nguide \"G\"\n")
+                .unwrap()
+                .document()
+                .guide(),
+            None
+        );
+        assert_eq!(
+            parse("guide \"G\"\noval 1\n")
+                .unwrap()
+                .document()
+                .version_marker(),
+            None
+        );
     }
 
-    /// The range of the party's name, quotes included, when this line declares the party.
-    pub fn name_range(&self) -> Option<TextRange> {
-        string_range(&self.0)
+    #[test]
+    fn a_note_inside_a_declaration_is_not_the_document_note() {
+        let document = parse("party @d \"D\"\n  note:\n    P.\n")
+            .unwrap()
+            .document();
+        assert_eq!(document.note(), None);
     }
 
-    /// Whether this line declares the party rather than referring to one declared elsewhere.
-    ///
-    /// A declaration is an identifier followed by a string (Section 2.7). The string decides;
-    /// whether the identifier is also declared elsewhere is the validation rule
-    /// `duplicate-declaration`.
-    pub fn is_declaration(&self) -> bool {
-        token(&self.0, SyntaxKind::StringLiteral).is_some()
+    #[test]
+    fn a_document_has_its_declarations_in_order() {
+        let document =
+            parse("party @dem \"D\"\ncandidate @a \"A\"\nparty @rep \"R\"\ncandidate @b \"B\"\n")
+                .unwrap()
+                .document();
+        let parties: Vec<_> = document
+            .parties()
+            .filter_map(|party| party.identifier())
+            .collect();
+        let candidates: Vec<_> = document
+            .candidates()
+            .filter_map(|c| c.identifier())
+            .collect();
+        let names = |ids: Vec<crate::ast::Identifier>| -> Vec<String> {
+            ids.iter()
+                .filter_map(|id| id.name().map(|name| name.text().to_owned()))
+                .collect()
+        };
+        assert_eq!(names(parties), ["dem", "rep"]);
+        assert_eq!(names(candidates), ["a", "b"]);
     }
 
-    /// The `abbreviation` field of an inline declaration.
-    pub fn abbreviation(&self) -> Option<StringField> {
-        field(&self.0, Keyword::Abbreviation)
+    #[test]
+    fn misplaced_and_inline_declarations_are_not_the_document_declarations() {
+        let document = parse(
+            "candidate @a \"A\"\n  party @green \"Green\"\nballot @b \"B\"\n  eligibility \"E\"\nparty @late \"L\"\n",
+        )
+        .unwrap()
+        .document();
+        assert_eq!(document.parties().count(), 0);
+        assert_eq!(document.candidates().count(), 1);
     }
 
-    /// The `website` field of an inline declaration.
-    pub fn website(&self) -> Option<UrlField> {
-        field(&self.0, Keyword::Website)
+    #[test]
+    fn a_document_has_its_root_ballots_and_not_their_sub_ballots() {
+        let document = parse(
+            "ballot @a \"A\"\n  ballot @sub \"Sub\"\n    eligibility \"E\"\nballot @b \"B\"\n  eligibility \"E\"\n",
+        )
+        .unwrap()
+        .document();
+        assert_eq!(document.ballots().count(), 2);
     }
-
-    /// The `note` field of an inline declaration.
-    pub fn note(&self) -> Option<MarkdownField> {
-        field(&self.0, Keyword::Note)
-    }
-}
-
-fn top_level_field<N: AstNode>(node: &SyntaxNode, which: Keyword) -> Option<N> {
-    node.children()
-        .filter_map(N::cast)
-        .find(|f| super::keyword(f.syntax()) == Some(which))
 }

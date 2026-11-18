@@ -1,202 +1,30 @@
 //! WebAssembly bindings for the Oval voting guide format.
 //!
-//! This crate is the source of the `@oval-vote/oval` npm package. It exposes [`check`],
-//! [`compile`], and [`format()`] from [`oval_core`] and [`oval_format`], and [`symbols`],
-//! [`outline`], [`completions`], [`hover`], and [`fixes`] from [`oval_analysis`], to JavaScript
-//! through `wasm-bindgen`,
-//! with [`catalog`],
-//! [`language_major`], and [`version`] beside them. Every function is synchronous and takes the
-//! document's source text as a string.
+//! This crate is the source of the `@oval-vote/oval` npm package, built with `wasm-pack`. Every
+//! function is synchronous. A panic, which is always a bug, prints its message to the console
+//! before the call fails.
 //!
-//! Results cross into JavaScript as plain values. Strings and numbers arrive as themselves;
-//! diagnostics, catalog entries, symbols, outlines, and the compiled model arrive as ordinary
-//! objects and arrays
-//! produced by `serde-wasm-bindgen`, not as class instances. Failures are thrown. A function that
-//! cannot read its input at all, because it contains U+0000, throws a string that says so; one
-//! that fails because the document has errors throws the array of diagnostics that [`check`]
-//! would return. Should a value fail to convert to JavaScript, the function throws that
-//! conversion error. A panic, which is always a bug, prints its message to the console before the
-//! call fails.
+//! A function throws an `OvalError` when the document has errors that stop it, with those errors
+//! in its `diagnostics`, and a plain `Error` when the source can't be an Oval document at all.
 //!
-//! [`TYPES`] declares the TypeScript types of these values and is appended to the package's
-//! generated typings.
+//! Positions in a document are JavaScript string indices, which count UTF-16 code units, so
+//! `source.slice(range.start, range.end)` is the text a range spans. Results are plain objects and
+//! arrays, whose TypeScript types are declared alongside the functions.
 
-use oval_analysis::Symbols;
-use oval_core::{CompileError, DiagnosticCode, InputRejection, Report, Severity};
+mod analysis;
+mod utf16;
+
+pub use analysis::Analysis;
+
+use oval_core::{DiagnosticCode, InputRejection, Report, Severity};
 use oval_format::FormatError;
-use oval_syntax::ast::{AstNode, Document};
 use serde::Serialize;
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
-/// The TypeScript declarations appended to the package's typings.
-///
-/// They name the values the functions return.
-///
-/// - `DiagnosticIdentifier` is the union of every identifier [`DiagnosticCode::all`] lists, in
-///   the specification's order.
-/// - `Severity` is `"error"` or `"warning"`.
-/// - `Diagnostic` is the shape of each element [`check`] returns.
-/// - `CatalogEntry` is the shape of each element [`catalog`] returns.
-/// - `Compiled` is the canonical model, which is `Guide` from `@oval-vote/oval-schema`, the
-///   specification's schema as types; the npm package depends on that package at the version whose
-///   shape this implementation produces.
-/// - `Range` is a span of byte offsets into the UTF-8 source.
-/// - `Symbols`, `Declaration`, and `Reference` are what [`symbols`] returns.
-/// - `OutlineItem` is the shape of each element [`outline`] returns, nested through `children`.
-/// - `Completion` is the shape of each element [`completions`] returns.
-/// - `Hover` is what [`hover`] returns, and `Fix` and `Edit` are what [`fixes`] returns.
-pub const TYPES: &str = r#"
-export type DiagnosticIdentifier =
-  | "illegal-tab"
-  | "unexpected-character"
-  | "unterminated-string"
-  | "invalid-escape"
-  | "malformed-number"
-  | "malformed-url"
-  | "inconsistent-dedent"
-  | "unexpected-token"
-  | "missing-identifier"
-  | "missing-name"
-  | "missing-contest-kind"
-  | "missing-value"
-  | "missing-body"
-  | "missing-block"
-  | "unexpected-block"
-  | "unexpected-entry"
-  | "repeated-field"
-  | "repeated-flag"
-  | "misplaced-entry"
-  | "empty-recommendation"
-  | "unsupported-version"
-  | "missing-guide-field"
-  | "empty-document"
-  | "invalid-date"
-  | "undeclared-reference"
-  | "duplicate-declaration"
-  | "mismatched-reference"
-  | "block-on-reference"
-  | "misplaced-candidate-field"
-  | "empty-ballot"
-  | "empty-section"
-  | "contest-without-campaigns"
-  | "campaign-without-members"
-  | "duplicate-member"
-  | "candidate-in-two-campaigns"
-  | "invalid-multiple-count"
-  | "invalid-ranked-max"
-  | "retention-campaign-count"
-  | "missing-recommendation"
-  | "repeated-recommendation"
-  | "campaign-not-in-contest"
-  | "repeated-oppose"
-  | "repeated-stance"
-  | "tiers-in-single"
-  | "support-over-max"
-  | "retention-stance"
-  | "markdown-profile"
-  | "unused-declaration"
-  | "duplicate-party-name"
-  | "duplicate-ballot-title"
-  | "support-over-count"
-  | "non-head-reference"
-  | "unpaired-outcome"
-  | "insecure-url"
-  | "empty-string";
-
-export type Severity = "error" | "warning";
-
-export interface Diagnostic {
-  code: DiagnosticIdentifier;
-  severity: Severity;
-  range: { start: number; end: number };
-  message: string;
-}
-
-export interface CatalogEntry {
-  identifier: DiagnosticIdentifier;
-  severity: Severity;
-  title: string;
-  url: string;
-}
-
-export type Compiled = import("@oval-vote/oval-schema").Guide;
-
-export interface Range {
-  start: number;
-  end: number;
-}
-
-export type SymbolKind = "party" | "candidate" | "ballot" | "contest" | "measure";
-
-export interface Declaration {
-  name: string;
-  kind: SymbolKind;
-  range: Range;
-  nameRange: Range;
-}
-
-export interface Reference {
-  name: string;
-  range: Range;
-  nameRange: Range;
-  declaration?: number;
-}
-
-export interface Symbols {
-  declarations: Declaration[];
-  references: Reference[];
-}
-
-export type OutlineKind = "ballot" | "section" | "contest" | "measure";
-
-export interface OutlineItem {
-  kind: OutlineKind;
-  title?: string;
-  name?: string;
-  range: Range;
-  selection: Range;
-  children: OutlineItem[];
-}
-
-export type CompletionKind = "keyword" | SymbolKind;
-
-export interface Completion {
-  label: string;
-  kind: CompletionKind;
-  detail?: string;
-  replace: Range;
-}
-
-export interface Hover {
-  range: Range;
-  contents: string;
-}
-
-export interface Edit {
-  range: Range;
-  text: string;
-  placeholders?: Range[];
-}
-
-export interface Fix {
-  code: DiagnosticIdentifier;
-  range: Range;
-  title: string;
-  edits: Edit[];
-}
-"#;
+use crate::utf16::{Range, Utf16Index};
 
 #[wasm_bindgen(typescript_custom_section)]
-const TYPESCRIPT: &str = TYPES;
-
-/// One entry of the specification's catalog of diagnostics.
-#[derive(Serialize)]
-struct CatalogEntry {
-    identifier: &'static str,
-    severity: Severity,
-    title: &'static str,
-    url: String,
-}
+const TYPES: &str = include_str!("types.d.ts");
 
 #[wasm_bindgen]
 extern "C" {
@@ -209,309 +37,209 @@ fn start() {
     std::panic::set_hook(Box::new(|info| console_error(&info.to_string())));
 }
 
-/// The major version of the Oval language this package reads, `1`.
+/// Returns the major version of the language this package reads.
 ///
-/// Exported to JavaScript as `languageMajor()`, returning a number. A document whose version
-/// marker names another major version is reported as `unsupported-version` rather than parsed.
+/// Exported to JavaScript as `languageMajor()`.
 #[wasm_bindgen(js_name = languageMajor)]
 pub fn language_major() -> u32 {
-    oval_core::SUPPORTED_LANGUAGE_MAJOR
+    oval_core::MAJOR_VERSION
 }
 
-/// The version of this package, as a semantic version string.
+/// Returns the version of this package.
 ///
-/// It is the Cargo version of this crate, which the npm package mirrors.
+/// It's the version of this crate, which the npm package shares.
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
-/// Every diagnostic this package can report, in the specification's order.
+/// Checks `source` and returns every problem found in it, ordered by where each one begins.
 ///
-/// Returns an array of `CatalogEntry` objects, one per [`DiagnosticCode`], each with the code's
-/// `identifier`, `severity`, `title`, and `url`, the address of its entry on the specification's
-/// site. A tool uses it to list what it reports or to link a diagnostic to its documentation.
-///
-/// ```js
-/// const { catalog } = require("@oval-vote/oval");
-/// const entry = catalog().find((e) => e.identifier === "invalid-date");
-/// console.log(entry.title, entry.url);
-/// ```
-///
-/// # Errors
-///
-/// Throws only when the entries cannot be converted to a JavaScript value.
-#[wasm_bindgen(unchecked_return_type = "CatalogEntry[]")]
-pub fn catalog() -> Result<JsValue, JsValue> {
-    let entries: Vec<CatalogEntry> = DiagnosticCode::all()
-        .into_iter()
-        .map(|code| CatalogEntry {
-            identifier: code.identifier(),
-            severity: code.severity(),
-            title: code.title(),
-            url: code.url(),
-        })
-        .collect();
-    serde_wasm_bindgen::to_value(&entries).map_err(into_js)
-}
-
-/// Parses and validates `source`, returning every diagnostic in source order.
-///
-/// Returns an array of `Diagnostic` objects, errors and warnings alike, each with its `code` (the
-/// identifier), `severity`, `range`, and `message`. The range is `{ start, end }` in byte offsets
-/// into the UTF-8 source, not in JavaScript string indices. The array is empty when the document
-/// is valid and has no warnings. When the version marker is missing or names another major
-/// version, the array contains only `unsupported-version`.
-///
-/// ```js
-/// const { check } = require("@oval-vote/oval");
-/// const diagnostics = check('oval 1\nguide "Franklin Voter Guide"\n');
-/// const errors = diagnostics.filter((d) => d.severity === "error");
-/// console.log(errors.map((d) => `${d.code}: ${d.message}`));
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000, the one input that is not an Oval document at
-/// all.
+/// Exported to JavaScript as `check(source)`, which returns `Diagnostic[]`.
 #[wasm_bindgen(unchecked_return_type = "Diagnostic[]")]
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
-    diagnostics(&oval_core::check(source).map_err(rejected)?)
+    let index = Utf16Index::new(source);
+    let report = oval_core::check(source).map_err(|rejection| rejected(rejection, &index))?;
+    to_js(&Diagnostic::all(&report, &index))
 }
 
-/// Compiles `source` to the canonical model, or throws its diagnostics.
+/// Compiles `source` into the object the specification's schema describes.
 ///
-/// Returns the object the specification's schema describes, Section 5, typed as `Guide` from
-/// `@oval-vote/oval-schema`: the guide with every reference resolved and the derived fields filled
-/// in, as a plain JavaScript object. It is the same value `oval compile` prints as JSON.
-///
-/// ```js
-/// const { compile } = require("@oval-vote/oval");
-/// let compiled;
-/// try {
-///   compiled = compile(source);
-/// } catch (thrown) {
-///   if (Array.isArray(thrown)) console.error(thrown);
-///   throw thrown;
-/// }
-/// console.log(compiled.guide.name, compiled.counts.contests);
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000. Throws the array of `Diagnostic` objects that
-/// [`check`] would return when the document has any error. Warnings alone do not prevent
-/// compilation and are not reported here, so a tool that wants them calls [`check`] as well.
-#[wasm_bindgen(unchecked_return_type = "Compiled")]
+/// Exported to JavaScript as `compile(source)`, which returns a `Guide`. Warnings don't stop it,
+/// and errors make it throw an `OvalError` with every error in the document.
+#[wasm_bindgen(unchecked_return_type = "Guide")]
 pub fn compile(source: &str) -> Result<JsValue, JsValue> {
-    match oval_core::compile(source) {
-        Ok(compiled) => serde_wasm_bindgen::to_value(&compiled).map_err(into_js),
-        Err(CompileError::Rejected(rejection)) => Err(rejected(rejection)),
-        Err(CompileError::Invalid(report)) => Err(diagnostics(&report)?),
+    let index = Utf16Index::new(source);
+    let report = oval_core::check(source).map_err(|rejection| rejected(rejection, &index))?;
+    match report.compile() {
+        Some(compiled) => to_js(&compiled),
+        None => Err(invalid(&report, &index, |code| {
+            code.severity() == Severity::Error
+        })),
     }
 }
 
-/// Formats `source` in the canonical style of Section 6, or throws its diagnostics.
+/// Formats `source` in the canonical style.
 ///
-/// Returns the formatted document as a string. It uses `\n` as its line terminator, ends with
-/// exactly one, and formatting it again returns it unchanged. A document with validation errors
-/// formats normally; only lexical and syntax errors prevent formatting.
-///
-/// ```js
-/// const { format } = require("@oval-vote/oval");
-/// format('oval 01\nguide   "G"\n'); // 'oval 1\nguide "G"\n'
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000. Throws the array of `Diagnostic` objects that
-/// [`check`] would return when the document has lexical or syntax errors, so a caller sees every
-/// problem and not only the ones that stopped the formatter.
+/// Exported to JavaScript as `format(source)`. Validation errors don't stop it, so a guide that
+/// isn't finished can be formatted. Lexical and syntax errors make it throw an `OvalError` with
+/// those errors.
 #[wasm_bindgen]
 pub fn format(source: &str) -> Result<String, JsValue> {
+    let index = Utf16Index::new(source);
     match oval_format::format(source) {
         Ok(formatted) => Ok(formatted),
-        Err(FormatError::Rejected(rejection)) => Err(rejected(rejection)),
-        Err(FormatError::SyntaxErrors(_)) => {
-            Err(diagnostics(&oval_core::check(source).map_err(rejected)?)?)
+        Err(FormatError::Rejected(rejection)) => Err(rejected(rejection, &index)),
+        Err(FormatError::Malformed(_)) => {
+            let report =
+                oval_core::check(source).map_err(|rejection| rejected(rejection, &index))?;
+            Err(invalid(&report, &index, |code| {
+                !matches!(code, DiagnosticCode::Validation(_))
+            }))
         }
     }
 }
 
-/// The declared identifiers of `source` and every use of one.
-///
-/// Returns a `Symbols` object with `declarations` and `references`, each in document order. A
-/// declaration has its `name` without the `@`, its `kind`, its `range`, and its `nameRange`, the
-/// span of the name alone, which a rename replaces. A reference has the same spans and
-/// `declaration`, the index in `declarations` of the one it names, absent when nothing declares
-/// the name. Ranges are byte offsets into the UTF-8 source. A document with errors still has
-/// symbols; the parts the parser could not read are left out.
-///
-/// ```js
-/// const { symbols } = require("@oval-vote/oval");
-/// const { declarations, references } = symbols(source);
-/// const uses = references.filter((r) => r.name === "delgado").map((r) => r.range);
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000.
-#[wasm_bindgen(unchecked_return_type = "Symbols")]
-pub fn symbols(source: &str) -> Result<JsValue, JsValue> {
-    let document = document(source)?;
-    serde_wasm_bindgen::to_value(&Symbols::new(&document)).map_err(into_js)
+fn to_js<T: Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    value
+        .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+        .map_err(JsValue::from)
 }
 
-/// The structure of `source` as nested ballots, sections, contests, and measures.
-///
-/// Returns an array of `OutlineItem` objects for the root ballots, in document order, each with
-/// its `kind`, `title`, `name` (the identifier without `@`, absent for a section), `range` (the
-/// whole construct), `selection` (its header line), and `children`. Parties and candidates are
-/// not in the outline; [`symbols`] lists them.
-///
-/// ```js
-/// const { outline } = require("@oval-vote/oval");
-/// for (const ballot of outline(source)) console.log(ballot.title, ballot.children.length);
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000.
-#[wasm_bindgen(unchecked_return_type = "OutlineItem[]")]
-pub fn outline(source: &str) -> Result<JsValue, JsValue> {
-    let document = document(source)?;
-    serde_wasm_bindgen::to_value(&oval_analysis::outline(&document)).map_err(into_js)
+fn rejected(rejection: InputRejection, index: &Utf16Index) -> JsValue {
+    js_sys::Error::new(&rejection_message(rejection, index)).into()
 }
 
-/// Everything the grammar accepts at `offset` in `source`, for completion.
-///
-/// Returns an array of `Completion` objects. Each has a `label` to insert, which is a keyword or
-/// an identifier with its `@`; its `kind`; `detail`, the name an identifier declares, such as a
-/// candidate's name; and `replace`, the range of the partial word before `offset` that the label
-/// replaces. `offset` is a byte offset into the UTF-8 source. Keywords are the ones the parser
-/// accepts at that point and identifiers are the declarations of the kind the point names, so
-/// `support` offers candidates and `party` offers parties. The array is empty inside a string, a
-/// comment, or a Markdown body, and where the point names a new identifier.
-///
-/// ```js
-/// const { completions } = require("@oval-vote/oval");
-/// const found = completions(source, byteOffsetOfCursor);
-/// console.log(found.map((c) => c.label));
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000.
-#[wasm_bindgen(unchecked_return_type = "Completion[]")]
-pub fn completions(source: &str, offset: u32) -> Result<JsValue, JsValue> {
-    reject_nul(source)?;
-    let found = oval_analysis::completions(source, oval_syntax::TextSize::from(offset));
-    serde_wasm_bindgen::to_value(&found).map_err(into_js)
-}
-
-/// Text for the identifier or keyword at `offset` in `source`, for a hover.
-///
-/// Returns a `Hover` with the `range` of the token and its `contents` as Markdown, or `undefined`
-/// when nothing at `offset` has text. For an identifier the text names what it declares, with its
-/// name or title and, for a candidate, its party; for a keyword, one sentence and a link to its
-/// section of the specification.
-///
-/// ```js
-/// const { hover } = require("@oval-vote/oval");
-/// const found = hover(source, byteOffsetOfCursor);
-/// if (found) console.log(found.contents);
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000.
-#[wasm_bindgen(unchecked_return_type = "Hover | undefined")]
-pub fn hover(source: &str, offset: u32) -> Result<JsValue, JsValue> {
-    reject_nul(source)?;
-    let found = oval_analysis::hover(source, oval_syntax::TextSize::from(offset));
-    serde_wasm_bindgen::to_value(&found).map_err(into_js)
-}
-
-/// Repairs for the diagnostics of `source` that have a mechanical one.
-///
-/// Returns an array of `Fix` objects in source order, each with the `code` and `range` of the
-/// diagnostic it repairs, a `title` to show, and the `edits` to apply together, where each edit
-/// replaces a `range` with `text`. An editor pairs a fix with a diagnostic by code and range.
-/// Insecure URLs, references with a near miss among the declarations, missing guide fields,
-/// missing recommendations, and unused top-level declarations have fixes; other diagnostics do
-/// not.
-///
-/// ```js
-/// const { fixes } = require("@oval-vote/oval");
-/// for (const fix of fixes(source)) console.log(fix.code, fix.title);
-/// ```
-///
-/// # Errors
-///
-/// Throws a string when `source` contains U+0000.
-#[wasm_bindgen(unchecked_return_type = "Fix[]")]
-pub fn fixes(source: &str) -> Result<JsValue, JsValue> {
-    reject_nul(source)?;
-    serde_wasm_bindgen::to_value(&oval_analysis::fixes(source)).map_err(into_js)
-}
-
-fn reject_nul(source: &str) -> Result<(), JsValue> {
-    match source.find('\0') {
-        Some(offset) => Err(rejected(InputRejection {
-            offset: oval_syntax::TextSize::try_from(offset)
-                .map_err(|_| JsValue::from("too long"))?,
-        })),
-        None => Ok(()),
+fn rejection_message(rejection: InputRejection, index: &Utf16Index) -> String {
+    match rejection {
+        InputRejection::NulCharacter { offset } => format!(
+            "the document contains U+0000 at index {}",
+            index.index(offset.into())
+        ),
+        InputRejection::TooLarge | InputRejection::InvalidUtf8 { .. } => rejection.to_string(),
     }
 }
 
-fn document(source: &str) -> Result<Document, JsValue> {
-    let parsed = oval_syntax::parser::parse(source).map_err(rejected)?;
-    Document::cast(parsed.syntax()).ok_or_else(|| JsValue::from("the root is not a document"))
+fn invalid(report: &Report, index: &Utf16Index, stops: impl Fn(DiagnosticCode) -> bool) -> JsValue {
+    let errors: Vec<Diagnostic> = report
+        .diagnostics()
+        .iter()
+        .filter(|diagnostic| stops(diagnostic.code))
+        .map(|diagnostic| Diagnostic::new(diagnostic, index))
+        .collect();
+    let error = js_sys::Error::new(&invalid_message(errors.len()));
+    error.set_name("OvalError");
+    let diagnostics = match to_js(&errors) {
+        Ok(diagnostics) => diagnostics,
+        Err(conversion) => return conversion,
+    };
+    match js_sys::Reflect::set(&error, &JsValue::from_str("diagnostics"), &diagnostics) {
+        Ok(_) => error.into(),
+        Err(thrown) => thrown,
+    }
 }
 
-fn diagnostics(report: &Report) -> Result<JsValue, JsValue> {
-    serde_wasm_bindgen::to_value(report.diagnostics()).map_err(into_js)
+fn invalid_message(errors: usize) -> String {
+    match errors {
+        1 => "the document has an error".to_owned(),
+        errors => format!("the document has {errors} errors"),
+    }
 }
 
-fn into_js(error: serde_wasm_bindgen::Error) -> JsValue {
-    JsValue::from(error)
+#[derive(Debug, PartialEq, Serialize)]
+struct Diagnostic {
+    code: &'static str,
+    severity: &'static str,
+    range: Range,
+    message: String,
 }
 
-fn rejected(rejection: InputRejection) -> JsValue {
-    JsValue::from(rejection.to_string())
+impl Diagnostic {
+    fn all(report: &Report, index: &Utf16Index) -> Vec<Self> {
+        report
+            .diagnostics()
+            .iter()
+            .map(|diagnostic| Self::new(diagnostic, index))
+            .collect()
+    }
+
+    fn new(diagnostic: &oval_core::Diagnostic, index: &Utf16Index) -> Self {
+        Self {
+            code: diagnostic.code.spec_id(),
+            severity: match diagnostic.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+            },
+            range: index.range(diagnostic.range),
+            message: diagnostic.message.clone(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use oval_core::DiagnosticCode;
 
-    use super::TYPES;
+    use oval_syntax::InputRejection;
+
+    use super::{Diagnostic, invalid_message, rejection_message};
+    use crate::utf16::{Range, Utf16Index};
 
     #[test]
-    fn the_typescript_union_lists_every_identifier_in_order() {
-        let union = TYPES
-            .split("export type DiagnosticIdentifier =")
-            .nth(1)
-            .and_then(|rest| rest.split(';').next())
-            .expect("union in the custom section");
-        let listed: Vec<&str> = union
+    fn the_typescript_code_union_lists_every_code_in_order() {
+        let union = include_str!("types.d.ts")
+            .split_once("export type DiagnosticCode =")
+            .and_then(|(_, rest)| rest.split_once(';'))
+            .map(|(union, _)| union)
+            .unwrap();
+        let declared: Vec<&str> = union
             .split('|')
-            .map(|item| item.trim().trim_matches('"'))
-            .filter(|item| !item.is_empty())
+            .map(|member| member.trim().trim_matches('"'))
+            .filter(|member| !member.is_empty())
             .collect();
-        let all: Vec<&str> = DiagnosticCode::all()
-            .into_iter()
-            .map(DiagnosticCode::identifier)
-            .collect();
-        assert_eq!(listed, all);
+        let codes: Vec<&str> = DiagnosticCode::all().map(DiagnosticCode::spec_id).collect();
+        assert_eq!(declared, codes);
     }
 
     #[test]
-    fn the_npm_package_has_the_workspace_version() {
-        let manifest: serde_json::Value =
-            serde_json::from_str(include_str!("../../../packages/oval/package.json"))
-                .expect("package.json is JSON");
-        assert_eq!(manifest["version"], env!("CARGO_PKG_VERSION"));
+    fn a_diagnostic_spans_string_indices() {
+        let source = "oval 1\nguide \"🗳 Guía\"\nelection \"E\"\ndate 2026-11-03\nparty @p \"Pé\"\n";
+        let report = oval_core::check(source).unwrap();
+        let found = Diagnostic::all(&report, &Utf16Index::new(source));
+        let declaration = "party @p \"Pé\"";
+        let start = source.find(declaration).unwrap();
+        let units = |text: &str| u32::try_from(text.encode_utf16().count()).unwrap();
+        assert_eq!(
+            found[0],
+            Diagnostic {
+                code: "unused-declaration",
+                severity: "warning",
+                range: Range {
+                    start: units(&source[..start]),
+                    end: units(&source[..start + declaration.len()]),
+                },
+                message: found[0].message.clone(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_rejection_gives_the_index_of_the_nul_character() {
+        let source = "é😀\0";
+        let rejection = oval_core::check(source).unwrap_err();
+        assert_eq!(
+            rejection_message(rejection, &Utf16Index::new(source)),
+            "the document contains U+0000 at index 3"
+        );
+        assert_eq!(
+            rejection_message(InputRejection::TooLarge, &Utf16Index::new(source)),
+            "the document is too large"
+        );
+    }
+
+    #[test]
+    fn an_invalid_document_says_how_many_errors_it_has() {
+        assert_eq!(invalid_message(1), "the document has an error");
+        assert_eq!(invalid_message(3), "the document has 3 errors");
     }
 }

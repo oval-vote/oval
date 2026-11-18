@@ -1,64 +1,64 @@
-//! Editor queries over Oval voting guides.
+//! Symbols, outlines, and other editor queries over Oval voting guides.
 //!
-//! This crate answers the questions an editor asks about a document once it is parsed. Which
-//! identifiers are declared and where each one is used ([`Symbols`]), what the document's
-//! structure is ([`outline`]), which identifier sits under the cursor ([`Symbols::at`]), what the
-//! grammar accepts at a position ([`completions`]), what to say about the token there ([`hover`]),
-//! and how to repair the diagnostics that have a mechanical fix ([`fixes`]). Every answer is positions and names, so a language server, a WebAssembly
-//! binding, or a test can turn it into its own representation.
-//!
-//! The functions take a parsed [`Document`](oval_syntax::ast::Document) and never fail. A document with errors still has a
-//! tree, and an editor needs symbols and an outline most while the author is mid-edit, so every
-//! part the parser could not find is left out rather than reported.
-//!
-//! # Examples
+//! An [`Analysis`] checks a document once and then answers the questions an editor asks about
+//! it, such as which identifier sits under the cursor and where it's declared. Every answer is a
+//! byte range into the document, so a language server, a WebAssembly binding, or a test can turn
+//! it into its own positions. A document with errors still has answers, since an editor needs them
+//! most while the author is mid-edit.
 //!
 //! ```
-//! use oval_analysis::{Symbols, outline};
-//! use oval_syntax::ast::{AstNode, Document};
-//! use oval_syntax::parser::parse;
+//! use oval_analysis::Analysis;
 //!
-//! let source = r#"oval 1
-//! guide "G"
-//! election "E"
-//! date 2026-11-03
-//! candidate @delgado "Rosa Delgado"
-//! ballot @city "City"
-//!   contest @attorney "City Attorney" single
-//!     campaign @delgado
-//!     recommend
-//!       support @delgado
-//! "#;
-//! let document = Document::cast(parse(source).unwrap().syntax()).unwrap();
-//!
-//! let symbols = Symbols::new(&document);
-//! let reference = source.rfind("@delgado").unwrap();
-//! let declaration = symbols.definition(reference.try_into().unwrap()).unwrap();
-//! assert_eq!(usize::from(declaration.range.start()), source.find("@delgado").unwrap());
-//! assert_eq!(symbols.occurrences(reference.try_into().unwrap()).len(), 3);
-//!
-//! let items = outline(&document);
-//! assert_eq!(items[0].title.as_deref(), Some("City"));
-//! assert_eq!(items[0].children[0].title.as_deref(), Some("City Attorney"));
+//! let source = "oval 1\nparty @dem \"Democratic\"\ncandidate @n \"Nadia\"\n  party @dem\n";
+//! let analysis = Analysis::new(source)?;
+//! let reference = source.rfind("@dem").expect("the candidate names the party");
+//! let definition = analysis.definition(reference.try_into()?).expect("the party is declared");
+//! assert_eq!(definition.identifier.name().map(|name| name.to_string()).as_deref(), Some("dem"));
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod completion;
 mod fix;
 mod hover;
-mod names;
 mod outline;
 mod symbols;
 
-pub use completion::{Completion, CompletionKind, completions};
-pub use fix::{Edit, Fix, fixes};
-pub use hover::{Hover, hover};
-pub use outline::{OutlineItem, OutlineKind, outline};
-pub use symbols::{Declaration, Reference, Symbol, SymbolKind, Symbols};
+pub use completion::{Completion, CompletionKind};
+pub use fix::{Edit, Fix};
+pub use hover::Hover;
+pub use outline::{OutlineItem, OutlineKind};
+pub use oval_core::InputRejection;
+pub use symbols::{Occurrence, Symbol};
 
-fn clamp_to_char_boundary(source: &str, offset: oval_syntax::TextSize) -> usize {
-    let offset = usize::from(offset).min(source.len());
-    (0..=offset)
-        .rev()
-        .find(|at| source.is_char_boundary(*at))
-        .unwrap_or(0)
+use oval_core::{Report, Symbols};
+
+/// A checked document, ready to answer editor queries.
+#[derive(Debug)]
+pub struct Analysis {
+    report: Report,
+    symbols: Symbols,
+}
+
+impl Analysis {
+    /// Checks `source` and collects its symbols.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`InputRejection`] when the input can't be an Oval document at all, because it
+    /// contains U+0000 or is too large.
+    pub fn new(source: &str) -> Result<Self, InputRejection> {
+        let report = oval_core::check(source)?;
+        let symbols = Symbols::new(&report.parse().document());
+        Ok(Self { report, symbols })
+    }
+
+    /// Returns the report of the document's diagnostics, with its syntax tree.
+    pub fn report(&self) -> &Report {
+        &self.report
+    }
+
+    /// Returns the document's declarations and references.
+    pub fn symbols(&self) -> &Symbols {
+        &self.symbols
+    }
 }

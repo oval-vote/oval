@@ -1,465 +1,262 @@
-//! The `oval` command line tool.
+//! The `oval` command line tool for Oval voting guides.
 //!
-//! `oval` reads Oval voting guides from files and checks, compiles, or formats them with
-//! [`oval_core`] and [`oval_format`]. It has three subcommands.
+//! `oval check FILE...` parses and validates each file and prints every diagnostic, errors and
+//! warnings alike, to standard output, one per line as
+//! `file:line:column: severity[identifier]: message`. The line and column are one-based, and the
+//! column counts characters. The identifier is the diagnostic's identifier in the specification,
+//! such as `missing-guide-field`, and the message says what is wrong for a person to read.
 //!
-//! - `oval check FILE...` parses and validates each file and prints every diagnostic, errors and
-//!   warnings alike, to standard output. With `--strict`, a warning fails the file as an error
-//!   does.
-//! - `oval compile FILE` compiles one file to its canonical JSON form, Section 5 of the
-//!   specification, on standard output, either compact or indented with `--pretty`. Diagnostics
-//!   go to standard error.
-//! - `oval fmt FILE...` rewrites each file in the canonical style of Section 6. With `--check` it
-//!   rewrites nothing and instead names each file that would change. A file with lexical or
-//!   syntax errors is left as it is and its diagnostics go to standard error.
+//! `oval compile FILE` compiles one file to its canonical JSON on standard output, compact or, with
+//! `--pretty`, indented. Its diagnostics go to standard error in the same form, and a file with an
+//! error prints no JSON.
 //!
-//! Diagnostics are printed one per line as `file:line:column: severity[identifier]: message`.
-//! `line` and `column` are one-based and `column` counts characters; `severity` is `error` or
-//! `warning`; `identifier` is the diagnostic's identifier in the specification, such as
-//! `missing-guide-field`. With `--json` each subcommand prints one JSON array instead, with an
-//! object per diagnostic whose fields are `path`, `code`, `severity`, `message`, `start` and `end`
-//! as `{ line, column }`, `range` as `{ start, end }` in byte offsets, and `url`, the address of
-//! the diagnostic's entry in the specification. `check` prints the array even when it is empty;
-//! `compile` and `fmt` print it only when there is something to report.
+//! `oval fmt FILE...` rewrites each file in the canonical style, leaving a file that is already
+//! formatted untouched. With `--check` it rewrites nothing, and prints the path of each file that
+//! would change instead. A file with lexical or syntax errors is never formatted, and its errors go
+//! to standard error in the same form as diagnostics.
 //!
-//! A file that cannot be processed, because it cannot be read or written, is not UTF-8, or
-//! contains U+0000, is reported on standard error as one line starting `oval:`, never in the JSON
-//! array, and the remaining files are still processed. Invalid UTF-8 is reported with the line and
-//! column of its first bad byte.
+//! With `--json`, each command prints its diagnostics as one JSON array on the same stream instead,
+//! with an object for each diagnostic whose keys are `path`, `code`, `severity`, `message`, `start`
+//! and `end` as a one-based `line` and `column`, and `range` as the byte offsets `start` and `end`.
+//! `check` prints the array even when it's empty, and `compile` and `fmt` only when it isn't.
 //!
-//! The exit status is the most severe outcome among the files. It is 0 on success, including when
-//! the only diagnostics are warnings and `--strict` is not given. It is 1 when a checked file has
-//! an error, or a warning under `--strict`, when a compiled file is invalid, or when a formatted
-//! file has syntax errors or, under `--check`, would change. It is 2 when a file cannot be
-//! processed, when its compiled form cannot be written as JSON, when output cannot be written, and
-//! when the command line itself is invalid. When standard output is closed early, as by `head`,
-//! the run stops and the status is 0.
+//! A file that can't be read or written, or that is rejected before lexing, is reported on standard
+//! error in one line starting `oval:`, even with `--json`, and the remaining files are still
+//! processed.
+//!
+//! The exit status is the worst outcome among the files. It's 0 on success, including when the
+//! only diagnostics are warnings and `check` isn't given `--strict`. It's 1 when a file has an
+//! error, or a warning under `check --strict`, or under `fmt --check` would change, and 2 when a
+//! file can't be read or written or the command line is invalid. When standard
+//! output is closed early, as by `head`, the run stops with status 0.
 
 mod line_index;
+mod printer;
 
+use std::fmt;
+use std::fs;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use oval_core::{CompileError, Diagnostic, InputRejection, Report, Severity};
+use oval_core::{InputRejection, Report};
 use oval_format::FormatError;
-use oval_syntax::TextSize;
-use serde::Serialize;
 
-use crate::line_index::LineIndex;
+use crate::printer::Printer;
 
-/// The command line, as clap parses it.
 #[derive(Parser)]
-#[command(name = "oval", version, about = "Tools for Oval voting guides")]
+#[command(
+    name = "oval",
+    bin_name = "oval",
+    version,
+    about = "Tools for Oval voting guides"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
 }
 
-/// The subcommands.
 #[derive(Subcommand)]
 enum Command {
-    /// Parse and validate one or more documents.
+    #[command(about = "Parse and validate one or more documents")]
     Check {
-        /// Files to check.
-        #[arg(required = true)]
+        #[arg(required = true, help = "The files to check")]
         files: Vec<PathBuf>,
-        /// Print diagnostics as a JSON array instead of text lines.
-        #[arg(long)]
-        json: bool,
-        /// Fail when a file has warnings, not only errors.
-        #[arg(long)]
+        #[arg(long, help = "Fail when a file has warnings, not only errors")]
         strict: bool,
-    },
-    /// Compile a document to its canonical JSON form.
-    Compile {
-        /// The file to compile.
-        file: PathBuf,
-        /// Indent the output for reading.
-        #[arg(long)]
-        pretty: bool,
-        /// Print diagnostics as a JSON array instead of text lines.
-        #[arg(long)]
+        #[arg(long, help = "Print the diagnostics as one JSON array")]
         json: bool,
     },
-    /// Rewrite one or more documents in the canonical style.
+    #[command(about = "Compile a document to its canonical JSON")]
+    Compile {
+        #[arg(help = "The file to compile")]
+        file: PathBuf,
+        #[arg(long, help = "Indent the JSON for reading")]
+        pretty: bool,
+        #[arg(long, help = "Print the diagnostics as one JSON array")]
+        json: bool,
+    },
+    #[command(about = "Rewrite one or more documents in the canonical style")]
     Fmt {
-        /// Files to format.
-        #[arg(required = true)]
+        #[arg(required = true, help = "The files to format")]
         files: Vec<PathBuf>,
-        /// Report files that would change instead of rewriting them.
-        #[arg(long)]
+        #[arg(long, help = "Rewrite nothing, and list the files that would change")]
         check: bool,
-        /// Print diagnostics as a JSON array instead of text lines.
-        #[arg(long)]
+        #[arg(long, help = "Print the diagnostics as one JSON array")]
         json: bool,
     },
 }
 
-/// The outcome of a run or of one file, ordered from best to worst.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum ExitStatus {
-    /// Nothing failed.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Status {
     Success,
-    /// A file has errors, has warnings under `--strict`, or would change under `fmt --check`.
     Failure,
-    /// A file could not be processed, or output could not be written.
     Error,
 }
 
-impl From<ExitStatus> for ExitCode {
-    fn from(status: ExitStatus) -> Self {
+impl From<Status> for ExitCode {
+    fn from(status: Status) -> Self {
         match status {
-            ExitStatus::Success => ExitCode::SUCCESS,
-            ExitStatus::Failure => ExitCode::FAILURE,
-            ExitStatus::Error => ExitCode::from(2),
+            Status::Success => ExitCode::SUCCESS,
+            Status::Failure => ExitCode::FAILURE,
+            Status::Error => ExitCode::from(2),
         }
     }
 }
 
-/// The form diagnostics are printed in.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum OutputFormat {
-    /// One line per diagnostic.
-    Text,
-    /// One JSON array for the whole run.
-    Json,
-}
-
-impl OutputFormat {
-    fn from_json_flag(json: bool) -> Self {
-        if json { Self::Json } else { Self::Text }
-    }
-}
-
-/// Whether `--json` output prints an array when there is nothing to report.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum WhenEmpty {
-    /// Print `[]`.
-    PrintArray,
-    /// Print nothing.
-    PrintNothing,
-}
-
-/// One of the two output streams.
-#[derive(Clone, Copy)]
-enum Stream {
-    /// Standard output.
-    Stdout,
-    /// Standard error.
-    Stderr,
-}
-
-/// A reason one file could not be processed.
-enum FileError {
-    /// The file could not be read.
-    Read(io::Error),
-    /// The file is not UTF-8; the position is that of its first invalid byte.
-    InvalidUtf8 { line: usize, column: usize },
-    /// The file contains U+0000.
+enum Problem {
+    Unreadable(io::Error),
+    Unwritable(io::Error),
     Rejected(InputRejection),
-    /// The formatted file could not be written back.
-    Write(io::Error),
-    /// The compiled form could not be written as JSON.
-    Serialize(serde_json::Error),
 }
 
-/// The run's locked output streams. Standard output is buffered and standard error is not.
-struct Output {
-    stdout: BufWriter<io::StdoutLock<'static>>,
-    stderr: io::StderrLock<'static>,
-}
-
-impl Output {
-    fn new() -> Self {
-        Self {
-            stdout: BufWriter::new(io::stdout().lock()),
-            stderr: io::stderr().lock(),
-        }
-    }
-
-    fn stream(&mut self, stream: Stream) -> &mut dyn Write {
-        match stream {
-            Stream::Stdout => &mut self.stdout,
-            Stream::Stderr => &mut self.stderr,
-        }
-    }
-
-    fn failure(&mut self, path: &Path, error: &FileError) -> io::Result<()> {
-        self.stdout.flush()?;
-        let path = path.display();
-        match error {
-            FileError::Read(error) => writeln!(self.stderr, "oval: cannot read {path}: {error}"),
-            FileError::InvalidUtf8 { line, column } => {
-                writeln!(self.stderr, "oval: {path}:{line}:{column}: not valid UTF-8")
+impl fmt::Display for Problem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unreadable(error) => error.fmt(f),
+            Self::Unwritable(error) => {
+                write!(f, "the formatted document can't be written: {error}")
             }
-            FileError::Rejected(rejection) => writeln!(self.stderr, "oval: {path}: {rejection}"),
-            FileError::Write(error) => writeln!(self.stderr, "oval: cannot write {path}: {error}"),
-            FileError::Serialize(error) => {
-                writeln!(self.stderr, "oval: cannot serialize {path}: {error}")
-            }
+            Self::Rejected(rejection) => rejection.fmt(f),
         }
     }
 }
 
-/// A one-based line and column, as `--json` output reports positions.
-#[derive(Serialize)]
-struct Position {
-    line: usize,
-    column: usize,
-}
-
-/// One diagnostic as `--json` output prints it.
-#[derive(Serialize)]
-struct Entry {
-    path: String,
-    #[serde(flatten)]
-    diagnostic: Diagnostic,
-    start: Position,
-    end: Position,
-    url: String,
-}
-
-/// Prints diagnostics to one stream, as text lines or, with `--json`, as one array at the end.
-struct Printer {
-    format: OutputFormat,
-    stream: Stream,
-    when_empty: WhenEmpty,
-    entries: Vec<Entry>,
-}
-
-impl Printer {
-    fn new(format: OutputFormat, stream: Stream, when_empty: WhenEmpty) -> Self {
-        Self {
-            format,
-            stream,
-            when_empty,
-            entries: Vec::new(),
-        }
-    }
-
-    fn report(
-        &mut self,
-        output: &mut Output,
-        path: &Path,
-        source: &str,
-        report: &Report,
-    ) -> io::Result<()> {
-        let index = LineIndex::new(source);
-        for diagnostic in report.diagnostics() {
-            let (line, column) = index.line_column(diagnostic.range.start());
-            match self.format {
-                OutputFormat::Text => {
-                    let severity = match diagnostic.severity {
-                        Severity::Error => "error",
-                        Severity::Warning => "warning",
-                    };
-                    writeln!(
-                        output.stream(self.stream),
-                        "{}:{line}:{column}: {severity}[{}]: {}",
-                        path.display(),
-                        diagnostic.code,
-                        diagnostic.message
-                    )?;
-                }
-                OutputFormat::Json => {
-                    let (end_line, end_column) = index.line_column(diagnostic.range.end());
-                    self.entries.push(Entry {
-                        path: path.display().to_string(),
-                        diagnostic: diagnostic.clone(),
-                        start: Position { line, column },
-                        end: Position {
-                            line: end_line,
-                            column: end_column,
-                        },
-                        url: diagnostic.code.url(),
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn finish(self, output: &mut Output) -> io::Result<()> {
-        let wanted = self.when_empty == WhenEmpty::PrintArray || !self.entries.is_empty();
-        if self.format == OutputFormat::Json && wanted {
-            let writer = output.stream(self.stream);
-            serde_json::to_writer(&mut *writer, &self.entries)?;
-            writeln!(writer)?;
-        }
-        Ok(())
+impl Problem {
+    fn report(&self, path: &Path) -> Status {
+        eprintln!("oval: {}: {self}", path.display());
+        Status::Error
     }
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(cli) {
-        Ok(status) => status.into(),
-        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitStatus::Success.into(),
-        Err(error) => {
-            let _ = writeln!(io::stderr(), "oval: {error}");
-            ExitStatus::Error.into()
-        }
-    }
-}
-
-fn run(cli: Cli) -> io::Result<ExitStatus> {
-    let mut output = Output::new();
-    let status = match cli.command {
+    let mut output = BufWriter::new(io::stdout().lock());
+    let result = match cli.command {
         Command::Check {
             files,
+            strict,
             json,
-            strict,
-        } => check(
-            &mut output,
-            &files,
-            OutputFormat::from_json_flag(json),
-            strict,
-        )?,
-        Command::Compile { file, pretty, json } => compile(
-            &mut output,
-            &file,
-            pretty,
-            OutputFormat::from_json_flag(json),
-        )?,
-        Command::Fmt { files, check, json } => fmt(
-            &mut output,
-            &files,
-            check,
-            OutputFormat::from_json_flag(json),
-        )?,
-    };
-    output.stdout.flush()?;
-    Ok(status)
-}
-
-fn read_source(path: &Path) -> Result<String, FileError> {
-    let bytes = std::fs::read(path).map_err(FileError::Read)?;
-    String::from_utf8(bytes).map_err(|error| {
-        let valid = &error.as_bytes()[..error.utf8_error().valid_up_to()];
-        let prefix = std::str::from_utf8(valid).unwrap_or_default();
-        let end = TextSize::try_from(prefix.len()).unwrap_or(TextSize::from(u32::MAX));
-        let (line, column) = LineIndex::new(prefix).line_column(end);
-        FileError::InvalidUtf8 { line, column }
-    })
+        } => check(&files, strict, Printer::new(json), &mut output),
+        Command::Compile { file, pretty, json } => {
+            compile(&file, pretty, Printer::new(json), &mut output)
+        }
+        Command::Fmt { files, check, json } => {
+            format(&files, check, Printer::new(json), &mut output)
+        }
+    }
+    .and_then(|status| output.flush().map(|()| status));
+    match result {
+        Ok(status) => status.into(),
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("oval: {error}");
+            Status::Error.into()
+        }
+    }
 }
 
 fn check(
-    output: &mut Output,
     files: &[PathBuf],
-    format: OutputFormat,
     strict: bool,
-) -> io::Result<ExitStatus> {
-    let mut status = ExitStatus::Success;
-    let mut printer = Printer::new(format, Stream::Stdout, WhenEmpty::PrintArray);
+    mut printer: Printer,
+    output: &mut impl Write,
+) -> io::Result<Status> {
+    let mut status = Status::Success;
     for path in files {
-        let checked = read_source(path).and_then(|source| {
-            let report = oval_core::check(&source).map_err(FileError::Rejected)?;
-            Ok((source, report))
-        });
-        match checked {
-            Ok((source, report)) => {
-                printer.report(output, path, &source, &report)?;
-                if report.has_errors() || (strict && report.has_diagnostics()) {
-                    status = status.max(ExitStatus::Failure);
+        let file_status = match load(path) {
+            Ok((text, report)) => {
+                printer.print(output, path, &text, report.diagnostics())?;
+                let fails = report.has_errors() || strict && !report.diagnostics().is_empty();
+                if fails {
+                    Status::Failure
+                } else {
+                    Status::Success
                 }
             }
-            Err(error) => {
-                output.failure(path, &error)?;
-                status = status.max(ExitStatus::Error);
-            }
-        }
+            Err(problem) => problem.report(path),
+        };
+        status = status.max(file_status);
     }
-    printer.finish(output)?;
+    printer.finish(output, true)?;
     Ok(status)
 }
 
 fn compile(
-    output: &mut Output,
     path: &Path,
     pretty: bool,
-    format: OutputFormat,
-) -> io::Result<ExitStatus> {
-    let source = match read_source(path) {
-        Ok(source) => source,
-        Err(error) => {
-            output.failure(path, &error)?;
-            return Ok(ExitStatus::Error);
-        }
+    mut printer: Printer,
+    output: &mut impl Write,
+) -> io::Result<Status> {
+    let (text, report) = match load(path) {
+        Ok(loaded) => loaded,
+        Err(problem) => return Ok(problem.report(path)),
     };
-    match oval_core::compile(&source) {
-        Ok(compiled) => {
-            let json = if pretty {
-                compiled.to_json_pretty()
-            } else {
-                compiled.to_json()
-            };
-            match json {
-                Ok(json) => {
-                    writeln!(output.stdout, "{json}")?;
-                    Ok(ExitStatus::Success)
-                }
-                Err(error) => {
-                    output.failure(path, &FileError::Serialize(error))?;
-                    Ok(ExitStatus::Error)
-                }
-            }
-        }
-        Err(CompileError::Rejected(rejection)) => {
-            output.failure(path, &FileError::Rejected(rejection))?;
-            Ok(ExitStatus::Error)
-        }
-        Err(CompileError::Invalid(report)) => {
-            let mut printer = Printer::new(format, Stream::Stderr, WhenEmpty::PrintNothing);
-            printer.report(output, path, &source, &report)?;
-            printer.finish(output)?;
-            Ok(ExitStatus::Failure)
-        }
-    }
+    let mut errors = io::stderr().lock();
+    printer.print(&mut errors, path, &text, report.diagnostics())?;
+    printer.finish(&mut errors, false)?;
+    let Some(compiled) = report.compile() else {
+        return Ok(Status::Failure);
+    };
+    let json = if pretty {
+        compiled.to_json_pretty()
+    } else {
+        compiled.to_json()
+    };
+    writeln!(output, "{json}")?;
+    Ok(Status::Success)
 }
 
-fn fmt(
-    output: &mut Output,
+fn format(
     files: &[PathBuf],
-    check_only: bool,
-    format: OutputFormat,
-) -> io::Result<ExitStatus> {
-    let mut status = ExitStatus::Success;
-    let mut printer = Printer::new(format, Stream::Stderr, WhenEmpty::PrintNothing);
+    check: bool,
+    mut printer: Printer,
+    output: &mut impl Write,
+) -> io::Result<Status> {
+    let mut status = Status::Success;
     for path in files {
-        let source = match read_source(path) {
-            Ok(source) => source,
-            Err(error) => {
-                output.failure(path, &error)?;
-                status = status.max(ExitStatus::Error);
+        let text = match read(path) {
+            Ok(text) => text,
+            Err(problem) => {
+                status = status.max(problem.report(path));
                 continue;
             }
         };
-        match oval_format::format(&source) {
-            Ok(formatted) if formatted == source => {}
-            Ok(_) if check_only => {
-                writeln!(output.stdout, "{} would be reformatted", path.display())?;
-                status = status.max(ExitStatus::Failure);
+        let file_status = match oval_format::format(&text) {
+            Ok(formatted) if formatted == text => Status::Success,
+            Ok(_) if check => {
+                writeln!(output, "{}", path.display())?;
+                Status::Failure
             }
-            Ok(formatted) => {
-                if let Err(error) = std::fs::write(path, formatted) {
-                    output.failure(path, &FileError::Write(error))?;
-                    status = status.max(ExitStatus::Error);
-                }
+            Ok(formatted) => match fs::write(path, formatted) {
+                Ok(()) => Status::Success,
+                Err(error) => Problem::Unwritable(error).report(path),
+            },
+            Err(FormatError::Rejected(rejection)) => Problem::Rejected(rejection).report(path),
+            Err(FormatError::Malformed(parse)) => {
+                let diagnostics = oval_core::parse_diagnostics(&parse);
+                printer.print(&mut io::stderr().lock(), path, &text, &diagnostics)?;
+                Status::Failure
             }
-            Err(FormatError::Rejected(rejection)) => {
-                output.failure(path, &FileError::Rejected(rejection))?;
-                status = status.max(ExitStatus::Error);
-            }
-            Err(FormatError::SyntaxErrors(_)) => {
-                if let Ok(report) = oval_core::check(&source) {
-                    printer.report(output, path, &source, &report)?;
-                }
-                status = status.max(ExitStatus::Failure);
-            }
-        }
+        };
+        status = status.max(file_status);
     }
-    printer.finish(output)?;
+    printer.finish(&mut io::stderr().lock(), false)?;
     Ok(status)
+}
+
+fn read(path: &Path) -> Result<String, Problem> {
+    let bytes = fs::read(path).map_err(Problem::Unreadable)?;
+    String::from_utf8(bytes).map_err(|error| {
+        Problem::Rejected(InputRejection::InvalidUtf8 {
+            offset: u32::try_from(error.utf8_error().valid_up_to()).unwrap_or(u32::MAX),
+        })
+    })
+}
+
+fn load(path: &Path) -> Result<(String, Report), Problem> {
+    let text = read(path)?;
+    let report = oval_core::check(&text).map_err(Problem::Rejected)?;
+    Ok((text, report))
 }

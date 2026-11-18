@@ -1,30 +1,32 @@
-#![allow(dead_code)]
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
 
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+pub(crate) const VALID: &str = "oval 1\nguide \"G\"\nelection \"E\"\ndate 2026-11-03\nballot @b \"B\"\n  measure @m \"M\"\n    recommend yes\n";
 
-pub(crate) fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../oval-syntax/tests/fixtures/franklin.oval")
+pub(crate) struct Run {
+    pub(crate) status: Option<i32>,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
 }
 
-pub(crate) fn temp_path(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("oval-cli-{}-{name}", std::process::id()))
-}
-
-pub(crate) fn write_temp(name: &str, contents: &str) -> PathBuf {
-    write_temp_bytes(name, contents.as_bytes())
-}
-
-pub(crate) fn write_temp_bytes(name: &str, contents: &[u8]) -> PathBuf {
-    let path = temp_path(name);
-    std::fs::write(&path, contents).expect("temp file");
-    path
-}
-
-pub(crate) fn oval(args: &[&OsStr]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_oval"))
-        .args(args)
+pub(crate) fn run(test: &str, files: &[(&str, &[u8])], arguments: &[&str]) -> Run {
+    let directory = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(arguments.first().copied().unwrap_or("none"))
+        .join(test);
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir_all(&directory).unwrap();
+    for (name, contents) in files {
+        fs::write(directory.join(name), contents).unwrap();
+    }
+    let output = Command::new(env!("CARGO_BIN_EXE_oval"))
+        .args(arguments)
+        .current_dir(&directory)
         .output()
-        .expect("run oval")
+        .unwrap();
+    Run {
+        status: output.status.code(),
+        stdout: String::from_utf8(output.stdout).unwrap(),
+        stderr: String::from_utf8(output.stderr).unwrap(),
+    }
 }

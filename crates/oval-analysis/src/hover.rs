@@ -1,239 +1,267 @@
-use std::fmt::Write;
+use oval_core::{Declaration, Entity};
+use oval_syntax::ast::{self, AstNode, Campaign, Member, PartyRef};
+use oval_syntax::{Keyword, SyntaxKind, SyntaxNode, SyntaxToken, TextRange, TextSize};
 
-use oval_core::SPECIFICATION_URL;
-use oval_core::index::{EntityKind, Index};
-use oval_syntax::ast::{AstNode, Contest, ContestKind, Document};
-use oval_syntax::parser::parse;
-use oval_syntax::{TextRange, TextSize};
-use serde::Serialize;
+use crate::Analysis;
 
-use crate::names::display_names;
-use crate::symbols::serialize_range;
-
-/// Text to show for the token at a position.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Text describing what's under the cursor.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hover {
-    /// The range of the token the text describes.
-    #[serde(serialize_with = "serialize_range")]
+    /// The identifier or keyword the text describes.
     pub range: TextRange,
-    /// The text, as Markdown.
+    /// The description in Markdown.
     pub contents: String,
 }
 
-/// Text describing the identifier or keyword at `offset` in `source`.
-///
-/// For an identifier, the text names what it declares, with the name or title the declaration
-/// gives it and, for a candidate, its party. For a keyword, the text is one sentence on what the
-/// keyword introduces and a link to its section of the specification. `None` when neither is at
-/// `offset`, and for an identifier that nothing declares. An offset past the end of `source` or
-/// inside a character is moved back to the nearest character boundary.
-pub fn hover(source: &str, offset: TextSize) -> Option<Hover> {
-    let offset = TextSize::try_from(crate::clamp_to_char_boundary(source, offset)).ok()?;
-    let parsed = parse(source).ok()?;
-    let document = Document::cast(parsed.syntax())?;
-    let index = Index::build(&document);
-    if let Some(found) = identifier(&document, &index, offset) {
-        return Some(found);
+impl Analysis {
+    /// Describes the identifier or keyword at `offset`, or returns `None` when there's neither.
+    ///
+    /// An identifier is described by what it declares, with the declaration's name and, for a
+    /// candidate, the name of their party. A name nothing declares has no description. A keyword is
+    /// described in one sentence on what it introduces.
+    pub fn hover(&self, offset: TextSize) -> Option<Hover> {
+        if let Some(symbol) = self.symbol_at(offset) {
+            let declaration = self.definition(offset)?;
+            return Some(Hover {
+                range: symbol.identifier().syntax().text_range(),
+                contents: self.describe(declaration),
+            });
+        }
+        let token = self
+            .report()
+            .parse()
+            .syntax()
+            .token_at_offset(offset)
+            .find(|token| keyword(token).is_some())?;
+        let keyword = keyword(&token)?;
+        Some(Hover {
+            range: token.text_range(),
+            contents: format!("`{}` {}.", keyword.text(), sentence(keyword)),
+        })
     }
-    let token = parsed
-        .syntax()
-        .token_at_offset(offset)
-        .find(|token| token.kind().is_keyword())?;
-    let keyword = token.kind().as_keyword()?;
-    let (summary, section) = describe(keyword.text())?;
-    Some(Hover {
-        range: token.text_range(),
-        contents: format!(
-            "**keyword** `{}`\n\n{summary}\n\n[{section}]({SPECIFICATION_URL}#sec-{})",
-            keyword.text(),
-            section.replace(' ', "-"),
-        ),
-    })
+
+    fn describe(&self, declaration: &Declaration) -> String {
+        let kind = match declaration.entity {
+            Entity::Party => "party",
+            Entity::Candidate => "candidate",
+            Entity::Ballot => "ballot",
+            Entity::Contest => "contest",
+            Entity::Measure => "measure",
+        };
+        let name = match declaration.name() {
+            Some(name) => format!("**{}**", name.value()),
+            None => format!("`{}`", declaration.identifier.syntax().text()),
+        };
+        let party = declaration
+            .identifier
+            .syntax()
+            .parent()
+            .filter(|_| declaration.entity == Entity::Candidate)
+            .and_then(|node| party_field(&node))
+            .and_then(|party| self.party_name(&party));
+        match party {
+            Some(party) => format!("{kind} {name}, {party}"),
+            None => format!("{kind} {name}"),
+        }
+    }
+
+    fn party_name(&self, party: &PartyRef) -> Option<String> {
+        let symbols = self.symbols();
+        let declaration = symbols
+            .declarations()
+            .get(symbols.resolve(&party.identifier()?)?)?;
+        (declaration.entity == Entity::Party)
+            .then(|| declaration.name())
+            .flatten()
+            .map(|name| name.value().into_owned())
+    }
 }
 
-fn identifier(document: &Document, index: &Index, offset: TextSize) -> Option<Hover> {
-    let touches = |range: TextRange| range.start() <= offset && offset <= range.end();
-    let (name, range) = index
-        .declarations
-        .iter()
-        .find(|declaration| touches(declaration.range))
-        .map(|declaration| (declaration.name.clone(), declaration.range))
-        .or_else(|| {
-            index
-                .references
-                .iter()
-                .find(|reference| touches(reference.range))
-                .map(|reference| (reference.name.clone(), reference.range))
-        })?;
-    let declaration = index.resolve(&name)?;
-    let names = display_names(document, index);
-    let mut contents = format!("**{}** `@{name}`", declaration.kind.noun());
-    if let Some(display) = names.get(&name) {
-        let _ = write!(contents, "\n\n{display}");
+fn party_field(declaration: &SyntaxNode) -> Option<PartyRef> {
+    if let Some(candidate) = ast::Candidate::cast(declaration.clone()) {
+        return candidate.party();
     }
-    match declaration.kind {
-        EntityKind::Candidate => {
-            let party = document
-                .candidates()
-                .find(|candidate| candidate.id().is_some_and(|id| id.name() == name))
-                .and_then(|candidate| candidate.party())
-                .and_then(|party| party.id())
-                .map(|id| id.name())
-                .and_then(|party| names.get(&party).cloned());
-            if let Some(party) = party {
-                let _ = write!(contents, "\n\n{party}");
-            }
-        }
-        EntityKind::Contest => {
-            let method = index
-                .contests
-                .iter()
-                .find(|contest| contest.id().is_some_and(|id| id.name() == name))
-                .and_then(Contest::kind)
-                .map(|kind| match kind {
-                    ContestKind::Single => "Vote for one".to_owned(),
-                    ContestKind::Multiple { seats } => seats
-                        .map_or("Vote for several".to_owned(), |n| {
-                            format!("Vote for up to {n}")
-                        }),
-                    ContestKind::Ranked { max } => max
-                        .map_or("Rank the candidates".to_owned(), |n| {
-                            format!("Rank up to {n}")
-                        }),
-                    ContestKind::Retention => "Yes or no".to_owned(),
-                });
-            if let Some(method) = method {
-                let _ = write!(contents, "\n\n{method}");
-            }
-        }
-        _ => {}
+    let member = Member::cast(declaration.clone())?;
+    let campaign = member.syntax().ancestors().find_map(Campaign::cast)?;
+    if campaign.is_block_form() {
+        member.party()
+    } else {
+        campaign.party()
     }
-    let uses = index
-        .references
-        .iter()
-        .filter(|reference| reference.name == name)
-        .count();
-    let _ = write!(
-        contents,
-        "\n\n{}",
-        match uses {
-            0 => "Not referenced".to_owned(),
-            1 => "Referenced once".to_owned(),
-            n => format!("Referenced {n} times"),
-        }
-    );
-    Some(Hover { range, contents })
 }
 
-#[allow(clippy::too_many_lines)]
-fn describe(keyword: &str) -> Option<(&'static str, &'static str)> {
-    Some(match keyword {
-        "oval" => (
-            "The version marker, which opens every document with the major version of the language it is written in.",
-            "Document",
-        ),
-        "guide" => ("The name of the guide.", "Guide"),
-        "election" => ("The official name of the election.", "Guide"),
-        "date" => ("Election day, as `YYYY-MM-DD`.", "Guide"),
-        "note" => (
-            "Commentary in Markdown, under the construct it concerns.",
-            "Fields and Blocks",
-        ),
-        "party" => (
-            "A party, declared at the top level or named on a candidate or campaign.",
-            "Party",
-        ),
-        "abbreviation" => (
-            "The short form of a party's name, as printed on the ballot.",
-            "Party",
-        ),
-        "website" => ("The official site of a party or campaign.", "Party"),
-        "candidate" => (
-            "A person running for office, declared at the top level or inline in a campaign.",
-            "Candidate",
-        ),
-        "designation" => (
-            "A candidate's ballot designation, such as an occupation or current office.",
-            "Candidate",
-        ),
-        "ballot" => (
-            "The questions one electorate sees, nested for narrower electorates.",
-            "Ballot",
-        ),
-        "eligibility" => ("Who votes on a ballot, in prose.", "Ballot"),
-        "section" => ("A titled group of questions within a ballot.", "Section"),
-        "contest" => (
-            "An office chosen among campaigns, with its voting method.",
-            "Contest",
-        ),
-        "single" => (
-            "A contest in which the voter chooses one campaign.",
-            "Contest",
-        ),
-        "multiple" => (
-            "A contest in which the voter chooses up to a number of campaigns.",
-            "Contest",
-        ),
-        "ranked" => ("A contest in which the voter ranks campaigns.", "Contest"),
-        "max" => ("The most campaigns a voter may rank.", "Contest"),
-        "retention" => (
-            "A yes-or-no contest on keeping one officeholder.",
-            "Contest",
-        ),
-        "subtitle" => (
-            "A second line of the title, as printed on the ballot.",
-            "Contest",
-        ),
-        "tabulation" => (
-            "How votes are counted, or what it takes to pass, in prose.",
-            "Contest",
-        ),
-        "campaign" => (
-            "One or more candidates running together in a contest.",
-            "Campaign",
-        ),
-        "incumbent" => ("The campaign currently occupies the office.", "Campaign"),
-        "withdrawn" => (
-            "The campaign has ended but remains on the ballot.",
-            "Campaign",
-        ),
-        "recommend" => (
-            "The author's recommendation for a contest or measure.",
-            "Contest Recommendation",
-        ),
-        "support" => (
-            "Campaigns the author supports, named by candidate, in tiers of preference.",
-            "Contest Recommendation",
-        ),
-        "oppose" => (
-            "Campaigns the author advises against, named by candidate.",
-            "Contest Recommendation",
-        ),
-        "justification" => (
-            "Why the author recommends this, in Markdown.",
-            "Contest Recommendation",
-        ),
-        "no-position" => (
-            "The author deliberately takes no position.",
-            "Contest Recommendation",
-        ),
-        "measure" => ("A yes-or-no question on the ballot.", "Measure"),
-        "description" => (
-            "The official ballot text of a measure, copied verbatim.",
-            "Measure",
-        ),
-        "if_yes" => ("The official text of what a yes vote does.", "Measure"),
-        "if_no" => ("The official text of what a no vote does.", "Measure"),
-        "placement" => (
-            "How the measure reached the ballot, such as a legislative referral.",
-            "Measure",
-        ),
-        "fiscal_impact" => ("The official fiscal estimate, in prose.", "Measure"),
-        "supporters" => ("Who supports the measure, or `none`.", "Measure"),
-        "opponents" => ("Who opposes the measure, or `none`.", "Measure"),
-        "none" => ("Researched, and none known.", "Measure"),
-        "yes" => ("A recommendation to vote yes.", "Measure Recommendation"),
-        "no" => ("A recommendation to vote no.", "Measure Recommendation"),
-        _ => return None,
-    })
+fn keyword(token: &SyntaxToken) -> Option<Keyword> {
+    let names_an_identifier = token
+        .prev_token()
+        .is_some_and(|previous| previous.kind() == SyntaxKind::AtSign);
+    if token.kind() != SyntaxKind::Word || names_an_identifier {
+        return None;
+    }
+    Keyword::from_text(token.text())
+}
+
+pub(crate) fn sentence(keyword: Keyword) -> &'static str {
+    match keyword {
+        Keyword::Oval => "gives the major version of Oval the document is written in",
+        Keyword::Guide => "gives the voter guide's name",
+        Keyword::Election => "names the election the guide covers",
+        Keyword::Date => "gives the date of the election",
+        Keyword::Note => "adds the author's note in Markdown",
+        Keyword::Party => "declares or names a political party",
+        Keyword::Candidate => "declares a candidate",
+        Keyword::Ballot => "declares a ballot, or a sub-ballot for a narrower electorate",
+        Keyword::Section => "groups a ballot's contests and measures under a title",
+        Keyword::Contest => "declares a race between campaigns for an office",
+        Keyword::Campaign => "adds candidates or parties running together in a contest",
+        Keyword::Measure => "declares a question that voters answer yes or no",
+        Keyword::Abbreviation => "gives the short form printed beside a party's candidates",
+        Keyword::Website => "gives a website",
+        Keyword::Designation => "gives the occupation or title printed beside a name",
+        Keyword::Eligibility => "says who votes on the ballot",
+        Keyword::Single => "makes the contest a vote for one choice",
+        Keyword::Multiple => "makes the contest a vote for up to a number of choices",
+        Keyword::Ranked => "makes the contest a ranking of choices by preference",
+        Keyword::Retention => "makes the contest a yes or no on keeping an officeholder",
+        Keyword::Seats => "gives how many candidates the contest elects",
+        Keyword::Max => "gives how many choices a voter may rank",
+        Keyword::Min => "gives how many choices a ballot that marks the contest must mark",
+        Keyword::All => "requires every printed choice to be ranked",
+        Keyword::Subtitle => "gives a line printed under the title",
+        Keyword::Tabulation => "says how the votes are counted",
+        Keyword::Incumbent => "marks the campaign that holds the office now",
+        Keyword::Withdrawn => "marks a campaign that ended but is still on the ballot",
+        Keyword::As => "gives a member's role on the ticket",
+        Keyword::Required => "means the voter must answer the question",
+        Keyword::Optional => "means the voter may leave the question blank",
+        Keyword::Extensible => "lets the voter write in a choice",
+        Keyword::Exhaustive => "allows only the choices printed on the ballot",
+        Keyword::Recommend => "gives the author's recommendation",
+        Keyword::Support => "lists one tier of choices the author recommends",
+        Keyword::Oppose => "lists the choices the author advises against",
+        Keyword::Justification => "gives the author's reasoning in Markdown",
+        Keyword::Yes => "recommends voting yes",
+        Keyword::No => "recommends voting no",
+        Keyword::NoPosition => "says the author takes no position",
+        Keyword::Abstain => "advises leaving the question blank",
+        Keyword::WriteIn => "is a choice the voter writes on the ballot by hand",
+        Keyword::Description => "gives the measure's official ballot text in Markdown",
+        Keyword::IfYes => "says what happens if the measure passes, in Markdown",
+        Keyword::IfNo => "says what happens if the measure fails, in Markdown",
+        Keyword::Placement => "says how the measure got onto the ballot",
+        Keyword::FiscalImpact => "summarizes what the measure costs",
+        Keyword::Supporters => "lists who supports the measure",
+        Keyword::Opponents => "lists who opposes the measure",
+        Keyword::NoneValue => "says research found no one",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use oval_syntax::{TextRange, TextSize};
+
+    use crate::Analysis;
+
+    const SOURCE: &str = "oval 1\nparty @dem \"Democratic Party\"\ncandidate @n \"Nadia Reyes\"\n  party @dem\ncandidate @x \"Xavier\"\nballot @b \"City\"\n  contest @k \"Mayor\" single\n    campaign @n\n    campaign @c \"Carl Fox\"\n      party @grn \"Green Party\"\n    campaign\n      @j \"Jordan Lee\"\n        party @dem\n      @x\n    recommend\n      support @n\n      oppose @nobody write-in\n  measure @m \"Measure M\"\n    recommend no-position\n";
+
+    fn at(needle: &str, nth: usize) -> TextSize {
+        let offset = SOURCE.match_indices(needle).nth(nth).unwrap().0;
+        TextSize::try_from(offset).unwrap()
+    }
+
+    fn contents(offset: TextSize) -> Option<String> {
+        Analysis::new(SOURCE)
+            .unwrap()
+            .hover(offset)
+            .map(|hover| hover.contents)
+    }
+
+    #[test]
+    fn an_identifier_is_described_by_what_it_declares() {
+        assert_eq!(
+            contents(at("@dem", 0)).as_deref(),
+            Some("party **Democratic Party**")
+        );
+        assert_eq!(contents(at("@b", 0)).as_deref(), Some("ballot **City**"));
+        assert_eq!(contents(at("@k", 0)).as_deref(), Some("contest **Mayor**"));
+        assert_eq!(
+            contents(at("@m", 0)).as_deref(),
+            Some("measure **Measure M**")
+        );
+        assert_eq!(
+            contents(at("@x", 0)).as_deref(),
+            Some("candidate **Xavier**")
+        );
+    }
+
+    #[test]
+    fn a_candidate_is_described_with_their_party_however_it_is_declared() {
+        assert_eq!(
+            contents(at("@n", 0)).as_deref(),
+            Some("candidate **Nadia Reyes**, Democratic Party")
+        );
+        assert_eq!(
+            contents(at("@c", 0)).as_deref(),
+            Some("candidate **Carl Fox**, Green Party")
+        );
+        assert_eq!(
+            contents(at("@j", 0)).as_deref(),
+            Some("candidate **Jordan Lee**, Democratic Party")
+        );
+    }
+
+    #[test]
+    fn a_reference_is_described_by_its_declaration_and_highlights_itself() {
+        let analysis = Analysis::new(SOURCE).unwrap();
+        let reference = at("@n", 2);
+        let hover = analysis.hover(reference).unwrap();
+        assert_eq!(
+            hover.contents,
+            "candidate **Nadia Reyes**, Democratic Party"
+        );
+        assert_eq!(hover.range, TextRange::at(reference, TextSize::of("@n")));
+        assert_eq!(contents(at("@nobody", 0)), None);
+    }
+
+    #[test]
+    fn a_keyword_is_described_in_a_sentence() {
+        assert_eq!(
+            contents(at("ballot", 0)).as_deref(),
+            Some("`ballot` declares a ballot, or a sub-ballot for a narrower electorate.")
+        );
+        assert_eq!(
+            contents(at("no-position", 0) + TextSize::from(3)).as_deref(),
+            Some("`no-position` says the author takes no position.")
+        );
+        assert_eq!(
+            contents(at("write-in", 0)).as_deref(),
+            Some("`write-in` is a choice the voter writes on the ballot by hand.")
+        );
+        let analysis = Analysis::new(SOURCE).unwrap();
+        let hover = analysis.hover(at("single", 0)).unwrap();
+        assert_eq!(
+            hover.range,
+            TextRange::at(at("single", 0), TextSize::of("single"))
+        );
+    }
+
+    #[test]
+    fn a_keyword_written_as_an_identifier_is_not_described_as_a_keyword() {
+        let source = "oval 1\nballot @b \"B\"\n  abbreviation @single\n";
+        let offset = TextSize::try_from(source.find("single").unwrap()).unwrap();
+        assert_eq!(Analysis::new(source).unwrap().hover(offset), None);
+    }
+
+    #[test]
+    fn a_party_field_that_names_a_candidate_gives_no_party() {
+        let source = "oval 1\ncandidate @a \"A\"\ncandidate @c \"C\"\n  party @a\n";
+        let offset = TextSize::try_from(source.find("@c").unwrap()).unwrap();
+        let hover = Analysis::new(source).unwrap().hover(offset).unwrap();
+        assert_eq!(hover.contents, "candidate **C**");
+    }
+
+    #[test]
+    fn text_that_is_neither_an_identifier_nor_a_keyword_has_no_description() {
+        assert_eq!(contents(at("Democratic Party", 0)), None);
+        assert_eq!(contents(at("1\n", 0)), None);
+    }
 }
